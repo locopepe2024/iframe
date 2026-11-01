@@ -1416,14 +1416,16 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                             </button>
                         </div>}
                         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-glass-border px-3 sm:px-5" data-testid="character-asset-toolbar">
-                            <label className="flex min-h-11 min-w-0 items-center gap-2 text-sm text-text-secondary">
-                                <span className="shrink-0">出图模板</span>
-                                <select aria-label="出图模板" value={activePanel} onChange={(event) => setActivePanel(event.target.value as CharacterImagePanel)} className="min-w-0 rounded border border-glass-border bg-surface-inset px-2 py-1 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
-                                    <option value="full_body">全身角色图</option>
-                                    <option value="three_view">三视图设定</option>
-                                    <option value="headshot">头像特写</option>
-                                </select>
-                            </label>
+                            <div role="tablist" aria-label={tc("materialTypes")} className="flex min-w-0 gap-1 overflow-x-auto">
+                                {([["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
+                                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                                    event.preventDefault();
+                                    const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
+                                    const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+                                    next?.click();
+                                    next?.focus();
+                                }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
+                            </div>
                             {activePanel !== "three_view" && <CharacterPresentationSwitch
                                 mode={activePanel === "full_body" ? fullBodyMode : headshotMode}
                                 onModeChange={activePanel === "full_body" ? setFullBodyMode : setHeadshotMode}

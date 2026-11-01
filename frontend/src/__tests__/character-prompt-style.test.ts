@@ -24,3 +24,13 @@ it('does not contradict selected expression or gaze with unconditional neutral d
         expect(prompt).not.toContain('中性表情，正面看向镜头');
     }
 });
+
+it('projects full-body character design into a non-contradictory headshot prompt', () => {
+    const prompt = buildCharacterImagePrompt('headshot', '探子首领',
+        '面容：下颌轮廓较分明。发型：低盘发髻。服装：上身穿深青色里衣和黑色窄袖长袍。下穿黑色长裤，脚穿素面布靴。构图与背景：人物自然站立，全身服装与鞋履完整可见。');
+    expect(prompt).toContain('上身穿深青色里衣和黑色窄袖长袍');
+    expect(prompt).not.toContain('下穿黑色长裤');
+    expect(prompt).not.toContain('脚穿素面布靴');
+    expect(prompt).not.toContain('全身服装与鞋履完整可见');
+    expect(prompt).toContain('头肩构图');
+});

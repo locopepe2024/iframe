@@ -21,6 +21,18 @@ function sentence(...fragments: unknown[]): string {
     return parts.length ? `${parts.join("。")}。` : "";
 }
 
+/** Remove full-body-only instructions before projecting a character design to a headshot. */
+function projectHeadshotDescription(description: string): string {
+    const parts = description
+        .split(/[\n。！？]+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    if (!parts.length) return description;
+    const fullBodyOnly = /(构图与背景|全身|头顶到鞋底|鞋履完整|脚穿|下穿|人物自然站立|腰束窄布带)/;
+    const projected = parts.filter((part) => !fullBodyOnly.test(part));
+    return projected.length ? projected.join("。") : description;
+}
+
 export function buildCharacterImagePrompt(
     type: CharacterImagePromptType,
     name: string,
@@ -54,8 +66,9 @@ export function buildCharacterImagePrompt(
     return sentence(
         preserveReference && "严格保持参考图中的角色面孔、发型、肤色和五官",
         `角色${characterName}的近景肖像`,
-        characterDescription,
-        "聚焦面部和肩部，刻画清晰的面部细节，未指定表情时采用中性表情，未指定视线时正面看向镜头",
+        projectHeadshotDescription(characterDescription),
+        "头肩构图，仅显示头部、肩部和少量领口，不显示腰部以下或鞋履；聚焦面部和肩部，刻画清晰的面部细节，未指定表情时采用中性表情，未指定视线时正面看向镜头",
+        "简洁浅色背景，光影自然克制，保留真实肤质",
     );
 }
 
