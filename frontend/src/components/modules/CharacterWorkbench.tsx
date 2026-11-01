@@ -1515,6 +1515,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
                         showReferencePicker
                         designReferences={designReferenceAssets}
+                        effectiveReferences={imageGenerationReferences([...designReferenceAssets, ...promptReferences.full_body, ...promptPickerReferences.full_body])}
                         pickerReferences={promptPickerReferences.full_body}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("full_body", references)}
                         imageGenerationMode={promptModes.full_body}
@@ -1581,6 +1582,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
                         showReferencePicker
                         designReferences={designReferenceAssets}
+                        effectiveReferences={imageGenerationReferences([...promptReferences.three_view, ...promptPickerReferences.three_view, ...(masterReference ? [masterReference] : [])]).slice(0, 1)}
                         pickerReferences={[...(masterReference ? [masterReference] : []), ...promptPickerReferences.three_view]}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("three_view", references)}
                         imageGenerationMode={promptModes.three_view}
@@ -1628,6 +1630,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
                         showReferencePicker
                         designReferences={designReferenceAssets}
+                        effectiveReferences={imageGenerationReferences([...promptReferences.headshot, ...promptPickerReferences.headshot, ...(masterReference ? [masterReference] : [])]).slice(0, 1)}
                         pickerReferences={[...(masterReference ? [masterReference] : []), ...promptPickerReferences.headshot]}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("headshot", references)}
                         imageGenerationMode={promptModes.headshot}
@@ -1751,6 +1754,7 @@ export function WorkbenchPanel({
     onReferencesChange,
     showReferencePicker = false,
     designReferences,
+    effectiveReferences = [],
     pickerReferences = [],
     onPickerReferencesChange,
     imageGenerationMode = "text",
@@ -1804,6 +1808,10 @@ export function WorkbenchPanel({
     // variants. The explicit reference picker remains available for users who
     // want to constrain the generation set before typing the prompt.
     const matchingReferenceCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "");
+    const effectiveReferenceLabels = (effectiveReferences as AssetLibraryReference[]).map((reference: AssetLibraryReference) => {
+        const candidate = referenceCandidates.find((item: ReferenceCandidate) => referenceKey(item.reference) === referenceKey(reference));
+        return candidate?.label || `${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`;
+    });
 
     const imageReferenceControls = <>
                 <div className="p-2 border-b border-border-subtle flex justify-between items-center bg-surface">
@@ -1822,6 +1830,9 @@ export function WorkbenchPanel({
                         ))}
                     </div>
                 </div>
+                {designEditor && <div className="border-b border-border-subtle px-4 py-2 text-[11px] text-text-muted" aria-label={`实际传递的参考图：${title}`}>
+                    <span className="font-medium text-text-secondary">本次实际传递的参考图：</span>{effectiveReferenceLabels.length ? ` ${effectiveReferenceLabels.join("、")}` : " 无（白模只作为骨相参数，不上传为参考图）"}
+                </div>}
                 {showReferencePicker && !designEditor && <div className="px-4 pt-2">
                     <AssetReferencePicker
                         candidates={referenceCandidates}
