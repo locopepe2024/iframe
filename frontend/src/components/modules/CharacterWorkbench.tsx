@@ -46,7 +46,7 @@ import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
 import CharacterVoiceBinding from "./cast/CharacterVoiceBinding";
-import { faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
+import { FACE_SHAPE_REFERENCE_PROMPT, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
 
 type CharacterImagePanel = "full_body" | "three_view" | "headshot";
 type AppliedPlatformPrompt = {
@@ -177,7 +177,10 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
 }
 
 function confirmedDesignDescription(design: DesignDraft | undefined): string {
-    return [confirmedDesignContent(design), design?.white_face_shape ? faceShapePrompt(design.white_face_shape) : "",
+    const whiteFaceText = design?.white_face_shape
+        ? design.active_design_source === "ai" ? faceShapePrompt(design.white_face_shape) : FACE_SHAPE_REFERENCE_PROMPT
+        : "";
+    return [confirmedDesignContent(design), whiteFaceText,
         characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
 }
 
@@ -710,7 +713,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
 
     const promptForSource = (source: "panel" | "ai") => [source === "ai" ? designResult || "" : panelDesignPrompt,
-        whiteFaceShape ? faceShapePrompt(whiteFaceShape) : ""].filter(Boolean).join("\n");
+        whiteFaceShape ? source === "ai" ? faceShapePrompt(whiteFaceShape) : FACE_SHAPE_REFERENCE_PROMPT : ""].filter(Boolean).join("\n");
     const descriptionForSource = (source: "panel" | "ai") => [promptForSource(source), designConstraintText].filter(Boolean).join("\n");
 
     const applyDesignToPrompts = (source: "panel" | "ai") => {
