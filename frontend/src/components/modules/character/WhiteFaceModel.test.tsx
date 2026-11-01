@@ -39,3 +39,17 @@ it("saves the edited geometry as a stable reference and matching prompt", async 
         expect.objectContaining({ faceLength: 112 }),
     );
 });
+
+it("restores saved proportions when the workbench reopens its design", () => {
+    const { rerender } = render(<WhiteFaceModel characterName="探子首领" onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    expect(screen.getByLabelText(/脸部长度/)).toHaveValue("100");
+
+    rerender(<WhiteFaceModel characterName="探子首领" initialShape={{
+        faceLength: 112, faceWidth: 90, cheekWidth: 105, jawWidth: 85,
+        eyeSpacing: 96, noseProjection: 110,
+    }} onSaved={vi.fn()} />);
+
+    expect(screen.getByLabelText(/脸部长度/)).toHaveValue("112");
+    expect(screen.getByLabelText(/下颌宽度/)).toHaveValue("85");
+});

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { DEFAULT_FACE_SHAPE, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
@@ -43,6 +43,10 @@ export default function WhiteFaceModel({ characterName, initialShape, onSaved }:
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
     const stageRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setShape(initialShape ?? DEFAULT_FACE_SHAPE);
+    }, [initialShape]);
 
     const save = async () => {
         const canvas = stageRef.current?.querySelector("canvas");

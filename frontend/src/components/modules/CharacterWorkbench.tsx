@@ -1255,7 +1255,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         onWhiteFaceSaved={(reference: AssetLibraryReference, prompt: string, shape: FaceShape) => {
             const withoutWhiteFace = (items: AssetLibraryReference[]) => items.filter(item => !item.applied_fields?.includes("face_geometry"));
             setDesignReferenceAssets(current => [...withoutWhiteFace(current), reference]);
-            setPromptPickerReferences(current => ({ ...current, full_body: [...withoutWhiteFace(current.full_body), reference] }));
+            setPromptPickerReferences(current => ({ ...current, full_body: withoutWhiteFace(current.full_body) }));
             setWhiteFaceShape(shape);
             setDesignStatus("draft");
             setPromptsNeedDesignApply(true);
@@ -1377,6 +1377,12 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             setDesignSource(snapshot.field_status?.visual_notes === "creative-choice" ? "creative-choice" : "stated");
             setDesignUnresolved(snapshot.unresolved || []);
             setDesignFieldAnswers(snapshot.field_answers || {});
+            setDesignReferenceAssets(snapshot.reference_assets || []);
+            setWhiteFaceShape(snapshot.white_face_shape);
+            setPromptPickerReferences(current => ({
+                ...current,
+                full_body: current.full_body.filter(item => !item.applied_fields?.includes("face_geometry")),
+            }));
             setSavedDesignSource(snapshot.active_design_source === "ai" ? "ai" : "panel");
             setDesignTab(snapshot.active_design_source === "ai" ? "ai" : "design"); setDesignStatus("draft");
             setPromptsNeedDesignApply(false);
