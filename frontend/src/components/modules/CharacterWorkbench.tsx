@@ -39,6 +39,7 @@ import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, characterStructured
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterDesignPanel from "./CharacterDesignPanel";
+import WhiteFaceModel from "./character/WhiteFaceModel";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
 
@@ -49,6 +50,7 @@ import CharacterVoiceBinding from "./cast/CharacterVoiceBinding";
 import { FACE_SHAPE_REFERENCE_PROMPT, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
 
 type CharacterImagePanel = "full_body" | "three_view" | "headshot";
+type CharacterWorkbenchPanel = CharacterImagePanel | "face_model" | "video";
 type AppliedPlatformPrompt = {
     resourceId: string;
     revision: number;
@@ -443,7 +445,7 @@ interface CharacterWorkbenchProps {
 
 export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateDescription, onUpdateAttributes, onRename, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
-    const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
+    const [activePanel, setActivePanel] = useState<CharacterWorkbenchPanel>("full_body");
     const [isPlanOpen, setIsPlanOpen] = useState(false);
     const savedDesign = (asset.character_design?.design_draft || asset.character_design?.design_revisions?.at(-1)?.design || {}) as DesignDraft;
     const savedInput = savedDesign.design_input;
@@ -1271,9 +1273,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         setDesignStatus("draft"); setPromptsNeedDesignApply(true);
     };
 
-    const designEditor = <CharacterDesignPanel
-        description={asset.description} details={designInput} characterName={asset.name} whiteFaceShape={whiteFaceShape}
-        onWhiteFaceSaved={(reference: AssetLibraryReference, prompt: string, shape: FaceShape) => {
+    const handleWhiteFaceSaved = (reference: AssetLibraryReference, prompt: string, shape: FaceShape) => {
             const withoutWhiteFace = (items: AssetLibraryReference[]) => items.filter(item => !item.applied_fields?.includes("face_geometry"));
             setDesignReferenceAssets(current => [...withoutWhiteFace(current), reference]);
             setPromptPickerReferences(current => ({ ...current, full_body: withoutWhiteFace(current.full_body) }));
@@ -1289,7 +1289,10 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 nose: `鼻部突出度 ${shape.noseProjection}%（中性基准 100%）`,
             }, {});
             refreshAssetIndex();
-        }}
+    };
+
+    const designEditor = <CharacterDesignPanel
+        description={asset.description} details={designInput}
         onDictionaryConfiguration={recordDictionaryConfiguration}
         configurations={dictionaryConfigurations}
         previousExpressionText={dictionaryConfigurations.find(configuration => configuration.preset_id === "dictionary.panel.expression")?.rendered_text}
@@ -1478,7 +1481,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         </div>}
                         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-glass-border px-3 sm:px-5" data-testid="character-asset-toolbar">
                             <div role="tablist" aria-label={tc("materialTypes")} className="flex min-w-0 gap-1 overflow-x-auto">
-                                {([["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
+                                {([["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")], ["face_model", "面容白模"]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
                                     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
                                     event.preventDefault();
                                     const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
@@ -1487,13 +1490,23 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                                     next?.focus();
                                 }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
                             </div>
-                            {activePanel !== "three_view" && <CharacterPresentationSwitch
+                            {(activePanel === "full_body" || activePanel === "headshot") && <CharacterPresentationSwitch
                                 mode={activePanel === "full_body" ? fullBodyMode : headshotMode}
                                 onModeChange={activePanel === "full_body" ? setFullBodyMode : setHeadshotMode}
                                 hasStaticImage={activePanel === "full_body" ? hasFullBodyImage : !!asset.headshot_image_url || !!asset.headshot_asset?.variants?.length}
                             />}
                         </div>
                         <div className="min-h-0 flex-1 flex overflow-hidden">
+
+                    {activePanel === "face_model" && <div className="min-h-0 flex-1 overflow-y-auto p-6 lg:p-10">
+                        <div className="mx-auto w-full max-w-6xl">
+                            <div className="mb-4">
+                                <h2 className="text-lg font-semibold text-foreground">面容白模</h2>
+                                <p className="mt-1 text-xs text-text-muted">独立调整脸型、鼻部、眼眉和嘴唇/下巴参数。参数会保存到当前角色，并作为骨相提示传递。</p>
+                            </div>
+                            <WhiteFaceModel characterName={asset.name || "角色"} initialShape={whiteFaceShape} onSaved={handleWhiteFaceSaved} standalone />
+                        </div>
+                    </div>}
 
                     {/* Panel 1: Full Body (Master) */}
                     {activePanel === "full_body" &&
