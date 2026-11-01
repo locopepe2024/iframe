@@ -4,7 +4,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Image as ImageIcon, Search, X } from "lucide-react";
 import type { AssetLibraryReference, ChatModel } from "@/lib/api";
-import ReferencePromptEditor, { type PromptSlashSuggestion, type ReferenceCandidate } from "./playground/ReferencePromptEditor";
+import ReferencePromptEditor, { type PromptSlashSuggestion, type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
 import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures, type CharacterConstraints } from "@/lib/characterStructuredDesign";
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
@@ -73,6 +73,9 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         return () => openFieldsRef.current?.focus();
     }, [showFields]);
     const [slash, setSlash] = useState<PromptSlashSuggestion | null>(null);
+    const [mention, setMention] = useState<ReferenceSuggestion | null>(null);
+    const selectedCandidates = selectedReferenceCandidates(referenceCandidates, referenceSelections);
+    const mentionCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "");
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const keyHandler = useRef<((event: KeyboardEvent) => boolean) | null>(null);
     const fieldsPanel = <div className={`${host ? 'absolute' : 'fixed'} inset-0 z-[70] flex flex-col rounded-xl border border-glass-border bg-surface p-4 shadow-2xl`}
@@ -145,10 +148,18 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
             <DesignReferencePicker candidates={referenceCandidates} selected={referenceSelections} onChange={onReferenceSelectionsChange} onOpen={onRefreshReferences} />
             <p className="mb-2 text-[11px] text-text-muted">可直接使用角色设计，也可先提交 AI 完善。保存会保留两份内容，当前页签决定用于出图的版本。</p>
             <div className="relative min-h-36 rounded border border-glass-border p-2">
-                <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={selectedReferenceCandidates(referenceCandidates, referenceSelections)} restoreSelectedReferences={referenceSelections} onReferencesChange={onReferenceSelectionsChange} expanded editable={!saving}
+                <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={selectedCandidates} restoreSelectedReferences={referenceSelections} expanded editable={!saving}
                     placeholder="角色设计，/ 选择词典，[] 调整细节" openSlashRequest={openSlashRequest}
-                    allowImplicitMentions={false} onSlashChange={setSlash}
+                    allowImplicitMentions={false} onMentionChange={setMention} onSlashChange={setSlash}
                     onSlashKeyDown={event => keyHandler.current?.(event) || false} />
+                {mention && <div role="listbox" aria-label="已选角色设计参考素材" className="absolute bottom-full left-0 z-50 mb-2 max-h-64 w-full overflow-y-auto rounded border border-glass-border bg-elevated p-2 shadow-lg">
+                    {mentionCandidates.length ? mentionCandidates.map(candidate => <button key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`} type="button" role="option"
+                        onMouseDown={event => event.preventDefault()} onClick={() => { mention.choose(candidate); setMention(null); }}
+                        className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-xs text-foreground hover:bg-hover-bg">
+                        <span className="h-7 w-7 shrink-0 overflow-hidden rounded bg-surface-inset">{candidate.previewRef ? <AssetIndexPreview asset={candidate.previewRef} /> : null}</span>
+                        <span className="min-w-0 truncate">{candidate.label}</span>
+                    </button>) : <p className="px-2 py-2 text-xs text-text-muted">{selectedCandidates.length ? "没有匹配的参考素材" : "请先在角色设计参考素材中添加素材"}</p>}
+                </div>}
                 {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)} configurations={configurations}
                     currentFields={{ identity: identityFields, look: lookFields }}
                     onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => {

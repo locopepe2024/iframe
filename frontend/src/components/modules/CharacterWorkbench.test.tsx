@@ -493,6 +493,33 @@ it("loads the project reference index for the character workbench", async () => 
     ));
 });
 
+it("keeps selected design references and offers them after closing the picker and typing @", async () => {
+    apiMocks.getAssetReferenceIndex.mockReset();
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ schema_version: 1, project_id: "project-1", assets: [
+        { asset_type: "character", asset_id: "actor-1", name: "Actor one", source_scope: "global", variants: [{ id: "face-1", url: "/files/one.png" }] },
+        { asset_type: "character", asset_id: "actor-2", name: "Actor two", source_scope: "global", variants: [{ id: "face-2", url: "/files/two.png" }] },
+    ] });
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+
+    const picker = screen.getByRole("button", { name: "角色设计参考素材" });
+    fireEvent.click(picker);
+    fireEvent.click(await screen.findByRole("option", { name: /Actor one/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Actor two/ }));
+    expect(picker).toHaveTextContent("2");
+    fireEvent.click(picker);
+
+    const editor = designDetailsEditor();
+    act(() => { editor.chain().focus().insertContent("参考 @").run(); });
+    const suggestions = await screen.findByRole("listbox", { name: "已选角色设计参考素材" });
+    expect(suggestions).toHaveTextContent("Actor one");
+    expect(suggestions).toHaveTextContent("Actor two");
+    expect(picker).toHaveTextContent("2");
+    fireEvent.click(within(suggestions).getByRole("option", { name: /Actor one/ }));
+    expect(document.querySelector('[data-reference-variant-id="face-1"]')).toBeInTheDocument();
+    expect(picker).toHaveTextContent("2");
+});
+
 it("removes a deleted shared asset when the reference picker opens again", async () => {
     apiMocks.getAssetReferenceIndex.mockReset();
     const oldIndex = { schema_version: 1, project_id: "project-1", assets: [{
