@@ -199,6 +199,23 @@ it('shows only project materials in the workspace and opens the library through 
   expect(onSelect).toHaveBeenCalledWith(material);
 });
 
+it('hydrates a saved timeline source that is missing from the project snapshot', async () => {
+  const saved = {
+    ...project,
+    plan: {
+      id: 'assembly-independent', scope: 'project' as const, revision: 1, target_duration_ms: 1000,
+      lanes: [{ id: 'video', kind: 'video' as const, allow_overlap: false, clips: [{ id: 'clip', source_media_id: material.id, timeline_start_ms: 0, timeline_end_ms: 1000, source_start_ms: 0, source_end_ms: 1000, enabled: true, source_refs: [] }] }],
+      markers: [], provenance: {},
+    },
+  };
+  vi.mocked(editing.get).mockResolvedValue(saved);
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  await waitFor(() => expect(editing.material).toHaveBeenCalledWith(material.id));
+  expect(screen.queryByText('No video at this position. Select a shot on the timeline.')).not.toBeInTheDocument();
+});
+
 
 it('undoes and redoes a directional trim before saving the source interval', async () => {
   render(<EditingPage />);

@@ -33,6 +33,25 @@ export default function EditingPage() {
   const emptyPlan = (id: string): AssemblyEditPlan => ({ id: `assembly-${id}`, scope: 'project', revision: 1, target_duration_ms: 1000, lanes: [], markers: [], provenance: {} });
   const accept = (p: EditProject) => { setProject(p); setPlan(p.plan || emptyPlan(p.id)); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); };
   useEffect(() => { editing.list().then(setProjects).catch(e => setError(extractErrorDetail(e))); }, []);
+  // Older projects can contain a saved timeline reference without the
+  // corresponding source snapshot in `sources` (for example, after a
+  // migration or an interrupted import). Hydrate those references when the
+  // project is opened so the preview can resolve the current video instead of
+  // treating the playhead as an empty position.
+  useEffect(() => {
+    if (!project || !plan) return;
+    const ids = Array.from(new Set(plan.lanes.flatMap(lane => lane.clips
+      .filter(clip => lane.kind !== 'subtitle' && lane.kind !== 'markers' && clip.source_media_id)
+      .map(clip => clip.source_media_id as string))));
+    const missing = ids.filter(id => !sources[id]?.url);
+    if (!missing.length) return;
+    let active = true;
+    void Promise.all(missing.map(id => editing.material(id))).then(items => {
+      if (!active) return;
+      setSources(current => ({ ...current, ...Object.fromEntries(items.map(item => [item.id, item])) }));
+    }).catch(error => { if (active) setError(extractErrorDetail(error)); });
+    return () => { active = false; };
+  }, [project?.id, plan, sources]);
   const run = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(extractErrorDetail(e)); } finally { setBusy(false); } };
   const change = (next: AssemblyEditPlan) => { if (plan) setUndo(old => [...old.slice(-49), plan]); setRedo([]); setPlan(next); setDirty(true); };
   const add = (item: EditMaterial) => {
