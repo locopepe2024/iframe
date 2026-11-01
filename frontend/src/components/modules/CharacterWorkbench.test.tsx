@@ -748,6 +748,28 @@ function mountSimpleDesign(extra: Record<string, unknown> = {}) {
     return { onUpdateAttributes, onUpdateDescription, onGenerate };
 }
 
+it('includes saved white face proportions once in a panel image prompt', () => {
+    const shape = { faceLength: 90, faceWidth: 120, cheekWidth: 117, jawWidth: 75, eyeSpacing: 80, noseProjection: 75 };
+    const saved = {
+        confirmed: true,
+        active_design_source: 'panel',
+        identity: { editor_mode: 'fields', features: {
+            facial_proportions: '脸长 90%，脸宽 120%（中性基准 100%）',
+            eye_spacing: '眼距 80%（中性基准 100%）',
+            cheekbones: '颧部宽 117%（中性基准 100%）',
+            jaw: '下颌宽 75%（中性基准 100%）',
+            nose: '鼻部突出度 75%（中性基准 100%）',
+        } },
+        white_face_shape: shape,
+    };
+    mountSimpleDesign({ character_design: { design_draft: saved, design_revisions: [{ revision: 1, design: saved }] } });
+
+    const prompt = imagePromptInput().textContent || '';
+    expect(prompt.match(/脸长 90%/g)).toHaveLength(1);
+    expect(prompt.match(/鼻部突出度 75%/g)).toHaveLength(1);
+    expect(prompt).toContain('白模正面和侧面是同一人的两种视角');
+});
+
 it.each(['panel', 'ai'] as const)('generates explicitly from %s while preserving both saved designs', async (source) => {
     const { onGenerate, onUpdateAttributes } = mountSimpleDesign();
     const result = await submitSimpleDesign();
