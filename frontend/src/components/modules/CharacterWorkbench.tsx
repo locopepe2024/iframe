@@ -46,6 +46,7 @@ import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
 import CharacterVoiceBinding from "./cast/CharacterVoiceBinding";
+import { faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
 
 type CharacterImagePanel = "full_body" | "three_view" | "headshot";
 type AppliedPlatformPrompt = {
@@ -102,6 +103,7 @@ type DesignDraft = {
     field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
     user_visual_requirements?: { identity?: string; look?: string };
     reference_assets?: AssetLibraryReference[];
+    white_face_shape?: FaceShape;
     field_status?: Record<string, "stated" | "inferred" | "default" | "creative-choice">;
     skill_id?: string;
     skill_revision?: string;
@@ -175,7 +177,8 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
 }
 
 function confirmedDesignDescription(design: DesignDraft | undefined): string {
-    return [confirmedDesignContent(design), characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
+    return [confirmedDesignContent(design), design?.white_face_shape ? faceShapePrompt(design.white_face_shape) : "",
+        characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
 }
 
 function normalizeDesignQuestions(values: unknown): string[] {
@@ -252,11 +255,27 @@ function AssetReferencePicker({
 }) {
     const [query, setQuery] = useState("");
     const [isOpen, setIsOpen] = useState(false);
+    const pickerRef = useRef<HTMLElement | null>(null);
     const generatedId = useId().replace(/:/g, "");
     const searchId = `character-reference-search-${generatedId}`;
     const optionId = (index: number) => `${searchId}-option-${index}`;
     const selectedKeys = new Set(selected.map(referenceKey));
-    const filtered = searchReferenceCandidates(candidates, query).slice(0, 20);
+    // Keep the complete owner-scoped candidate set available. The picker is
+    // already scroll-bounded; truncating to the first 20 hides valid assets
+    // (for example a generated crowd roster) behind earlier shared assets.
+    const filtered = searchReferenceCandidates(candidates, query);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const handlePointerDown = (event: PointerEvent) => {
+            const target = event.target as Node | null;
+            if (target && pickerRef.current?.contains(target)) return;
+            setIsOpen(false);
+            setQuery("");
+        };
+        document.addEventListener("pointerdown", handlePointerDown);
+        return () => document.removeEventListener("pointerdown", handlePointerDown);
+    }, [isOpen]);
 
     const toggle = (candidate: ReferenceCandidate) => {
         if (!candidate.reference) return;
@@ -267,7 +286,7 @@ function AssetReferencePicker({
     };
 
     return (
-        <section className="mt-3 rounded-md border border-glass-border bg-surface/60 p-3">
+        <section ref={pickerRef} data-reference-picker className="mt-3 rounded-md border border-glass-border bg-surface/60 p-3">
             <button
                 type="button"
                 aria-expanded={isOpen}
@@ -278,7 +297,18 @@ function AssetReferencePicker({
                 className="flex min-h-8 w-full items-center justify-between gap-2 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
             >
                 <span>{title}{selected.length > 0 ? ` · ${selected.length}` : ""}</span>
-                <ImageIcon size={15} className="shrink-0 text-text-muted" aria-hidden="true" />
+                <span className="inline-flex items-center gap-1">
+                    {isOpen && <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label="关闭参考素材搜索"
+                        onMouseDown={(event) => event.stopPropagation()}
+                        onClick={(event) => { event.stopPropagation(); setIsOpen(false); setQuery(""); }}
+                        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setIsOpen(false); setQuery(""); } }}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                    ><X size={14} aria-hidden="true" /></span>}
+                    <ImageIcon size={15} className="shrink-0 text-text-muted" aria-hidden="true" />
+                </span>
             </button>
             {isOpen && <>
             <p className="mt-1 text-[11px] leading-4 text-text-muted">{description}</p>
@@ -290,6 +320,12 @@ function AssetReferencePicker({
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                     onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                            event.preventDefault();
+                            setIsOpen(false);
+                            setQuery("");
+                            return;
+                        }
                         if (event.key === "ArrowDown" && filtered.length > 0) {
                             event.preventDefault();
                             document.getElementById(optionId(0))?.focus();
@@ -430,6 +466,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const [savingDesign, setSavingDesign] = useState(false);
     const [designError, setDesignError] = useState("");
     const [designInput, setDesignInput] = useState(savedInput?.prompt ?? ([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n") || confirmedDesignContent(savedDesign) || asset.full_body_prompt || ""));
+    const [designReferenceAssets, setDesignReferenceAssets] = useState<AssetLibraryReference[]>(savedDesign.reference_assets || []);
+    const [whiteFaceShape, setWhiteFaceShape] = useState<FaceShape | undefined>(savedDesign.white_face_shape);
     const [designResult, setDesignResult] = useState<string | null>(savedResult?.source === "panel" ? null
         : savedResult?.prompt || confirmedDesignContent(savedDesign) || null);
     const [designResultSource, setDesignResultSource] = useState<DesignResultSnapshot["source"]>(savedResult?.source || (savedResult ? "ai" : "legacy"));
@@ -446,9 +484,10 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
     const currentSeries = useProjectStore(state => state.currentSeries);
-    const variantNameFallback = (index: number) => asset.name?.trim()
-        ? `${asset.name.trim()}-${index + 1}`
-        : `${currentSeries?.id === currentProject?.series_id ? currentSeries?.title || "项目" : "项目"}.${currentProject?.title || "剧集"}.view ${index + 1}`;
+    // Variants are views of the same character asset. Keep the generated
+    // fallback neutral and stable; users can save a semantic display name
+    // per variant without creating another character asset.
+    const variantNameFallback = (index: number) => `view ${index + 1}`;
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
     const assetIndexRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
@@ -486,6 +525,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     });
     const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
 
+
     useEffect(() => {
         let active = true;
         void agentRequest<{ models: ChatModel[] }>("/models").then(({ models }) => {
@@ -507,10 +547,18 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         void api.getAssetReferenceIndex(projectId)
             .then((index) => {
                 if (requestId !== assetIndexRequest.current) return;
-                const entries = index.assets.filter((entry) => entry.variants?.some((variant) => variant.id));
+                // Resolve legacy fixed crowd entries to their linked visual
+                // character. Unresolved templates do not have a face asset to
+                // reference and therefore stay out of the @ picker.
+                const entries = index.assets.flatMap((entry) => {
+                    if (entry.asset_type !== "crowd") return [entry];
+                    if (!entry.linked_visual_asset_id) return [];
+                    return [{ ...entry, asset_type: "character" as const, asset_id: entry.linked_visual_asset_id }];
+                }).filter((entry) => entry.variants?.some((variant) => variant.id));
                 setAssetIndex(entries);
                 const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
                     `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));
+                setDesignReferenceAssets((current) => current.filter((reference) => available.has(referenceKey(reference))));
                 setPromptPickerReferences((current) => Object.fromEntries(Object.entries(current).map(([panel, refs]) =>
                     [panel, refs.filter((ref) => available.has(referenceKey(ref)))])) as typeof current);
             })
@@ -599,6 +647,10 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
+    const masterVariantId = masterAsset?.selected_id || masterAsset?.variants?.[0]?.id;
+    const masterReference: AssetLibraryReference | undefined = masterImageUrl && masterVariantId
+        ? { asset_type: "character", asset_id: asset.id, variant_id: masterVariantId }
+        : undefined;
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
         const confirmedDesign = asset.character_design?.design_revisions?.at(-1)?.design || (savedDesign.confirmed ? savedDesign : undefined);
@@ -657,7 +709,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const savedDesignSnapshot = useRef<DesignDraft>(savedDesign);
     const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
 
-    const promptForSource = (source: "panel" | "ai") => source === "ai" ? designResult || "" : panelDesignPrompt;
+    const promptForSource = (source: "panel" | "ai") => [source === "ai" ? designResult || "" : panelDesignPrompt,
+        whiteFaceShape ? faceShapePrompt(whiteFaceShape) : ""].filter(Boolean).join("\n");
     const descriptionForSource = (source: "panel" | "ai") => [promptForSource(source), designConstraintText].filter(Boolean).join("\n");
 
     const applyDesignToPrompts = (source: "panel" | "ai") => {
@@ -676,7 +729,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const characterDesignRequest = {
         model: designModel,
         project_id: currentProject?.id,
-        reference_assets: [],
+        reference_assets: designReferenceAssets,
         character_name: asset.name,
         profile: asset.description,
         current_draft: designInput,
@@ -862,7 +915,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             user_visual_requirements: { identity: designInput, look: "" },
             field_suggestions: useAIResult ? Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
             field_suggestion_choices: useAIResult ? Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
-            reference_assets: savedDesign.reference_assets || [],
+            reference_assets: designReferenceAssets,
+            white_face_shape: whiteFaceShape,
             field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: activeIdentityNotes ? (useAIResult ? (resultIdentityBasis.includes("creative_choice") ? "creative-choice" : "stated") : designSource) : "default" },
             skill_id: "character-style-routes",
             skill_revision: useAIResult ? designSkillRevision || undefined : undefined,
@@ -1043,11 +1097,12 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         else if (type === "headshot") prompt = headshotPrompt;
 
         const promptType = type === "reference_sheet" ? "full_body" : type;
-        const references = [...promptReferences[promptType], ...promptPickerReferences[promptType]]
+        const references = [...designReferenceAssets, ...promptReferences[promptType], ...promptPickerReferences[promptType]]
             .filter((reference, index, all) => all.findIndex((candidate) => referenceKey(candidate) === referenceKey(reference)) === index);
-        const imageGenerationMode = promptModes[promptType];
-        if (!seriesId && !currentProject?.id) return;
         const isDerived = type === "three_view" || type === "headshot";
+        const derivedReference = promptReferences[promptType][0] || promptPickerReferences[promptType][0] || masterReference;
+        const imageGenerationMode = isDerived && derivedReference ? "reference" : promptModes[promptType];
+        if (!seriesId && !currentProject?.id) return;
         setPendingImageReview({
             asset_id: asset.id,
             asset_type: "character",
@@ -1057,7 +1112,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             batch_size: batchSize,
             model_name: seriesId || currentProject?.series_id ? undefined : resolveAssetGenerationModel(currentProject?.model_settings?.t2i_model),
             image_generation_mode: imageGenerationMode,
-            ...(isDerived ? { reference: references[0] } : { references }),
+            ...(isDerived ? { reference: derivedReference } : { references }),
             apply_style: false,
             preserve_prompt: true,
         });
@@ -1082,16 +1137,18 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const type = pendingImageReview.generation_type === "reference_sheet" ? "full_body" : pendingImageReview.generation_type;
         if (type !== "full_body" && type !== "three_view" && type !== "headshot") return pendingImageReview;
         const prompt = type === "full_body" ? fullBodyPrompt : type === "three_view" ? threeViewPrompt : headshotPrompt;
-        const references = [...promptReferences[type], ...promptPickerReferences[type]]
+        const references = [...designReferenceAssets, ...promptReferences[type], ...promptPickerReferences[type]]
             .filter((reference, index, all) => all.findIndex(candidate => referenceKey(candidate) === referenceKey(reference)) === index);
         const isDerived = type === "three_view" || type === "headshot";
+        const derivedReference = promptReferences[type][0] || promptPickerReferences[type][0] || masterReference;
         return {
-            ...pendingImageReview, prompt, negative_prompt: negativePrompt, image_generation_mode: promptModes[type],
-            reference: isDerived ? references[0] : undefined,
+            ...pendingImageReview, prompt, negative_prompt: negativePrompt,
+            image_generation_mode: isDerived && derivedReference ? "reference" : promptModes[type],
+            reference: isDerived ? derivedReference : undefined,
             references: isDerived ? [] : references,
         };
-    }, [fullBodyPrompt, threeViewPrompt, headshotPrompt, negativePrompt, promptReferences, promptPickerReferences,
-        promptModes, pendingImageReview]);
+    }, [fullBodyPrompt, threeViewPrompt, headshotPrompt, negativePrompt, designReferenceAssets, promptReferences, promptPickerReferences,
+        promptModes, pendingImageReview, masterReference]);
     const reviewReferences = imageReviewRequest?.reference ? [imageReviewRequest.reference] : imageReviewRequest?.references || [];
     const reviewValidationError = !imageReviewRequest ? "" :
         imageReviewRequest.image_generation_mode === "text" && reviewReferences.length > 0
@@ -1194,7 +1251,25 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     };
 
     const designEditor = <CharacterDesignPanel
-        description={asset.description} details={designInput}
+        description={asset.description} details={designInput} characterName={asset.name} whiteFaceShape={whiteFaceShape}
+        onWhiteFaceSaved={(reference: AssetLibraryReference, prompt: string, shape: FaceShape) => {
+            const withoutWhiteFace = (items: AssetLibraryReference[]) => items.filter(item => !item.applied_fields?.includes("face_geometry"));
+            setDesignReferenceAssets(current => [...withoutWhiteFace(current), reference]);
+            setPromptPickerReferences(current => ({ ...current, full_body: [...withoutWhiteFace(current.full_body), reference] }));
+            setWhiteFaceShape(shape);
+            setDesignStatus("draft");
+            setPromptsNeedDesignApply(true);
+            setPanelMode("full_body", "reference");
+            setDesignTab("design");
+            updateStructuredDesign({
+                facial_proportions: `脸长 ${shape.faceLength}%，脸宽 ${shape.faceWidth}%（中性基准 100%）`,
+                eye_spacing: `眼距 ${shape.eyeSpacing}%（中性基准 100%）`,
+                cheekbones: `颧部宽 ${shape.cheekWidth}%（中性基准 100%）`,
+                jaw: `下颌宽 ${shape.jawWidth}%（中性基准 100%）`,
+                nose: `鼻部突出度 ${shape.noseProjection}%（中性基准 100%）`,
+            }, {});
+            refreshAssetIndex();
+        }}
         onDictionaryConfiguration={recordDictionaryConfiguration}
         configurations={dictionaryConfigurations}
         previousExpressionText={dictionaryConfigurations.find(configuration => configuration.preset_id === "dictionary.panel.expression")?.rendered_text}
@@ -1210,6 +1285,21 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         constraints={designConstraints} onConstraintsChange={value => {
             clearAIResultForInput();
             setDesignConstraints(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
+        }}
+        referenceCandidates={referenceCandidates}
+        referenceSelections={designReferenceAssets}
+        onRefreshReferences={refreshAssetIndex}
+        onReferenceSelectionsChange={(references) => {
+            setDesignReferenceAssets(references);
+            if (!references.some(item => item.applied_fields?.includes("face_geometry"))) {
+                setWhiteFaceShape(undefined);
+                setPromptPickerReferences(current => ({
+                    ...current,
+                    full_body: current.full_body.filter(item => !item.applied_fields?.includes("face_geometry")),
+                }));
+            }
+            setDesignStatus("draft");
+            setPromptsNeedDesignApply(true);
         }}
         supplemental={supplementalPrompt} onSupplementalChange={value => {
             setSupplementalPrompt(value);
@@ -1362,7 +1452,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         </div>}
                         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-glass-border px-3 sm:px-5" data-testid="character-asset-toolbar">
                             <div role="tablist" aria-label={tc("materialTypes")} className="flex min-w-0 gap-1 overflow-x-auto">
-                                {([ ["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")] ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
+                                {([["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
                                     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
                                     event.preventDefault();
                                     const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
@@ -1413,6 +1503,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
                         showReferencePicker
+                        designReferences={designReferenceAssets}
                         pickerReferences={promptPickerReferences.full_body}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("full_body", references)}
                         imageGenerationMode={promptModes.full_body}
@@ -1478,7 +1569,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
                         showReferencePicker
-                        pickerReferences={promptPickerReferences.three_view}
+                        designReferences={designReferenceAssets}
+                        pickerReferences={[...(masterReference ? [masterReference] : []), ...promptPickerReferences.three_view]}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("three_view", references)}
                         imageGenerationMode={promptModes.three_view}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("three_view", mode)}
@@ -1524,7 +1616,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onRefreshReferences={refreshAssetIndex}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
                         showReferencePicker
-                        pickerReferences={promptPickerReferences.headshot}
+                        designReferences={designReferenceAssets}
+                        pickerReferences={[...(masterReference ? [masterReference] : []), ...promptPickerReferences.headshot]}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("headshot", references)}
                         imageGenerationMode={promptModes.headshot}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("headshot", mode)}
@@ -1646,6 +1739,7 @@ export function WorkbenchPanel({
     onRefreshReferences,
     onReferencesChange,
     showReferencePicker = false,
+    designReferences,
     pickerReferences = [],
     onPickerReferencesChange,
     imageGenerationMode = "text",
@@ -1694,7 +1788,10 @@ export function WorkbenchPanel({
     const [promptSlash, setPromptSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const slashKeyHandler = useRef<((event: globalThis.KeyboardEvent) => boolean) | null>(null);
-    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, pickerReferences), [referenceCandidates, pickerReferences]);
+    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, designEditor ? (designReferences || []) : pickerReferences), [referenceCandidates, designEditor, designReferences, pickerReferences]);
+    // @ should search the complete owner-scoped asset index, including crowd
+    // variants. The explicit reference picker remains available for users who
+    // want to constrain the generation set before typing the prompt.
     const matchingReferenceCandidates = searchReferenceCandidates(selectedCandidates, mention?.query ?? "");
 
     const imageReferenceControls = <>
@@ -1714,7 +1811,7 @@ export function WorkbenchPanel({
                         ))}
                     </div>
                 </div>
-                {showReferencePicker && <div className="px-4 pt-2">
+                {showReferencePicker && !designEditor && <div className="px-4 pt-2">
                     <AssetReferencePicker
                         candidates={referenceCandidates}
                         selected={pickerReferences}
