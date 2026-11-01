@@ -16,19 +16,41 @@ function Head({ shape, side = false, x }: { shape: FaceShape; side?: boolean; x:
     shape = normalizeFaceShape(shape);
     const width = shape.faceWidth / 100;
     const length = shape.faceLength / 100;
+    const forehead = shape.foreheadWidth / 100;
     const cheek = shape.cheekWidth / 100;
     const jaw = shape.jawWidth / 100;
+    const chin = shape.chinWidth / 100;
+    const chinProjection = shape.chinProjection / 100;
     const eyes = shape.eyeSpacing / 100;
+    const eyeSize = shape.eyeSize / 100;
+    const eyeDepth = shape.eyeDepth / 100;
+    const eyeTilt = (shape.eyeTilt - 100) / 100;
+    const browEyeDistance = shape.browEyeDistance / 100;
+    const bridgeHeight = shape.noseBridgeHeight / 100;
+    const bridgeWidth = shape.noseBridgeWidth / 100;
     const nose = shape.noseProjection / 100;
+    const noseTip = shape.noseTipWidth / 100;
+    const nostril = shape.nostrilWidth / 100;
+    const mouth = shape.mouthWidth / 100;
+    const upperLip = shape.upperLipThickness / 100;
+    const lowerLip = shape.lowerLipThickness / 100;
+    const philtrum = shape.philtrumLength / 100;
+    const cornerTilt = (shape.mouthCornerTilt - 100) / 100;
     return <group position={[x, 0, 0]} rotation={[0, side ? Math.PI / 2 : 0, 0]}>
         <mesh scale={[0.68 * width, 0.9 * length, 0.55]}><sphereGeometry args={[1, 48, 32]} /><meshStandardMaterial color="#e3e6e5" roughness={0.92} /></mesh>
-        <mesh position={[0, -0.5 * length, 0.09]} scale={[0.46 * jaw, 0.35, 0.48]}><sphereGeometry args={[1, 40, 24]} /><meshStandardMaterial color="#dee1df" roughness={0.95} /></mesh>
+        <mesh position={[0, 0.34 * length, 0.02]} scale={[0.48 * forehead, 0.34 * length, 0.49]}><sphereGeometry args={[1, 32, 20]} /><meshStandardMaterial color="#e1e4e2" roughness={0.95} /></mesh>
+        <mesh position={[0, -0.5 * length, 0.09 + 0.035 * chinProjection]} scale={[0.46 * jaw, 0.35, 0.48]}><sphereGeometry args={[1, 40, 24]} /><meshStandardMaterial color="#dee1df" roughness={0.95} /></mesh>
+        <mesh position={[0, -0.72 * length, 0.13 + 0.07 * chinProjection]} scale={[0.22 * chin, 0.18, 0.18 * chinProjection]}><sphereGeometry args={[1, 32, 20]} /><meshStandardMaterial color="#d9dddb" roughness={0.95} /></mesh>
         {[-1, 1].map(sign => <group key={sign}>
             <mesh position={[sign * 0.5 * cheek, -0.12, 0.26]} scale={[0.19, 0.24, 0.28]}><sphereGeometry args={[1, 24, 16]} /><meshStandardMaterial color="#e6e8e7" roughness={0.95} /></mesh>
-            <mesh position={[sign * 0.27 * eyes, 0.16, 0.5]} scale={[0.095, 0.045, 0.03]}><sphereGeometry args={[1, 20, 12]} /><meshStandardMaterial color="#7d8586" roughness={1} /></mesh>
+            <mesh position={[sign * 0.27 * eyes, 0.16, 0.5 - 0.04 * eyeDepth]} rotation={[0, 0, sign * eyeTilt]} scale={[0.095 * eyeSize, 0.045 * eyeSize, 0.03 * eyeDepth]}><sphereGeometry args={[1, 20, 12]} /><meshStandardMaterial color="#7d8586" roughness={1} /></mesh>
+            <mesh position={[sign * 0.27 * eyes, 0.24 + 0.07 * browEyeDistance, 0.48 - 0.02 * eyeDepth]} rotation={[0, 0, sign * eyeTilt * 0.65]} scale={[0.13 * eyeSize, 0.025, 0.025]}><sphereGeometry args={[1, 20, 10]} /><meshStandardMaterial color="#b5bab8" roughness={1} /></mesh>
         </group>)}
-        <mesh position={[0, -0.06, 0.57 + 0.07 * nose]} rotation={[Math.PI / 2, 0, 0]} scale={[0.105, 0.23 * nose, 0.12]}><coneGeometry args={[1, 1, 24]} /><meshStandardMaterial color="#f0f1ef" roughness={0.9} /></mesh>
-        <mesh position={[0, -0.4, 0.5]} scale={[0.19, 0.025, 0.03]}><sphereGeometry args={[1, 20, 10]} /><meshStandardMaterial color="#9ca2a1" roughness={1} /></mesh>
+        <mesh position={[0, 0.08, 0.57 + 0.035 * bridgeHeight + 0.07 * nose]} rotation={[Math.PI / 2, 0, 0]} scale={[0.055 * bridgeWidth, 0.15 * bridgeHeight, 0.07 * nose]}><coneGeometry args={[1, 1, 20]} /><meshStandardMaterial color="#e9ecea" roughness={0.9} /></mesh>
+        <mesh position={[0, -0.06, 0.59 + 0.07 * nose]} rotation={[Math.PI / 2, 0, 0]} scale={[0.105 * noseTip, 0.23 * nose, 0.12 * nostril]}><coneGeometry args={[1, 1, 24]} /><meshStandardMaterial color="#f0f1ef" roughness={0.9} /></mesh>
+        <mesh position={[0, -0.27 - 0.06 * philtrum, 0.51 + 0.02 * nose]} scale={[0.19 * mouth, 0.018 * upperLip, 0.03]}><sphereGeometry args={[1, 20, 10]} /><meshStandardMaterial color="#9ca2a1" roughness={1} /></mesh>
+        <mesh position={[0, -0.33 - 0.08 * philtrum, 0.51 + 0.02 * nose]} scale={[0.19 * mouth, 0.018 * lowerLip, 0.03]}><sphereGeometry args={[1, 20, 10]} /><meshStandardMaterial color="#a8adab" roughness={1} /></mesh>
+        {[-1, 1].map(sign => <mesh key={`mouth-corner-${sign}`} position={[sign * 0.17 * mouth, -0.3 - 0.07 * philtrum + 0.08 * cornerTilt, 0.52 + 0.02 * nose]} scale={[0.035, 0.02, 0.025]}><sphereGeometry args={[1, 16, 10]} /><meshStandardMaterial color="#9ca2a1" roughness={1} /></mesh>)}
     </group>;
 }
 

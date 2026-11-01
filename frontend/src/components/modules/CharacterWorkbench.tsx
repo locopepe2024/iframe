@@ -47,7 +47,7 @@ import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
 import CharacterVoiceBinding from "./cast/CharacterVoiceBinding";
-import { FACE_SHAPE_REFERENCE_PROMPT, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
+import { faceShapePanelPrompt, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
 
 type CharacterImagePanel = "full_body" | "three_view" | "headshot";
 type CharacterWorkbenchPanel = CharacterImagePanel | "face_model" | "video";
@@ -180,7 +180,7 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
 
 function confirmedDesignDescription(design: DesignDraft | undefined): string {
     const whiteFaceText = design?.white_face_shape
-        ? design.active_design_source === "ai" ? faceShapePrompt(design.white_face_shape) : FACE_SHAPE_REFERENCE_PROMPT
+        ? design.active_design_source === "ai" ? faceShapePrompt(design.white_face_shape) : faceShapePanelPrompt(design.white_face_shape)
         : "";
     return [confirmedDesignContent(design), whiteFaceText,
         characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
@@ -731,7 +731,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
 
     const promptForSource = (source: "panel" | "ai") => [source === "ai" ? designResult || "" : panelDesignPrompt,
-        whiteFaceShape ? source === "ai" ? faceShapePrompt(whiteFaceShape) : FACE_SHAPE_REFERENCE_PROMPT : ""].filter(Boolean).join("\n");
+        whiteFaceShape ? source === "ai" ? faceShapePrompt(whiteFaceShape) : faceShapePanelPrompt(whiteFaceShape) : ""].filter(Boolean).join("\n");
     const descriptionForSource = (source: "panel" | "ai") => [promptForSource(source), designConstraintText].filter(Boolean).join("\n");
 
     const applyDesignToPrompts = (source: "panel" | "ai") => {

@@ -27,6 +27,9 @@ it("saves the edited geometry as a stable reference and matching prompt", async 
     fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
     fireEvent.change(screen.getByLabelText(/脸部长度/), { target: { value: "112" } });
     fireEvent.change(screen.getByLabelText(/鼻尖突出度/), { target: { value: "118" } });
+    fireEvent.change(screen.getByLabelText(/额头宽度/), { target: { value: "108" } });
+    fireEvent.click(screen.getByText("嘴唇与下巴"));
+    fireEvent.change(screen.getByLabelText(/嘴角倾斜/), { target: { value: "115" } });
     fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
@@ -37,8 +40,9 @@ it("saves the edited geometry as a stable reference and matching prompt", async 
     expect(onSaved).toHaveBeenCalledWith(
         { asset_type: "prop", asset_id: "face-prop", variant_id: "face-v1", application_mode: "reference_only", applied_fields: ["face_geometry"] },
         expect.stringContaining("鼻尖突出度 118%"),
-        expect.objectContaining({ faceLength: 112 }),
+        expect.objectContaining({ faceLength: 112, foreheadWidth: 108, mouthCornerTilt: 115 }),
     );
+    expect(createLibraryAsset.mock.calls[0][1].description).toContain("嘴角倾斜 115%");
 });
 
 it("restores saved proportions when the workbench reopens its design", () => {
