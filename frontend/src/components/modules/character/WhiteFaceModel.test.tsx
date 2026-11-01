@@ -26,7 +26,7 @@ it("saves the edited geometry as a stable reference and matching prompt", async 
     render(<WhiteFaceModel characterName="探子首领" onSaved={onSaved} />);
     fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
     fireEvent.change(screen.getByLabelText(/脸部长度/), { target: { value: "112" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存为出图参考" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
     expect(createLibraryAsset).toHaveBeenCalledWith("prop", expect.objectContaining({
