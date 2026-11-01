@@ -3,18 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { api, type AssetLibraryReference } from "@/lib/api";
-import { DEFAULT_FACE_SHAPE, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
+import { faceShapePrompt, normalizeFaceShape, type FaceShape } from "@/lib/whiteFaceShape";
 
-const CONTROLS: Array<[keyof FaceShape, string, number, number]> = [
-    ["faceLength", "脸部长度", 80, 120],
-    ["faceWidth", "脸部宽度", 80, 120],
-    ["cheekWidth", "颧部宽度", 80, 120],
-    ["jawWidth", "下颌宽度", 75, 125],
-    ["eyeSpacing", "眼距", 80, 120],
-    ["noseProjection", "鼻部突出度", 75, 125],
+const CONTROL_GROUPS: Array<[string, Array<[keyof FaceShape, string, number, number]>]> = [
+    ["头部轮廓", [["faceLength", "脸部长度", 80, 120], ["faceWidth", "脸部宽度", 80, 120], ["foreheadWidth", "额头宽度", 80, 120], ["cheekWidth", "颧部宽度", 80, 120], ["jawWidth", "下颌宽度", 75, 125], ["chinWidth", "下巴宽度", 75, 125], ["chinProjection", "下巴前突", 75, 125]]],
+    ["鼻部", [["noseBridgeHeight", "鼻梁高度", 75, 125], ["noseBridgeWidth", "鼻梁宽度", 75, 125], ["noseProjection", "鼻尖突出度", 75, 125], ["noseTipWidth", "鼻尖宽度", 75, 125], ["nostrilWidth", "鼻翼宽度", 75, 125]]],
+    ["眼眉", [["eyeSpacing", "眼距", 80, 120], ["eyeSize", "眼睛大小", 80, 120], ["eyeDepth", "眼窝深度", 80, 120], ["eyeTilt", "眼尾倾斜", 80, 120], ["browEyeDistance", "眉眼距离", 80, 120]]],
+    ["嘴唇与下巴", [["mouthWidth", "嘴宽", 80, 120], ["upperLipThickness", "上唇厚度", 75, 125], ["lowerLipThickness", "下唇厚度", 75, 125], ["philtrumLength", "人中长度", 80, 120], ["mouthCornerTilt", "嘴角倾斜", 80, 120]]],
 ];
 
 function Head({ shape, side = false, x }: { shape: FaceShape; side?: boolean; x: number }) {
+    shape = normalizeFaceShape(shape);
     const width = shape.faceWidth / 100;
     const length = shape.faceLength / 100;
     const cheek = shape.cheekWidth / 100;
@@ -35,17 +34,17 @@ function Head({ shape, side = false, x }: { shape: FaceShape; side?: boolean; x:
 
 export default function WhiteFaceModel({ characterName, initialShape, onSaved }: {
     characterName: string;
-    initialShape?: FaceShape;
+    initialShape?: Partial<FaceShape>;
     onSaved: (reference: AssetLibraryReference, prompt: string, shape: FaceShape) => void;
 }) {
-    const [shape, setShape] = useState<FaceShape>(initialShape ?? DEFAULT_FACE_SHAPE);
+    const [shape, setShape] = useState<FaceShape>(normalizeFaceShape(initialShape));
     const [open, setOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
     const stageRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        setShape(initialShape ?? DEFAULT_FACE_SHAPE);
+        setShape(normalizeFaceShape(initialShape));
     }, [initialShape]);
 
     const save = async () => {
@@ -84,11 +83,16 @@ export default function WhiteFaceModel({ characterName, initialShape, onSaved }:
                 <Head shape={shape} x={1.1} side />
             </Canvas>
         </div>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {CONTROLS.map(([key, label, min, max]) => <label key={key} className="text-xs text-text-secondary">
-                <span className="flex justify-between"><span>{label}</span><span>{shape[key]}%</span></span>
-                <input type="range" min={min} max={max} value={shape[key]} onChange={event => setShape(current => ({ ...current, [key]: Number(event.target.value) }))} className="w-full" />
-            </label>)}
+        <div className="space-y-2">
+            {CONTROL_GROUPS.map(([group, controls]) => <details key={group} open={group === "头部轮廓"} className="rounded border border-glass-border/60 p-2">
+                <summary className="cursor-pointer text-xs font-medium text-text-secondary">{group}</summary>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {controls.map(([key, label, min, max]) => <label key={key} className="text-xs text-text-secondary">
+                        <span className="flex justify-between"><span>{label}</span><span>{shape[key]}%</span></span>
+                        <input aria-label={label} type="range" min={min} max={max} value={shape[key]} onChange={event => setShape(current => ({ ...current, [key]: Number(event.target.value) }))} className="w-full" />
+                    </label>)}
+                </div>
+            </details>)}
         </div>
         <button type="button" disabled={saving} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
         {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
