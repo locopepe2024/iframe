@@ -48,6 +48,11 @@ export default function EditingPage() {
     setSources(old => ({ ...old, [item.id]: item }));
     change({ ...current, lanes, target_duration_ms: item.video ? start + duration : current.target_duration_ms });
   };
+  const importToWorkspace = (item: EditMaterial) => {
+    setSources(old => ({ ...old, [item.id]: item }));
+    setTab('edit');
+    window.location.hash = '#/editing';
+  };
   const importMaterials = () => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; };
   const deleteCurrentProject = () => {
     if (!project || dirty || busy) return;
@@ -61,7 +66,7 @@ export default function EditingPage() {
   return <div className="h-full space-y-5 overflow-y-auto p-4 md:p-7">
     <div className="flex flex-wrap items-center gap-2"><h1 className="font-display mr-3 text-2xl font-semibold">{t('独立剪辑', 'Independent editing')}</h1><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'edit'} onClick={() => { setTab('edit'); window.location.hash = '#/editing'; }}>{t('剪辑工作区', 'Editing')}</button><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'materials'} onClick={() => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; }}>{t('素材管理', 'Materials')}</button></div>
     <p className="text-sm text-text-secondary">{tab === 'materials' ? t('管理上传素材和目录；生成素材仍由来源项目维护。', 'Manage uploaded materials and folders; generated materials remain owned by their source project.') : t('从素材库选择视频，按顺序剪辑，添加音轨和字幕后合成。', 'Select videos, arrange the sequence, add audio and captions, then render.')}</p>
-    {tab === 'materials' ? <EditingMaterialManager onSelect={item => { add(item); setTab('edit'); window.location.hash = '#/editing'; }} disabled={!project || busy} /> : <>
+    {tab === 'materials' ? <EditingMaterialManager onSelect={importToWorkspace} disabled={!project || busy} /> : <>
     {error && <p role="alert" className="text-red-300">{error}</p>}
     <div className="flex flex-wrap gap-3">
       <select className="glass-input px-3 py-2" aria-label={t('剪辑项目', 'Editing project')} disabled={busy || dirty} value={project?.id || ''} onChange={e => { const id = e.target.value; if (id) void run(async () => accept(await editing.get(id))); }}><option value="">{t('选择项目', 'Select project')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>

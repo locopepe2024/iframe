@@ -13,12 +13,12 @@ export function EditingMaterials({ onSelect, onImport, materials = {}, disabled 
   return <section className="min-w-0 space-y-3" aria-label={t('剪辑素材库', 'Editing materials')}>
     <button type="button" className="glass-button min-h-11 px-3 py-2" disabled={disabled} onClick={onImport}>{t('导入', 'Import')}</button>
     {!items.length && <p className="text-xs text-text-secondary">{t('导入视频或音频开始剪辑。', 'Import video or audio to start editing.')}</p>}
-    <div className="grid grid-cols-2 gap-2">{items.map(item => <article key={item.id} className="group relative min-w-0 overflow-hidden rounded-lg border border-glass-border bg-surface" title={`${item.name} · ${(item.duration_ms / 1000).toFixed(3)}s`}>
-      <div className="aspect-video overflow-hidden bg-black/40">
+    <div className="flex min-w-0 flex-col gap-1">{items.map(item => <article key={item.id} className="group flex min-h-12 min-w-0 items-center gap-2 overflow-hidden rounded-md border border-glass-border bg-surface p-1" title={`${item.name} · ${(item.duration_ms / 1000).toFixed(3)}s`}>
+      <div className="h-10 w-16 shrink-0 overflow-hidden rounded bg-black/40">
         {item.video ? <video className="h-full w-full object-cover" src={item.url} poster={getVideoPosterUrl(item.url) || undefined} muted preload="metadata" aria-label={item.name} /> : <div className="flex h-full items-center justify-center text-text-muted"><Music size={24} aria-hidden="true" /></div>}
       </div>
-      <div className="flex items-center gap-1 p-1"><span className="min-w-0 flex-1 truncate text-xs">{item.name}</span>
-        <button type="button" className="flex min-h-11 min-w-11 items-center justify-center rounded-md bg-primary text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40" aria-label={`${t('添加素材', 'Add material')} ${item.name}`} title={t('添加到时间线', 'Add to timeline')} disabled={disabled} onClick={() => onSelect?.(item)}><Plus size={18} aria-hidden="true" /></button>
+      <div className="flex min-w-0 flex-1 items-center gap-1"><span className="min-w-0 flex-1 truncate text-xs">{item.name}</span>
+        <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40" aria-label={`${t('加入剪辑', 'Add to edit')} ${item.name}`} title={t('加入时间线', 'Add to timeline')} disabled={disabled} onClick={() => onSelect?.(item)}><Plus size={16} aria-hidden="true" /></button>
       </div>
     </article>)}</div>
   </section>;
@@ -121,7 +121,7 @@ function MaterialBrowser({ onSelect, disabled = false, manage }: Props & { manag
         {item.video ? <video className="h-full w-full object-cover" src={item.url} poster={getVideoPosterUrl(item.url) || undefined} muted preload="metadata" aria-label={item.name} /> : <div className="flex h-full items-center justify-center text-text-muted"><Music size={24} aria-hidden="true" /></div>}
         <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           <span className="pointer-events-none absolute bottom-1 left-1 right-1 truncate text-[10px] text-white">{item.name} · {item.duration_ms > 0 ? `${(item.duration_ms / 1000).toFixed(1)}s` : t('打开后查看时长', 'Open to inspect duration')}</span>
-          {onSelect && <button type="button" className="min-h-11 min-w-11 rounded-full bg-primary p-3 text-white" aria-label={`${t('添加素材', 'Add material')} ${item.name}`} title={t('添加到时间线', 'Add to timeline')} disabled={busy || disabled} onClick={() => void run(async () => { onSelect(await editing.material(item.id)); })}><Plus size={18} aria-hidden="true" /></button>}
+          {onSelect && <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary p-2 text-white" aria-label={`${manage ? t('导入工作区', 'Import to workspace') : t('加入剪辑', 'Add to edit')} ${item.name}`} title={manage ? t('导入到工作区', 'Import to workspace') : t('加入时间线', 'Add to timeline')} disabled={busy || disabled} onClick={() => void run(async () => { onSelect(await editing.material(item.id)); })}><Plus size={16} aria-hidden="true" /></button>}
           {manage && item.deletable && <button type="button" className="rounded-full bg-red-500/80 p-3 text-white" aria-label={`${t('删除素材', 'Delete material')} ${item.name}`} disabled={busy} onClick={() => { if (window.confirm(t(`确认删除「${item.name}」？`, `Delete “${item.name}”?`))) void run(async () => { await editing.deleteMaterial(item.id); setReload(n => n + 1); }); }}><Trash2 size={16} /></button>}
           {!item.deletable && manage && <span className="rounded-full bg-black/60 p-3 text-text-muted" title={t('来源素材不可删除', 'Source material is read-only')}><Lock size={16} /></span>}
         </div>

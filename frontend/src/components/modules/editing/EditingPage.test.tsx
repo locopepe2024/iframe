@@ -25,13 +25,14 @@ it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', 
   await screen.findByRole('option', { name: project.title });
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
   fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Add material Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Toggle material panel' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Add material Original.mp4' })).toBeEnabled());
-  fireEvent.click(screen.getByRole('button', { name: 'Add material Original.mp4' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(editing.material).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Add material Original.mp4' })).toBeEnabled());
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeEnabled());
   fireEvent.click(screen.getByText('Track settings'));
   fireEvent.click(screen.getByRole('button', { name: 'Add Music' }));
   fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
@@ -65,7 +66,8 @@ it('references library media in an independent plan then saves and renders that 
   await screen.findByRole('option', { name: project.title });
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
   fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Add material Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
   expect(screen.getByRole('button', { name: 'Render MP4' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
@@ -84,7 +86,8 @@ it('separates material management from the timeline and preserves unsaved edits 
   await screen.findByRole('option', { name: project.title });
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
   fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Add material Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
   expect(screen.queryByLabelText('Upload video or audio')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Materials' }));
@@ -168,12 +171,12 @@ it('shows only project materials in the workspace and opens the library through 
   render(<EditingMaterials onImport={onImport} onSelect={onSelect} materials={{ [material.id]: material }} />);
   expect(screen.queryByRole('textbox', { name: 'Search materials' })).not.toBeInTheDocument();
   expect(screen.queryByRole('navigation', { name: 'Folder path' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Root' })).not.toBeInTheDocument();
   expect(editing.materials).not.toHaveBeenCalled();
   expect(editing.folders).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Import' }));
   expect(onImport).toHaveBeenCalledOnce();
-  fireEvent.click(screen.getByRole('button', { name: 'Add material Original.mp4' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add to edit Original.mp4' }));
   expect(onSelect).toHaveBeenCalledWith(material);
 });
 
@@ -183,7 +186,8 @@ it('undoes and redoes a directional trim before saving the source interval', asy
   await screen.findByRole('option', { name: project.title });
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
   fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Add material Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
   const playhead = await screen.findByRole('spinbutton', { name: 'Playhead (seconds)' });
   fireEvent.change(playhead, { target: { value: '0.4' } });
   fireEvent.click(screen.getByRole('button', { name: 'Trim left' }));

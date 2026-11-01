@@ -192,7 +192,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
         if (event.key.toLowerCase() === "s" && canSplit) { event.preventDefault(); if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId())); return; }
         if ((event.key === "Delete" || event.key === "Backspace") && selected) { event.preventDefault(); applyEdit(() => removeAssemblyClip(plan, selected.laneId, selected.clipId)); setSelected(null); }
     };
-    const control = "min-h-11 rounded-md border border-glass-border bg-elevated px-3 py-2 text-xs text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40";
+    const control = "min-h-9 rounded-md border border-glass-border bg-elevated px-2 py-1 text-xs leading-5 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40";
     const active = plan.lanes.filter(l => l.kind === "subtitle" && !l.muted).flatMap(l => l.clips.filter(c => c.enabled && c.timeline_start_ms <= position && position < c.timeline_end_ms));
     const download = async (id: string) => {
         setBusy(true); setError(null);
