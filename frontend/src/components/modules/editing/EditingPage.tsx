@@ -49,9 +49,14 @@ export default function EditingPage() {
     change({ ...current, lanes, target_duration_ms: item.video ? start + duration : current.target_duration_ms });
   };
   const importToWorkspace = (item: EditMaterial) => {
-    setSources(old => ({ ...old, [item.id]: item }));
-    setTab('edit');
-    window.location.hash = '#/editing';
+    if (!project) return;
+    void run(async () => {
+      const updated = await editing.importMaterial(project.id, project.revision, item.id);
+      setProject(updated);
+      setSources(updated.sources);
+      setTab('edit');
+      window.location.hash = '#/editing';
+    });
   };
   const importMaterials = () => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; };
   const deleteCurrentProject = () => {
