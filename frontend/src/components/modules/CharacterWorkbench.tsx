@@ -534,8 +534,10 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     });
     const [promptModes, setPromptModes] = useState<Record<"full_body" | "three_view" | "headshot", "text" | "reference">>({
         full_body: "text",
-        three_view: "text",
-        headshot: "text",
+        // Derived character views start from the selected master image. The
+        // creator can explicitly switch either panel to Text to image.
+        three_view: "reference",
+        headshot: "reference",
     });
     const [platformPromptSources, setPlatformPromptSources] = useState<Record<CharacterImagePanel, AppliedPlatformPrompt | null>>({
         full_body: null, three_view: null, headshot: null,
@@ -591,7 +593,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     useEffect(() => {
         setPromptReferences({ full_body: [], three_view: [], headshot: [] });
         setPromptPickerReferences({ full_body: [], three_view: [], headshot: [] });
-        setPromptModes({ full_body: "text", three_view: "text", headshot: "text" });
+        setPromptModes({ full_body: "text", three_view: "reference", headshot: "reference" });
         setPlatformPromptSources({ full_body: null, three_view: null, headshot: null });
     }, [asset.id]);
 
@@ -1117,8 +1119,9 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const references = imageGenerationReferences([...designReferenceAssets, ...promptReferences[promptType], ...promptPickerReferences[promptType]]);
         const isDerived = type === "three_view" || type === "headshot";
         const derivedReference = imageGenerationReferences([...promptReferences[promptType], ...promptPickerReferences[promptType], ...(masterReference ? [masterReference] : [])])[0];
-        const imageGenerationMode = isDerived && derivedReference ? "reference" : promptModes[promptType];
-        prompt = addReferenceIntent(promptType, prompt, imageGenerationMode, isDerived && derivedReference ? [derivedReference] : references);
+        const imageGenerationMode = promptModes[promptType];
+        const effectiveDerivedReference = isDerived && imageGenerationMode === "reference" ? derivedReference : undefined;
+        prompt = addReferenceIntent(promptType, prompt, imageGenerationMode, effectiveDerivedReference ? [effectiveDerivedReference] : references);
         if (!seriesId && !currentProject?.id) return;
         setPendingImageReview({
             asset_id: asset.id,
@@ -1129,7 +1132,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             batch_size: batchSize,
             model_name: seriesId || currentProject?.series_id ? undefined : resolveAssetGenerationModel(currentProject?.model_settings?.t2i_model),
             image_generation_mode: imageGenerationMode,
-            ...(isDerived ? { reference: derivedReference } : { references }),
+            ...(isDerived ? { reference: effectiveDerivedReference } : { references }),
             apply_style: false,
             preserve_prompt: true,
         });
@@ -1157,11 +1160,12 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const references = imageGenerationReferences([...designReferenceAssets, ...promptReferences[type], ...promptPickerReferences[type]]);
         const isDerived = type === "three_view" || type === "headshot";
         const derivedReference = imageGenerationReferences([...promptReferences[type], ...promptPickerReferences[type], ...(masterReference ? [masterReference] : [])])[0];
-        const imageGenerationMode = isDerived && derivedReference ? "reference" : promptModes[type];
+        const imageGenerationMode = promptModes[type];
+        const effectiveDerivedReference = isDerived && imageGenerationMode === "reference" ? derivedReference : undefined;
         return {
-            ...pendingImageReview, prompt: addReferenceIntent(type, prompt, imageGenerationMode, isDerived && derivedReference ? [derivedReference] : references), negative_prompt: negativePrompt,
+            ...pendingImageReview, prompt: addReferenceIntent(type, prompt, imageGenerationMode, effectiveDerivedReference ? [effectiveDerivedReference] : references), negative_prompt: negativePrompt,
             image_generation_mode: imageGenerationMode,
-            reference: isDerived ? derivedReference : undefined,
+            reference: effectiveDerivedReference,
             references: isDerived ? [] : references,
         };
     }, [fullBodyPrompt, threeViewPrompt, headshotPrompt, negativePrompt, designReferenceAssets, promptReferences, promptPickerReferences,
@@ -1173,7 +1177,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         imageReviewRequest.image_generation_mode === "reference" && reviewReferences.length === 0
             ? "请选择至少一张参考素材。" :
         (imageReviewRequest.generation_type === "three_view" || imageReviewRequest.generation_type === "headshot") &&
-            (imageReviewRequest.image_generation_mode !== "reference" || reviewReferences.length !== 1)
+            imageReviewRequest.image_generation_mode === "reference" && reviewReferences.length !== 1
             ? "三视图和头像需要选择一张角色主图作为参考。" : "";
 
     // Helper to check if a specific type is generating
