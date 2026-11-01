@@ -189,6 +189,15 @@ function imageGenerationReferences(references: AssetLibraryReference[]): AssetLi
         .filter((reference, index, all) => all.findIndex(candidate => referenceKey(candidate) === referenceKey(reference)) === index);
 }
 
+const FULL_BODY_REFERENCE_INTENT = "附带的全身参考图是同一角色的外观参考，用于保持面容、发型、肤色、身形比例和服装细节；最终只生成一个目标角色，不显示参考图、白模、参考图边框或对照排版。";
+const DERIVED_REFERENCE_INTENT = "附带的角色主图是同一角色的身份与外观参考；只生成目标视图，不把参考图作为画面中的第二个人物，不显示参考图或对照排版。";
+
+function addReferenceIntent(type: "full_body" | "three_view" | "headshot", prompt: string, mode: "text" | "reference", references: AssetLibraryReference[]): string {
+    if (mode !== "reference" || references.length === 0) return prompt;
+    const intent = type === "full_body" ? FULL_BODY_REFERENCE_INTENT : DERIVED_REFERENCE_INTENT;
+    return prompt.includes(intent) ? prompt : [prompt, intent].filter(Boolean).join("\n");
+}
+
 function normalizeDesignQuestions(values: unknown): string[] {
     if (!Array.isArray(values)) return [];
     return values.flatMap((value) => typeof value === "string" ? value.split(/[；;\n]+/) : [])
@@ -1109,6 +1118,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const isDerived = type === "three_view" || type === "headshot";
         const derivedReference = imageGenerationReferences([...promptReferences[promptType], ...promptPickerReferences[promptType], ...(masterReference ? [masterReference] : [])])[0];
         const imageGenerationMode = isDerived && derivedReference ? "reference" : promptModes[promptType];
+        prompt = addReferenceIntent(promptType, prompt, imageGenerationMode, isDerived && derivedReference ? [derivedReference] : references);
         if (!seriesId && !currentProject?.id) return;
         setPendingImageReview({
             asset_id: asset.id,
@@ -1147,9 +1157,10 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const references = imageGenerationReferences([...designReferenceAssets, ...promptReferences[type], ...promptPickerReferences[type]]);
         const isDerived = type === "three_view" || type === "headshot";
         const derivedReference = imageGenerationReferences([...promptReferences[type], ...promptPickerReferences[type], ...(masterReference ? [masterReference] : [])])[0];
+        const imageGenerationMode = isDerived && derivedReference ? "reference" : promptModes[type];
         return {
-            ...pendingImageReview, prompt, negative_prompt: negativePrompt,
-            image_generation_mode: isDerived && derivedReference ? "reference" : promptModes[type],
+            ...pendingImageReview, prompt: addReferenceIntent(type, prompt, imageGenerationMode, isDerived && derivedReference ? [derivedReference] : references), negative_prompt: negativePrompt,
+            image_generation_mode: imageGenerationMode,
             reference: isDerived ? derivedReference : undefined,
             references: isDerived ? [] : references,
         };
