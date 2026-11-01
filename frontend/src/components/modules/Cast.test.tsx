@@ -15,7 +15,7 @@ vi.mock("./cast/CharacterWorkbenchBridge", () => ({ default: () => null }));
 
 afterEach(() => cleanup());
 
-it("renders regular character cards without a separate crowd panel", () => {
+it("renders extracted crowd roster entries in the character section", () => {
     useProjectStore.setState({
         currentProject: {
             id: "episode", title: "第一幕", series_id: "series",
@@ -35,13 +35,13 @@ it("renders regular character cards without a separate crowd panel", () => {
     render(<NextIntlClientProvider locale="zh" messages={messages}><Cast /></NextIntlClientProvider>);
 
     expect(screen.getByText("苏砚（雪痕客）")).toBeTruthy();
-    expect(screen.queryByText("流民匪寇")).toBeNull();
-    expect(screen.queryByText("青溪镇市井百姓")).toBeNull();
+    expect(screen.getByText("流民匪寇")).toBeTruthy();
+    expect(screen.getByText("青溪镇市井百姓")).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /群演/ })).toBeNull();
 });
 
 
-it("does not surface legacy crowd roster entries as standalone cards", async () => {
+it("surfaces project crowd groups as reusable character cards", async () => {
     useProjectStore.setState({
         currentProject: {
             id: "episode-refresh", title: "第一幕", series_id: "series",
@@ -58,8 +58,8 @@ it("does not surface legacy crowd roster entries as standalone cards", async () 
     });
 
     render(<NextIntlClientProvider locale="zh" messages={messages}><Cast /></NextIntlClientProvider>);
-    expect(screen.queryByText("流民匪寇")).toBeNull();
-    expect(screen.queryByText("江湖打手")).toBeNull();
+    expect(screen.getByText("流民匪寇")).toBeTruthy();
+    expect(screen.getByText("江湖打手")).toBeTruthy();
 
     await act(async () => {
         useProjectStore.getState().updateProject("episode-refresh", {
@@ -73,6 +73,6 @@ it("does not surface legacy crowd roster entries as standalone cards", async () 
         } as any);
     });
 
-    expect(screen.queryByText("玄宸阁随行探子")).toBeNull();
-    expect(screen.queryByText("往来江湖客")).toBeNull();
+    expect(screen.getByText("玄宸阁随行探子")).toBeTruthy();
+    expect(screen.getByText("往来江湖客")).toBeTruthy();
 });

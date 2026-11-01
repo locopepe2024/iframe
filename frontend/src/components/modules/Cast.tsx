@@ -44,6 +44,7 @@ interface CastItem {
     referenceImageUrl?: string;     // 参考图（优先 reference_sheet → full_body fallback）
     status: "ready" | "pending" | "new";
     persona?: string;               // R2V v2 P1-a — characters only; groups visual variants of same person
+    virtualCrowd?: boolean;         // extracted crowd roster entry without a character asset yet
 }
 
 function resolveSceneImage(s: any): string | undefined {
@@ -58,6 +59,7 @@ export default function Cast() {
     const tStep = useTranslations("stepHeader");
     const t = useTranslations("cast");
     const currentProject = useProjectStore((state) => state.currentProject);
+    const currentSeries = useProjectStore((state) => state.currentSeries);
 
     // R2V v2 Phase 5 — add new asset modal (placeholder for full
     // generation flow which lands in a follow-up patch). For now this
@@ -120,6 +122,42 @@ export default function Cast() {
             };
         }).sort((a, b) => b.appearances - a.appearances || a.name.localeCompare(b.name));
 
+        // Entity extraction stores anonymous but reusable populations in the
+        // crowd roster rather than in characters. They still belong in the
+        // role/cast entry point so users can see and later give them visual
+        // variants. Keep them as separate cards with a stable prefixed id;
+        // do not merge by location or label with ordinary characters.
+        const crowdEntries = new Map<string, any>();
+        const addCrowdEntries = (entries: any[] | undefined) => {
+            for (const entry of entries ?? []) {
+                const key = String(entry?.extra_id ?? entry?.id ?? entry?.label ?? entry?.name ?? "").trim();
+                if (!key) continue;
+                const existing = crowdEntries.get(key);
+                if (!existing || existing.kind === "extra_template") crowdEntries.set(key, entry);
+            }
+        };
+        addCrowdEntries((currentProject as any)?.crowd_groups);
+        addCrowdEntries((currentProject as any)?.crowd_group_candidates);
+        addCrowdEntries((currentSeries as any)?.extra_roster);
+        const characterById = new Map(characterPool.map((c: any) => [String(c.id), c]));
+        const crowdCharacters: CastItem[] = Array.from(crowdEntries.values()).map((entry: any) => {
+            const visualAsset = entry.visual_asset_id ? characterById.get(String(entry.visual_asset_id)) : undefined;
+            const imageUrl = visualAsset ? characterImageUrl(visualAsset) : undefined;
+            const label = String(entry.label ?? entry.name ?? entry.extra_id);
+            return {
+                id: `crowd:${String(entry.extra_id ?? entry.id ?? label)}`,
+                name: label,
+                kind: "character" as const,
+                appearances: 0,
+                referenceImageUrl: imageUrl,
+                status: (imageUrl ? "ready" : "pending") as "ready" | "pending",
+                persona: label,
+                virtualCrowd: true,
+            };
+        });
+        characters.push(...crowdCharacters);
+        characters.sort((a, b) => b.appearances - a.appearances || a.name.localeCompare(b.name));
+
         const scenes: CastItem[] = scenePool.map((s: any) => {
             const imageUrl = resolveSceneImage(s);
             return {
@@ -145,7 +183,7 @@ export default function Cast() {
         }).sort((a, b) => b.appearances - a.appearances || a.name.localeCompare(b.name));
 
         return { characters, scenes, props };
-    }, [currentProject?.frames, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
+    }, [currentProject?.frames, currentProject?.characters, currentProject?.crowd_groups, currentProject?.crowd_group_candidates, currentProject?.scenes, currentProject?.props, currentSeries?.extra_roster]);
 
     // Crowd characters are regular character assets. The legacy roster is
     // still read for storyboard compatibility, but is not a separate cast UI.
@@ -637,14 +675,14 @@ function CastSection({ kind, icon, title, items, emptyLabel, onAddNew, addLabel,
                                 </div>
                             )}
                             <div className={`grid gap-3 ${gridCols}`}>
-                                {group.items.map(item => <CastCard key={item.id} item={item} onOpenWorkbench={() => onOpenWorkbench?.(item.id)} />)}
+                                {group.items.map(item => <CastCard key={item.id} item={item} onOpenWorkbench={item.virtualCrowd ? undefined : () => onOpenWorkbench?.(item.id)} />)}
                             </div>
                         </div>
                     ))}
                 </div>
             ) : (
                 <div className={`grid gap-3 ${gridCols}`}>
-                    {items.map(item => <CastCard key={item.id} item={item} onOpenWorkbench={() => onOpenWorkbench?.(item.id)} />)}
+                    {items.map(item => <CastCard key={item.id} item={item} onOpenWorkbench={item.virtualCrowd ? undefined : () => onOpenWorkbench?.(item.id)} />)}
                 </div>
             )}
         </section>
