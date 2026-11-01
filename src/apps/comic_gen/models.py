@@ -305,7 +305,7 @@ class ImageVariant(BaseModel):
         if self.url and not self.storage_key:
             self.storage_key = self.url
         return self
-    reference_inputs: List[Dict[str, str]] = Field(
+    reference_inputs: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Ordered stable asset-library inputs used to generate this variant",
     )
