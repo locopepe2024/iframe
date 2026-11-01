@@ -90,7 +90,7 @@ export default function WhiteFaceModel({ characterName, initialShape, onSaved }:
                 <input type="range" min={min} max={max} value={shape[key]} onChange={event => setShape(current => ({ ...current, [key]: Number(event.target.value) }))} className="w-full" />
             </label>)}
         </div>
-        <button type="button" disabled={saving} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存为出图参考"}</button>
+        <button type="button" disabled={saving} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
         {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
         </>}
     </section>;

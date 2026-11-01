@@ -767,7 +767,26 @@ it('includes saved white face proportions once in a panel image prompt', () => {
     const prompt = imagePromptInput().textContent || '';
     expect(prompt.match(/脸长 90%/g)).toHaveLength(1);
     expect(prompt.match(/鼻部突出度 75%/g)).toHaveLength(1);
-    expect(prompt).toContain('白模正面和侧面是同一人的两种视角');
+    expect(prompt).toContain('最终画面只呈现目标角色');
+});
+
+it('submits face proportions without including the white model image in a full-body generation', async () => {
+    const whiteFace = { asset_type: 'prop', asset_id: 'face-prop', variant_id: 'face-v1', application_mode: 'reference_only', applied_fields: ['face_geometry'] };
+    const shape = { faceLength: 90, faceWidth: 120, cheekWidth: 117, jawWidth: 75, eyeSpacing: 80, noseProjection: 75 };
+    const saved = {
+        confirmed: true,
+        active_design_source: 'panel',
+        identity: { editor_mode: 'fields', features: { facial_proportions: '脸长 90%，脸宽 120%（中性基准 100%）' } },
+        reference_assets: [whiteFace], white_face_shape: shape,
+    };
+    const { onGenerate } = mountSimpleDesign({ character_design: { design_draft: saved, design_revisions: [{ revision: 1, design: saved }] } });
+    fireEvent.click(screen.getAllByTestId('variant-generate')[0]);
+    await waitFor(() => expect(apiMocks.previewAssetImageSubmission).toHaveBeenCalled());
+    const request = apiMocks.previewAssetImageSubmission.mock.lastCall?.[1];
+    expect(request.prompt).toContain('脸长 90%');
+    expect(request.image_generation_mode).toBe('text');
+    expect(request.references).toEqual([]);
+    expect(onGenerate).not.toHaveBeenCalled();
 });
 
 it.each(['panel', 'ai'] as const)('generates explicitly from %s while preserving both saved designs', async (source) => {

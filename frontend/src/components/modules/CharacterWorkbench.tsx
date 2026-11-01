@@ -184,6 +184,11 @@ function confirmedDesignDescription(design: DesignDraft | undefined): string {
         characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
 }
 
+function imageGenerationReferences(references: AssetLibraryReference[]): AssetLibraryReference[] {
+    return references.filter(reference => !reference.applied_fields?.includes("face_geometry"))
+        .filter((reference, index, all) => all.findIndex(candidate => referenceKey(candidate) === referenceKey(reference)) === index);
+}
+
 function normalizeDesignQuestions(values: unknown): string[] {
     if (!Array.isArray(values)) return [];
     return values.flatMap((value) => typeof value === "string" ? value.split(/[；;\n]+/) : [])
@@ -1100,10 +1105,9 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         else if (type === "headshot") prompt = headshotPrompt;
 
         const promptType = type === "reference_sheet" ? "full_body" : type;
-        const references = [...designReferenceAssets, ...promptReferences[promptType], ...promptPickerReferences[promptType]]
-            .filter((reference, index, all) => all.findIndex((candidate) => referenceKey(candidate) === referenceKey(reference)) === index);
+        const references = imageGenerationReferences([...designReferenceAssets, ...promptReferences[promptType], ...promptPickerReferences[promptType]]);
         const isDerived = type === "three_view" || type === "headshot";
-        const derivedReference = promptReferences[promptType][0] || promptPickerReferences[promptType][0] || masterReference;
+        const derivedReference = imageGenerationReferences([...promptReferences[promptType], ...promptPickerReferences[promptType], ...(masterReference ? [masterReference] : [])])[0];
         const imageGenerationMode = isDerived && derivedReference ? "reference" : promptModes[promptType];
         if (!seriesId && !currentProject?.id) return;
         setPendingImageReview({
@@ -1140,10 +1144,9 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const type = pendingImageReview.generation_type === "reference_sheet" ? "full_body" : pendingImageReview.generation_type;
         if (type !== "full_body" && type !== "three_view" && type !== "headshot") return pendingImageReview;
         const prompt = type === "full_body" ? fullBodyPrompt : type === "three_view" ? threeViewPrompt : headshotPrompt;
-        const references = [...designReferenceAssets, ...promptReferences[type], ...promptPickerReferences[type]]
-            .filter((reference, index, all) => all.findIndex(candidate => referenceKey(candidate) === referenceKey(reference)) === index);
+        const references = imageGenerationReferences([...designReferenceAssets, ...promptReferences[type], ...promptPickerReferences[type]]);
         const isDerived = type === "three_view" || type === "headshot";
-        const derivedReference = promptReferences[type][0] || promptPickerReferences[type][0] || masterReference;
+        const derivedReference = imageGenerationReferences([...promptReferences[type], ...promptPickerReferences[type], ...(masterReference ? [masterReference] : [])])[0];
         return {
             ...pendingImageReview, prompt, negative_prompt: negativePrompt,
             image_generation_mode: isDerived && derivedReference ? "reference" : promptModes[type],
@@ -1262,7 +1265,6 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             setWhiteFaceShape(shape);
             setDesignStatus("draft");
             setPromptsNeedDesignApply(true);
-            setPanelMode("full_body", "reference");
             setDesignTab("design");
             updateStructuredDesign({
                 facial_proportions: `脸长 ${shape.faceLength}%，脸宽 ${shape.faceWidth}%（中性基准 100%）`,
