@@ -23,6 +23,18 @@ from src.apps.comic_gen.pipeline import (
 from src.models.image import WanxImageModel
 
 
+def test_image_variant_keeps_reference_application_fields():
+    reference = {
+        "asset_type": "prop",
+        "asset_id": "face-model",
+        "variant_id": "front-side",
+        "application_mode": "reference_only",
+        "applied_fields": ["face_geometry"],
+    }
+    variant = ImageVariant(id="result", url="result.png", reference_inputs=[reference])
+    assert variant.model_dump()["reference_inputs"] == [reference]
+
+
 def _pipeline_with_assets(tmp_path: Path):
     from src.apps.comic_gen.models import Script
 
