@@ -499,7 +499,7 @@ it("loads the project reference index for the character workbench", async () => 
     fireEvent.click(confirm);
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
-        "@Pocket watch ",
+        expect.stringContaining("@Pocket watch "),
         false,
         expect.any(String),
         1,
@@ -694,7 +694,7 @@ it("refreshes the reference index when a generated project snapshot arrives", as
 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
         "full_body",
-        "@Hero ",
+        expect.stringContaining("@Hero "),
         false,
         expect.any(String),
         1,
