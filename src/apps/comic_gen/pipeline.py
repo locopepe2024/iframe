@@ -3234,7 +3234,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             look = design.get("look", {})
             if not isinstance(identity, dict) or not isinstance(look, dict):
                 raise ValueError("Character design identity and look must be objects")
-            for section, allowed in ((identity, {"gender", "age", "face", "face_shape", "forehead", "cheekbones", "jaw", "chin", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks"}),
+            for section, allowed in ((identity, {"gender", "age", "face", "face_shape", "facial_proportions", "eye_spacing", "primary_feature", "secondary_features", "forehead", "cheekbones", "jaw", "chin", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks"}),
                                      (look, {"clothing", "palette", "footwear", "jewelry", "decoration", "condition", "garment_condition", "jewelry_condition", "accessories", "weapon"})):
                 if section.get("editor_mode") not in (None, "notes", "fields"):
                     raise ValueError("Character design editor mode is invalid")
@@ -3244,7 +3244,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 ):
                     raise ValueError("Character design features are invalid")
             section_fields = {
-                "identity": {"gender", "age", "face", "face_shape", "forehead", "cheekbones", "jaw", "chin", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks"},
+                "identity": {"gender", "age", "face", "face_shape", "facial_proportions", "eye_spacing", "primary_feature", "secondary_features", "forehead", "cheekbones", "jaw", "chin", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks"},
                 "look": {"clothing", "palette", "footwear", "jewelry", "decoration", "condition", "garment_condition", "jewelry_condition", "accessories", "weapon"},
             }
             valid_basis = {"script_fact", "user_specified", "confirmed_design", "verified_reference", "creative_choice"}

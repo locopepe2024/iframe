@@ -209,10 +209,10 @@ it("shows one task at a time and unlocks derived prompts when the reference shee
     );
 
     expect(container.querySelectorAll("[contenteditable]")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: "three_view" } });
     expect(container.querySelectorAll("[contenteditable]")).toHaveLength(1);
     expect(screen.getByRole("textbox", { name: "角色设计，/ 选择词典，[] 调整细节" })).toHaveAttribute("contenteditable", "true");
-    fireEvent.click(screen.getByRole("tab", { name: "avatar" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: "headshot" } });
     expect(screen.getByRole("textbox", { name: "角色设计，/ 选择词典，[] 调整细节" })).toHaveAttribute("contenteditable", "true");
     expect(screen.queryByText("Generate Master Asset first")).not.toBeInTheDocument();
 });
@@ -278,13 +278,29 @@ it("preserves each task prompt while switching views", () => {
     render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
     const fullBody = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
     act(() => { fullBody.editor.commands.setContent("<p>full body detail</p>"); });
-    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: "three_view" } });
     const threeView = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
     act(() => { threeView.editor.commands.setContent("<p>three view detail</p>"); });
-    fireEvent.click(screen.getByRole("tab", { name: "masterAsset" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: "full_body" } });
     expect((imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor }).editor.getText()).toBe("full body detail");
-    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: "three_view" } });
     expect((imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor }).editor.getText()).toBe("three view detail");
+});
+
+it("uses the selected character master for a headshot instead of an earlier crowd design reference", async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] } as any);
+    apiMocks.previewAssetImageSubmission.mockClear();
+    render(<CharacterWorkbench asset={{ id: "leader", name: "探子首领", description: "探子",
+        reference_sheet: { selected_image_id: "formal", image_variants: [{ id: "formal", url: "formal.webp" }] },
+        character_design: { design_draft: { reference_assets: [{ asset_type: "crowd", asset_id: "crowd-look", variant_id: "style" }] } },
+    }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: "headshot" } });
+    fireEvent.click(screen.getByTestId("variant-generate"));
+    await waitFor(() => expect(apiMocks.previewAssetImageSubmission).toHaveBeenCalled());
+    expect(apiMocks.previewAssetImageSubmission.mock.lastCall?.[1]).toMatchObject({
+        image_generation_mode: "reference",
+        reference: { asset_type: "character", asset_id: "leader", variant_id: "formal" },
+    });
 });
 
 it("keeps image references separate from generated variants", () => {
@@ -717,8 +733,8 @@ it("locates character previews by the owning character rather than its image con
         three_view_asset: { selected_id: "views", variants: [{ id: "views", url: "views.webp" }] },
         headshot_asset: { selected_id: "head", variants: [{ id: "head", url: "head.webp" }] },
     }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
-    for (const tab of ["masterAsset", "threeViews", "avatar"]) {
-        fireEvent.click(screen.getByRole("tab", { name: tab }));
+    for (const template of ["full_body", "three_view", "headshot"]) {
+        fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: template } });
         expect(JSON.parse(screen.getByTestId("preview-locator").textContent!)).toEqual({ scope: "project", containerId: "project-1", assetType: "character", assetId: "character-owner" });
     }
 });
@@ -743,7 +759,7 @@ it("keeps presentation controls with asset tabs and omits the embedded panel des
     render(<CharacterWorkbench asset={{ id: "compact-character", name: "Hero", description: "A hero" }}
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
     const toolbar = screen.getByTestId("character-asset-toolbar");
-    expect(toolbar).toContainElement(within(toolbar).getByRole("tablist"));
+    expect(toolbar).toContainElement(within(toolbar).getByRole("combobox", { name: "出图模板" }));
     expect(toolbar).toContainElement(screen.getByRole("group", { name: "资产呈现方式" }));
     expect(screen.queryByText("The primary reference for character consistency.")).not.toBeInTheDocument();
     const alert = vi.spyOn(window, "alert").mockImplementation(() => {});
@@ -751,7 +767,7 @@ it("keeps presentation controls with asset tabs and omits the embedded panel des
     expect(alert).toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "staticMode" })).toHaveAttribute("aria-pressed", "true");
     alert.mockRestore();
-    fireEvent.click(screen.getByRole("tab", { name: "threeViews" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: "three_view" } });
     expect(screen.queryByRole("group", { name: "资产呈现方式" })).not.toBeInTheDocument();
 });
 
@@ -761,9 +777,9 @@ it("preserves independent full-body and headshot presentation modes in the share
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "motionMode" }));
     expect(screen.getByRole("button", { name: "motionMode" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("tab", { name: "avatar" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: "headshot" } });
     expect(screen.getByRole("button", { name: "staticMode" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("tab", { name: "masterAsset" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: "full_body" } });
     expect(screen.getByRole("button", { name: "motionMode" })).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -850,7 +866,8 @@ it("opens design in the existing Prompt column with source and model, without a 
     const { onUpdateDescription } = mountSimpleDesign();
     const design = screen.getByRole("region", { name: "角色设计" });
     expect(design.closest("aside")).toBeNull();
-    expect(screen.getAllByRole("tab")).toHaveLength(5);
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(screen.getByRole("combobox", { name: "出图模板" })).toHaveValue("full_body");
     expect(screen.getByText("少年，身姿挺拔，素黑劲装；性格沉静寡言。")).toBeInTheDocument();
     expect(screen.getByText("供设计核对，不随 AI 完善改写。")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "身份视觉值" })).not.toBeInTheDocument();
@@ -1026,8 +1043,8 @@ it("applies the edited reviewed text to all image tasks only on explicit applica
     fireEvent.change(result, { target: { value: "身份：清冽眉目，身高约178厘米。\n造型：黑色外衣一件，布靴。" } });
     fireEvent.click(screen.getByRole("button", { name: /^应用.*到图片提示词/ }));
     openImagePrompt();
-    for (const name of ["masterAsset", "threeViews", "avatar"]) {
-        fireEvent.click(screen.getByRole("tab", { name }));
+    for (const template of ["full_body", "three_view", "headshot"]) {
+        fireEvent.change(screen.getByRole("combobox", { name: "出图模板" }), { target: { value: template } });
         const prompt = imagePromptInput();
         expect(prompt).toHaveTextContent("清冽眉目，身高约178厘米。");
         expect(prompt).toHaveTextContent("黑色外衣一件，布靴。");

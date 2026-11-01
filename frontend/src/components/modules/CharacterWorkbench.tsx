@@ -643,6 +643,10 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const masterAsset = referenceSheetImageAsset || asset.full_body_asset;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
+    const masterVariantId = masterAsset?.selected_id || masterAsset?.variants?.[0]?.id;
+    const masterReference: AssetLibraryReference | undefined = masterImageUrl && masterVariantId
+        ? { asset_type: "character", asset_id: asset.id, variant_id: masterVariantId }
+        : undefined;
     // Local state for prompts
     const getInitialPrompt = (type: string, existingPrompt: string) => {
         const confirmedDesign = asset.character_design?.design_revisions?.at(-1)?.design || (savedDesign.confirmed ? savedDesign : undefined);
@@ -1089,9 +1093,10 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const promptType = type === "reference_sheet" ? "full_body" : type;
         const references = [...designReferenceAssets, ...promptReferences[promptType], ...promptPickerReferences[promptType]]
             .filter((reference, index, all) => all.findIndex((candidate) => referenceKey(candidate) === referenceKey(reference)) === index);
-        const imageGenerationMode = promptModes[promptType];
-        if (!seriesId && !currentProject?.id) return;
         const isDerived = type === "three_view" || type === "headshot";
+        const derivedReference = promptReferences[promptType][0] || promptPickerReferences[promptType][0] || masterReference;
+        const imageGenerationMode = isDerived && derivedReference ? "reference" : promptModes[promptType];
+        if (!seriesId && !currentProject?.id) return;
         setPendingImageReview({
             asset_id: asset.id,
             asset_type: "character",
@@ -1101,7 +1106,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             batch_size: batchSize,
             model_name: seriesId || currentProject?.series_id ? undefined : resolveAssetGenerationModel(currentProject?.model_settings?.t2i_model),
             image_generation_mode: imageGenerationMode,
-            ...(isDerived ? { reference: references[0] } : { references }),
+            ...(isDerived ? { reference: derivedReference } : { references }),
             apply_style: false,
             preserve_prompt: true,
         });
@@ -1129,13 +1134,15 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const references = [...designReferenceAssets, ...promptReferences[type], ...promptPickerReferences[type]]
             .filter((reference, index, all) => all.findIndex(candidate => referenceKey(candidate) === referenceKey(reference)) === index);
         const isDerived = type === "three_view" || type === "headshot";
+        const derivedReference = promptReferences[type][0] || promptPickerReferences[type][0] || masterReference;
         return {
-            ...pendingImageReview, prompt, negative_prompt: negativePrompt, image_generation_mode: promptModes[type],
-            reference: isDerived ? references[0] : undefined,
+            ...pendingImageReview, prompt, negative_prompt: negativePrompt,
+            image_generation_mode: isDerived && derivedReference ? "reference" : promptModes[type],
+            reference: isDerived ? derivedReference : undefined,
             references: isDerived ? [] : references,
         };
     }, [fullBodyPrompt, threeViewPrompt, headshotPrompt, negativePrompt, designReferenceAssets, promptReferences, promptPickerReferences,
-        promptModes, pendingImageReview]);
+        promptModes, pendingImageReview, masterReference]);
     const reviewReferences = imageReviewRequest?.reference ? [imageReviewRequest.reference] : imageReviewRequest?.references || [];
     const reviewValidationError = !imageReviewRequest ? "" :
         imageReviewRequest.image_generation_mode === "text" && reviewReferences.length > 0
@@ -1409,16 +1416,14 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                             </button>
                         </div>}
                         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 border-b border-glass-border px-3 sm:px-5" data-testid="character-asset-toolbar">
-                            <div role="tablist" aria-label={tc("materialTypes")} className="flex min-w-0 gap-1 overflow-x-auto">
-                                {([ ["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")] ] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
-                                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-                                    event.preventDefault();
-                                    const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
-                                    const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
-                                    next?.click();
-                                    next?.focus();
-                                }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
-                            </div>
+                            <label className="flex min-h-11 min-w-0 items-center gap-2 text-sm text-text-secondary">
+                                <span className="shrink-0">出图模板</span>
+                                <select aria-label="出图模板" value={activePanel} onChange={(event) => setActivePanel(event.target.value as CharacterImagePanel)} className="min-w-0 rounded border border-glass-border bg-surface-inset px-2 py-1 text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                    <option value="full_body">全身角色图</option>
+                                    <option value="three_view">三视图设定</option>
+                                    <option value="headshot">头像特写</option>
+                                </select>
+                            </label>
                             {activePanel !== "three_view" && <CharacterPresentationSwitch
                                 mode={activePanel === "full_body" ? fullBodyMode : headshotMode}
                                 onModeChange={activePanel === "full_body" ? setFullBodyMode : setHeadshotMode}
@@ -1528,7 +1533,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
                         showReferencePicker
                         designReferences={designReferenceAssets}
-                        pickerReferences={promptPickerReferences.three_view}
+                        pickerReferences={[...(masterReference ? [masterReference] : []), ...promptPickerReferences.three_view]}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("three_view", references)}
                         imageGenerationMode={promptModes.three_view}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("three_view", mode)}
@@ -1575,7 +1580,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
                         showReferencePicker
                         designReferences={designReferenceAssets}
-                        pickerReferences={promptPickerReferences.headshot}
+                        pickerReferences={[...(masterReference ? [masterReference] : []), ...promptPickerReferences.headshot]}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("headshot", references)}
                         imageGenerationMode={promptModes.headshot}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("headshot", mode)}

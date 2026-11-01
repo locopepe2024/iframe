@@ -232,6 +232,20 @@ export const CHARACTER_DICTIONARY_PRESETS: CharacterDictionaryPreset[] = [
   ...CHARACTER_EXPRESSION_PROMPTS,
   classicalBaseTemplate("classical-live-action", "写实真人古装", "写实真人影像风格，人体比例自然，皮肤保留真实纹理，光影自然克制。"),
   classicalBaseTemplate("classical-donghua", "二次元国漫古装", "二次元国漫风格，二维手绘线条清晰，赛璐璐明暗分区明确，色块干净，人物比例与五官造型统一。"),
+  ...[
+    ["identity-anchor", "角色身份锚点卡", "生成当前角色的单人正面全身身份锚点卡。完整呈现已确认的面容、发型、肤色、身高比例、常态体态与基础造型；头顶到鞋底入画，面容可辨，背景简洁。只使用当前角色的身份参考，不借用其他角色的面容；未经确认的造型细节不写成身份事实。"],
+    ["full-body-anchor", "全身定妆图", "生成当前角色的单人全身定妆图，头顶到鞋底完整入画。保持已确认的面容、发型、身高比例与服装层次；衣领、袖口、腰带、下装和鞋履清楚可辨。站姿自然，背景简洁，不加入其他人物或无关道具。"],
+    ["three-view-anchor", "角色三视图", "以当前角色选中的正式造型图为身份参考，生成同一人的正面、侧面、背面全身三视图。三个视角保持身高比例、发型结构、衣物层次、颜色、配饰位置一致；人物均从头到脚完整可见，背景简洁。"],
+    ["headshot-anchor", "角色头像特写", "以当前角色选中的正式造型图为面容参考，生成同一人的头肩特写。保持脸型、五官比例、眼周细节、肤色、发际线和发型；保留自然肤质，眼神有明确落点。画面只出现该角色，不采用其他角色或群演的面容。"],
+    ["expression-sheet", "多表情参考卡", "以当前角色已确认的面容图为参考，制作同一人的多表情参考卡。每格保持脸型、五官比例、发际线、肤色与基础造型一致；通过眉眼、嘴角和面部肌肉表现不同表情，标注仅用于辨认。表情属于表演参考，不改变角色的长期身份。"],
+    ["costume-breakdown", "角色服装拆解卡", "以当前角色已确认的造型图为参考，展示同一套服装的整体外观与衣领、袖口、腰线、下摆、鞋履局部。明确层次、颜色、材质、连接方式与固定配饰位置，不新增未经确认的衣物或武器。服装卡只说明造型，不改变面容和体型。"],
+    ["crowd-member", "固定群演单人卡", "从当前群演资产的一个明确变体制作单人全身参考卡。保留该变体的面容、体型、发型与服装识别点；在同组统一的服装轮廓、主色和材质范围内呈现差异。只出现一人，轮廓完整，不把同组其他成员的面孔混入。"],
+  ].map(([id, title, text]) => ({
+    id: `dictionary.template.${id}`, title, text, type: "Prompt 模板" as const,
+    categories: ["character-template"], domain: "角色设计快捷 Skill", source: "iFrame 角色设计 · v1",
+    search: `角色设计 角色模板 快捷 skill ${title} 全身 三视图 头像 一致性`,
+    fields: [{ key: "template_usage", label: "用途", value: "角色设计", options: ["角色设计"] }],
+  })),
   {
     id: "dictionary.template.modern-fashion", title: "写实现代女装展示", type: "Prompt 模板", categories: ["modern-template"], domain: "完整 Prompt", source,
     search: "现代 女装 电商 商品 模特 写实 真人 完整 prompt 模板",
