@@ -10,8 +10,6 @@ import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 import { searchReferenceCandidates, selectedReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
-import WhiteFaceModel from "./character/WhiteFaceModel";
-import type { FaceShape } from "@/lib/whiteFaceShape";
 
 function DesignReferencePicker({ candidates, selected, onChange, onOpen }: { candidates: ReferenceCandidate[]; selected: AssetLibraryReference[]; onChange?: (references: AssetLibraryReference[]) => void; onOpen?: () => void }) {
     const [open, setOpen] = useState(false);
@@ -45,7 +43,7 @@ function DesignReferencePicker({ candidates, selected, onChange, onOpen }: { can
 }
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange, onRefreshReferences, characterName, whiteFaceShape, onWhiteFaceSaved,
+    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange, onRefreshReferences,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
@@ -64,9 +62,6 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     onSubmit: () => void; onSave: (source: "panel" | "ai") => void; onReedit: () => void;
     referenceCandidates?: ReferenceCandidate[]; referenceSelections?: AssetLibraryReference[]; onRefreshReferences?: () => void;
     onReferenceSelectionsChange?: (references: AssetLibraryReference[]) => void;
-    characterName?: string;
-    whiteFaceShape?: FaceShape;
-    onWhiteFaceSaved?: (reference: AssetLibraryReference, prompt: string, shape: FaceShape) => void;
 }) {
     const [showFields, setShowFields] = useState(false);
     const host = useContext(CharacterDictionaryHost);
@@ -151,7 +146,6 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                 </div>
             </div>
             <DesignReferencePicker candidates={referenceCandidates} selected={referenceSelections} onChange={onReferenceSelectionsChange} onOpen={onRefreshReferences} />
-            {onWhiteFaceSaved && <WhiteFaceModel characterName={characterName || "角色"} initialShape={whiteFaceShape} onSaved={onWhiteFaceSaved} />}
             <p className="mb-2 text-[11px] text-text-muted">可直接使用角色设计，也可先提交 AI 完善。保存会保留两份内容，当前页签决定用于出图的版本。</p>
             <div className="relative min-h-36 rounded border border-glass-border p-2">
                 <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={selectedCandidates} restoreSelectedReferences={referenceSelections} expanded editable={!saving}

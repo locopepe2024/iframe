@@ -847,7 +847,7 @@ it("opens design in the existing Prompt column with source and model, without a 
     const { onUpdateDescription } = mountSimpleDesign();
     const design = screen.getByRole("region", { name: "角色设计" });
     expect(design.closest("aside")).toBeNull();
-    expect(screen.getAllByRole("tab")).toHaveLength(5);
+    expect(screen.getAllByRole("tab")).toHaveLength(6);
     expect(screen.getByText("少年，身姿挺拔，素黑劲装；性格沉静寡言。")).toBeInTheDocument();
     expect(screen.getByText("供设计核对，不随 AI 完善改写。")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "身份视觉值" })).not.toBeInTheDocument();

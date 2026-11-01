@@ -32,10 +32,11 @@ function Head({ shape, side = false, x }: { shape: FaceShape; side?: boolean; x:
     </group>;
 }
 
-export default function WhiteFaceModel({ characterName, initialShape, onSaved }: {
+export default function WhiteFaceModel({ characterName, initialShape, onSaved, standalone = false }: {
     characterName: string;
     initialShape?: Partial<FaceShape>;
     onSaved: (reference: AssetLibraryReference, prompt: string, shape: FaceShape) => void;
+    standalone?: boolean;
 }) {
     const [shape, setShape] = useState<FaceShape>(normalizeFaceShape(initialShape));
     const [open, setOpen] = useState(false);
@@ -71,10 +72,10 @@ export default function WhiteFaceModel({ characterName, initialShape, onSaved }:
         }
     };
 
-    return <section aria-label="面部比例白模" className="space-y-3 rounded border border-glass-border p-3">
+    return <section aria-label="面部比例白模" className={`space-y-3 rounded border border-glass-border ${standalone ? "p-5 lg:p-6" : "p-3"}`}>
         <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className="min-h-10 w-full text-left text-xs font-medium text-foreground">面部比例白模</button>
         {open && <>
-        <div ref={stageRef} className="aspect-[2/1] w-full overflow-hidden rounded bg-[#28302f]">
+        <div ref={stageRef} className={`${standalone ? "aspect-[16/7] min-h-[360px]" : "aspect-[2/1]"} w-full overflow-hidden rounded bg-[#28302f]`}>
             <Canvas gl={{ preserveDrawingBuffer: true, antialias: true }} camera={{ position: [0, 0, 5], fov: 40 }}>
                 <color attach="background" args={["#28302f"]} />
                 <ambientLight intensity={1.5} />
