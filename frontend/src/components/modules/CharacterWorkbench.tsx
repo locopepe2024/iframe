@@ -46,6 +46,7 @@ import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
 import CharacterVoiceBinding from "./cast/CharacterVoiceBinding";
+import { faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
 
 type CharacterImagePanel = "full_body" | "three_view" | "headshot";
 type AppliedPlatformPrompt = {
@@ -102,6 +103,7 @@ type DesignDraft = {
     field_suggestion_choices?: Record<string, { age_stage?: string; route?: string }>;
     user_visual_requirements?: { identity?: string; look?: string };
     reference_assets?: AssetLibraryReference[];
+    white_face_shape?: FaceShape;
     field_status?: Record<string, "stated" | "inferred" | "default" | "creative-choice">;
     skill_id?: string;
     skill_revision?: string;
@@ -175,7 +177,8 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
 }
 
 function confirmedDesignDescription(design: DesignDraft | undefined): string {
-    return [confirmedDesignContent(design), characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
+    return [confirmedDesignContent(design), design?.white_face_shape ? faceShapePrompt(design.white_face_shape) : "",
+        characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
 }
 
 function normalizeDesignQuestions(values: unknown): string[] {
@@ -464,6 +467,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const [designError, setDesignError] = useState("");
     const [designInput, setDesignInput] = useState(savedInput?.prompt ?? ([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n") || confirmedDesignContent(savedDesign) || asset.full_body_prompt || ""));
     const [designReferenceAssets, setDesignReferenceAssets] = useState<AssetLibraryReference[]>(savedDesign.reference_assets || []);
+    const [whiteFaceShape, setWhiteFaceShape] = useState<FaceShape | undefined>(savedDesign.white_face_shape);
     const [designResult, setDesignResult] = useState<string | null>(savedResult?.source === "panel" ? null
         : savedResult?.prompt || confirmedDesignContent(savedDesign) || null);
     const [designResultSource, setDesignResultSource] = useState<DesignResultSnapshot["source"]>(savedResult?.source || (savedResult ? "ai" : "legacy"));
@@ -705,7 +709,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const savedDesignSnapshot = useRef<DesignDraft>(savedDesign);
     const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
 
-    const promptForSource = (source: "panel" | "ai") => source === "ai" ? designResult || "" : panelDesignPrompt;
+    const promptForSource = (source: "panel" | "ai") => [source === "ai" ? designResult || "" : panelDesignPrompt,
+        whiteFaceShape ? faceShapePrompt(whiteFaceShape) : ""].filter(Boolean).join("\n");
     const descriptionForSource = (source: "panel" | "ai") => [promptForSource(source), designConstraintText].filter(Boolean).join("\n");
 
     const applyDesignToPrompts = (source: "panel" | "ai") => {
@@ -910,7 +915,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             user_visual_requirements: { identity: designInput, look: "" },
             field_suggestions: useAIResult ? Object.fromEntries(Object.entries(designFieldSuggestions).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
             field_suggestion_choices: useAIResult ? Object.fromEntries(Object.entries(designFieldSuggestionChoices).filter(([question]) => !designFieldAnswers[question]?.trim())) : {},
-            reference_assets: savedDesign.reference_assets || [],
+            reference_assets: designReferenceAssets,
+            white_face_shape: whiteFaceShape,
             field_status: { route: "stated", age_stage: designAgeStage ? "stated" : "default", visual_notes: activeIdentityNotes ? (useAIResult ? (resultIdentityBasis.includes("creative_choice") ? "creative-choice" : "stated") : designSource) : "default" },
             skill_id: "character-style-routes",
             skill_revision: useAIResult ? designSkillRevision || undefined : undefined,
@@ -1245,7 +1251,25 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     };
 
     const designEditor = <CharacterDesignPanel
-        description={asset.description} details={designInput}
+        description={asset.description} details={designInput} characterName={asset.name} whiteFaceShape={whiteFaceShape}
+        onWhiteFaceSaved={(reference: AssetLibraryReference, prompt: string, shape: FaceShape) => {
+            const withoutWhiteFace = (items: AssetLibraryReference[]) => items.filter(item => !item.applied_fields?.includes("face_geometry"));
+            setDesignReferenceAssets(current => [...withoutWhiteFace(current), reference]);
+            setPromptPickerReferences(current => ({ ...current, full_body: [...withoutWhiteFace(current.full_body), reference] }));
+            setWhiteFaceShape(shape);
+            setDesignStatus("draft");
+            setPromptsNeedDesignApply(true);
+            setPanelMode("full_body", "reference");
+            setDesignTab("design");
+            updateStructuredDesign({
+                facial_proportions: `脸长 ${shape.faceLength}%，脸宽 ${shape.faceWidth}%（中性基准 100%）`,
+                eye_spacing: `眼距 ${shape.eyeSpacing}%（中性基准 100%）`,
+                cheekbones: `颧部宽 ${shape.cheekWidth}%（中性基准 100%）`,
+                jaw: `下颌宽 ${shape.jawWidth}%（中性基准 100%）`,
+                nose: `鼻部突出度 ${shape.noseProjection}%（中性基准 100%）`,
+            }, {});
+            refreshAssetIndex();
+        }}
         onDictionaryConfiguration={recordDictionaryConfiguration}
         configurations={dictionaryConfigurations}
         previousExpressionText={dictionaryConfigurations.find(configuration => configuration.preset_id === "dictionary.panel.expression")?.rendered_text}
@@ -1265,7 +1289,18 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         referenceCandidates={referenceCandidates}
         referenceSelections={designReferenceAssets}
         onRefreshReferences={refreshAssetIndex}
-        onReferenceSelectionsChange={setDesignReferenceAssets}
+        onReferenceSelectionsChange={(references) => {
+            setDesignReferenceAssets(references);
+            if (!references.some(item => item.applied_fields?.includes("face_geometry"))) {
+                setWhiteFaceShape(undefined);
+                setPromptPickerReferences(current => ({
+                    ...current,
+                    full_body: current.full_body.filter(item => !item.applied_fields?.includes("face_geometry")),
+                }));
+            }
+            setDesignStatus("draft");
+            setPromptsNeedDesignApply(true);
+        }}
         supplemental={supplementalPrompt} onSupplementalChange={value => {
             setSupplementalPrompt(value);
             clearAIResultForInput();
