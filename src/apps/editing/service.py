@@ -353,8 +353,20 @@ class EditingService:
                 raise HTTPException(409, 'Editing project changed; reload before saving')
             sources, _, _ = self.validate(plan, record['sources'], db=db)
             plan = plan.model_copy(update={'id': 'assembly-'+edit_id, 'revision': revision+1})
-            record.update(revision=revision+1, plan=plan.model_dump(), sources=sources, output=None)
+            record.update(revision=revision+1, plan=plan.model_dump(), sources={**record['sources'], **sources}, output=None)
             self._persist(db, record)
+        return record
+
+    def import_material(self, edit_id, revision, key):
+        with self.db() as db:
+            record = self._get(db, edit_id)
+            if record['revision'] != revision:
+                raise HTTPException(409, 'Editing project changed; reload before importing')
+            source, _ = self.resolve(key, db=db)
+            if key not in record['sources']:
+                record['sources'][key] = source
+                record['revision'] += 1
+                self._persist(db, record)
         return record
 
     def versions(self, edit_id):

@@ -19,6 +19,7 @@ export const editing = {
   upload: async (file: File, folderId?: string | null): Promise<EditMaterial> => { const data = new FormData(); data.append('file', file); return (await axios.post(`${base}/materials`, data, { params: { folder_id: folderId || undefined } })).data; },
   deleteMaterial: async (id: string) => (await axios.delete(`${base}/materials/${encodeURIComponent(id)}`)).data,
   save: async (id: string, revision: number, plan: AssemblyEditPlan): Promise<EditProject> => (await axios.put(`${base}/projects/${id}/plan`, { revision, plan })).data,
+  importMaterial: async (id: string, revision: number, materialId: string): Promise<EditProject> => (await axios.post(`${base}/projects/${id}/materials`, { revision, material_id: materialId })).data,
   render: async (id: string, revision: number): Promise<EditProject> => (await axios.post(`${base}/projects/${id}/render`, { revision }, { timeout: 660000 })).data,
   versions: async (id: string): Promise<{ revision: number }[]> => (await axios.get(`${base}/projects/${id}/versions`)).data,
   restore: async (id: string, revision: number, target_revision: number): Promise<EditProject> => (await axios.post(`${base}/projects/${id}/restore`, { revision, target_revision })).data,

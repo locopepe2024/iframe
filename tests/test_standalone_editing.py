@@ -71,6 +71,30 @@ def test_project_workspace_and_soft_delete_preserve_sources(service, video):
     assert service.resolve(item['id'])[0]['sha256'] == item['sha256']
 
 
+def test_imported_workspace_material_survives_reopen_and_timeline_save(service, video):
+    item = material(service, video)
+    project = service.create('Workspace import')
+    imported = service.import_material(project['id'], 0, item['id'])
+    assert imported['revision'] == 1
+    assert imported['plan'] is None
+    assert service.get(project['id'])['sources'][item['id']]['sha256'] == item['sha256']
+    assert service.import_material(project['id'], 1, item['id'])['revision'] == 1
+    with pytest.raises(HTTPException) as conflict:
+        service.import_material(project['id'], 0, item['id'])
+    assert conflict.value.status_code == 409
+    saved = service.save(project['id'], 1, plan_for(item))
+    assert saved['sources'][item['id']]['sha256'] == item['sha256']
+
+
+def test_imported_workspace_material_remains_without_timeline_clip(service, video):
+    item = material(service, video)
+    project = service.create('Workspace import')
+    service.import_material(project['id'], 0, item['id'])
+    another = material(service, video)
+    saved = service.save(project['id'], 1, plan_for(another))
+    assert set(saved['sources']) == {item['id'], another['id']}
+
+
 def test_source_mutation_and_invalid_range_rejected(service, video):
     item = material(service, video)
     project = service.create('Independent')
