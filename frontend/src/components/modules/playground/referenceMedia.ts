@@ -43,6 +43,18 @@ export function referenceName(path: string, names: Record<string, string>, histo
 }
 
 export function shortReferenceLabel(value: string): string {
+    // Preserve the asset/variant boundary in prompt tokens. Hiding the
+    // variant makes two versions of the same character look identical even
+    // though the token still carries the correct variant_id metadata.
+    const separator = value.indexOf(' · ');
+    if (separator > 0) {
+        const owner = value.slice(0, separator);
+        const variant = value.slice(separator + 3);
+        const compact = `${owner} · ${variant}`;
+        if (Array.from(compact).length <= 18) return compact;
+        const available = Math.max(3, 18 - Array.from(owner).length - 3);
+        return `${owner} · ${Array.from(variant).slice(0, available).join('')}...`;
+    }
     const chars = Array.from(value);
     return chars.length > 5 ? chars.slice(0, 5).join('') + '...' : value;
 }

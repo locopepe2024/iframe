@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, render, waitFor } from "@testing-library/react";
 import ReferencePromptEditor, { referencePromptDocument, type PromptSlashSuggestion } from "./ReferencePromptEditor";
+import { shortReferenceLabel } from "./referenceMedia";
+
+it("keeps character variant names visible in reference tokens", () => {
+  expect(shortReferenceLabel("探子首领 · 正式")).toBe("探子首领 · 正式");
+  expect(shortReferenceLabel("探子首领 · 正式全身定妆图")).toContain("探子首领 · ");
+});
 
 describe("reference prompt restoration", () => {
   it("restores only explicitly saved references when candidates arrive after mounting", async () => {
