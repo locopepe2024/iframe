@@ -568,14 +568,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         void api.getAssetReferenceIndex(projectId)
             .then((index) => {
                 if (requestId !== assetIndexRequest.current) return;
-                // Resolve legacy fixed crowd entries to their linked visual
-                // character. Unresolved templates do not have a face asset to
-                // reference and therefore stay out of the @ picker.
-                const entries = index.assets.flatMap((entry) => {
-                    if (entry.asset_type !== "crowd") return [entry];
-                    if (!entry.linked_visual_asset_id) return [];
-                    return [{ ...entry, asset_type: "character" as const, asset_id: entry.linked_visual_asset_id }];
-                }).filter((entry) => entry.variants?.some((variant) => variant.id));
+                const entries = index.assets.filter((entry) => entry.variants?.some((variant) => variant.id));
                 setAssetIndex(entries);
                 const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
                     `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));
