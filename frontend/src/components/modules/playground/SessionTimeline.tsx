@@ -222,10 +222,10 @@ function ChatCard({ message, onDelete, answered }: { message: ChatMessage; onDel
       {message.research_run_id && <ResearchTask runId={message.research_run_id} answered={answered} />}
       {!!message.asset_names?.length && <div className="mt-3 flex flex-wrap gap-2">{message.asset_names.map((name, i) => <span key={i} title={name} className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-300">@{shortReferenceLabel(name)}</span>)}</div>}
       <button type="button" onClick={restore} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-xl border border-glass-border px-3 text-xs text-text-secondary hover:text-primary"><ArrowUpLeft size={14} />{message.role === 'assistant' ? '填入输入框' : '编辑继续'}</button>
-      <div className="mt-2 flex items-center text-xs text-text-muted"><time>{message.created_at ? new Date(message.created_at * 1000).toLocaleString() : '历史消息'}</time><OverflowActions label="消息操作" actions={[
+      <div className="mt-2 flex items-center text-xs text-text-muted"><time>{message.pending ? '提交中' : message.created_at ? new Date(message.created_at * 1000).toLocaleString() : '历史消息'}</time>{!message.pending && <OverflowActions label="消息操作" actions={[
         { label: '复制', onClick: () => { void navigator.clipboard.writeText(message.content).catch(() => setError('复制失败，请重试')); } },
         { label: '删除', danger: true, onClick: () => onDelete(message.id) },
-      ]} /></div>
+      ]} />}</div>
       {error && <p role="alert" className="text-xs text-status-failed-fg">{error}</p>}
     </section>
   </article>;

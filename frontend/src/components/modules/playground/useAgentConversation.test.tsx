@@ -174,6 +174,31 @@ it('clears the submitted prompt immediately and keeps it clear after success', a
     hook.unmount();
 });
 
+it('shows an Agent submission and its referenced media before the reply arrives', async () => {
+    const response = deferred<unknown>();
+    mockConversation(response.promise);
+    usePlaygroundStore.setState({ prompt: '分析 @reference.png 的镜头', inputMedia: ['/reference.png'], mediaNames: { '/reference.png': 'reference.png' } });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+
+    let sending!: Promise<void>;
+    act(() => { sending = hook.result.current.send(); });
+    expect(hook.result.current.messages).toEqual([expect.objectContaining({
+        role: 'user', content: '分析 @reference.png 的镜头',
+        input_media: ['/reference.png'], asset_names: ['reference.png'], pending: true,
+    })]);
+
+    await act(async () => {
+        response.resolve({
+            user_message: { id: 'user-message', role: 'user', content: '分析 @reference.png 的镜头', input_media: ['/reference.png'], asset_names: ['reference.png'] },
+            assistant_message: { id: 'assistant-message', role: 'assistant', content: '完成' },
+        });
+        await sending;
+    });
+    expect(hook.result.current.messages.map(message => message.id)).toEqual(['user-message', 'assistant-message']);
+    hook.unmount();
+});
+
 it('keeps the composer empty when sending fails after submission', async () => {
     const response = deferred<unknown>();
     mockConversation(response.promise);
