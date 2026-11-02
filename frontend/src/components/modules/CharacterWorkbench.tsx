@@ -47,7 +47,7 @@ import type { AssetPlanEntry } from "@/lib/episodeAssetPlan";
 import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
 import CharacterVoiceBinding from "./cast/CharacterVoiceBinding";
-import { FACE_SHAPE_REFERENCE_PROMPT, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
+import { faceShapePanelPrompt, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
 
 type CharacterImagePanel = "full_body" | "three_view" | "headshot";
 type CharacterWorkbenchPanel = CharacterImagePanel | "face_model" | "video";
@@ -180,7 +180,7 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
 
 function confirmedDesignDescription(design: DesignDraft | undefined): string {
     const whiteFaceText = design?.white_face_shape
-        ? design.active_design_source === "ai" ? faceShapePrompt(design.white_face_shape) : FACE_SHAPE_REFERENCE_PROMPT
+        ? design.active_design_source === "ai" ? faceShapePrompt(design.white_face_shape) : faceShapePanelPrompt(design.white_face_shape)
         : "";
     return [confirmedDesignContent(design), whiteFaceText,
         characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
@@ -568,14 +568,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         void api.getAssetReferenceIndex(projectId)
             .then((index) => {
                 if (requestId !== assetIndexRequest.current) return;
-                // Resolve legacy fixed crowd entries to their linked visual
-                // character. Unresolved templates do not have a face asset to
-                // reference and therefore stay out of the @ picker.
-                const entries = index.assets.flatMap((entry) => {
-                    if (entry.asset_type !== "crowd") return [entry];
-                    if (!entry.linked_visual_asset_id) return [];
-                    return [{ ...entry, asset_type: "character" as const, asset_id: entry.linked_visual_asset_id }];
-                }).filter((entry) => entry.variants?.some((variant) => variant.id));
+                const entries = index.assets.filter((entry) => entry.variants?.some((variant) => variant.id));
                 setAssetIndex(entries);
                 const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
                     `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));
@@ -731,7 +724,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
 
     const promptForSource = (source: "panel" | "ai") => [source === "ai" ? designResult || "" : panelDesignPrompt,
-        whiteFaceShape ? source === "ai" ? faceShapePrompt(whiteFaceShape) : FACE_SHAPE_REFERENCE_PROMPT : ""].filter(Boolean).join("\n");
+        whiteFaceShape ? source === "ai" ? faceShapePrompt(whiteFaceShape) : faceShapePanelPrompt(whiteFaceShape) : ""].filter(Boolean).join("\n");
     const descriptionForSource = (source: "panel" | "ai") => [promptForSource(source), designConstraintText].filter(Boolean).join("\n");
 
     const applyDesignToPrompts = (source: "panel" | "ai") => {
@@ -1831,7 +1824,7 @@ export function WorkbenchPanel({
     const [promptSlash, setPromptSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const slashKeyHandler = useRef<((event: globalThis.KeyboardEvent) => boolean) | null>(null);
-    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, designEditor ? (designReferences || []) : pickerReferences), [referenceCandidates, designEditor, designReferences, pickerReferences]);
+    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, [...(designReferences || []), ...pickerReferences]), [referenceCandidates, designReferences, pickerReferences]);
     // @ should search the complete owner-scoped asset index, including crowd
     // variants. The explicit reference picker remains available for users who
     // want to constrain the generation set before typing the prompt.
@@ -1861,7 +1854,7 @@ export function WorkbenchPanel({
                 {designEditor && <div className="border-b border-border-subtle px-4 py-2 text-[11px] text-text-muted" aria-label={`实际传递的参考图：${title}`}>
                     <span className="font-medium text-text-secondary">本次实际传递的参考图：</span>{effectiveReferenceLabels.length ? ` ${effectiveReferenceLabels.join("、")}` : " 无（白模只作为骨相参数，不上传为参考图）"}
                 </div>}
-                {showReferencePicker && !designEditor && <div className="px-4 pt-2">
+                {showReferencePicker && <div className="px-4 pt-2">
                     <AssetReferencePicker
                         candidates={referenceCandidates}
                         selected={pickerReferences}

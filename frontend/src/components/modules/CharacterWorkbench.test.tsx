@@ -228,7 +228,7 @@ it("selects the character cover with one thumbnail action", async () => {
     }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
     expect(screen.queryByText(/项目角色锚点/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("本集造型名称")).not.toBeInTheDocument();
-    expect(screen.getByText("苏砚-1")).toBeInTheDocument();
+    expect(screen.getByText("view 1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "设为角色封面" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "选择变体" }));
     await waitFor(() => expect(apiMocks.selectAssetVariant).toHaveBeenCalledWith("project-1", "hero", "character", "front", "reference_sheet"));
@@ -247,7 +247,7 @@ it("uses project and episode context for an unnamed character variant", () => {
         render(<CharacterWorkbench asset={{ id: "hero", name: "", description: "Hero",
             reference_sheet: { selected_image_id: "front", image_variants: [{ id: "front", url: "front.webp" }] },
         }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
-        expect(screen.getByText("雪痕.第二集.view 1")).toBeInTheDocument();
+        expect(screen.getByText("view 1")).toBeInTheDocument();
     } finally {
         projectStoreMocks.currentProject = previous;
         projectStoreMocks.currentSeries = null;
@@ -748,8 +748,8 @@ function mountSimpleDesign(extra: Record<string, unknown> = {}) {
     return { onUpdateAttributes, onUpdateDescription, onGenerate };
 }
 
-it('includes saved white face proportions once in a panel image prompt', () => {
-    const shape = { faceLength: 90, faceWidth: 120, cheekWidth: 117, jawWidth: 75, eyeSpacing: 80, noseProjection: 75 };
+it('includes saved white face proportions and new geometry once in a panel image prompt', () => {
+    const shape = { faceLength: 90, faceWidth: 120, cheekWidth: 117, jawWidth: 75, eyeSpacing: 80, noseProjection: 75, foreheadWidth: 108, mouthCornerTilt: 115 };
     const saved = {
         confirmed: true,
         active_design_source: 'panel',
@@ -767,6 +767,8 @@ it('includes saved white face proportions once in a panel image prompt', () => {
     const prompt = imagePromptInput().textContent || '';
     expect(prompt.match(/脸长 90%/g)).toHaveLength(1);
     expect(prompt.match(/鼻部突出度 75%/g)).toHaveLength(1);
+    expect(prompt.match(/额头宽 108%/g)).toHaveLength(1);
+    expect(prompt.match(/嘴角倾斜 115%/g)).toHaveLength(1);
     expect(prompt).toContain('最终画面只呈现目标角色');
 });
 

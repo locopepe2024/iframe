@@ -15,19 +15,17 @@ vi.mock("./cast/CharacterWorkbenchBridge", () => ({ default: () => null }));
 
 afterEach(() => cleanup());
 
-it("shows merged characters and series crowd groups in Cast", () => {
+it("shows crowd performers as normal character cards in Cast", () => {
     useProjectStore.setState({
         currentProject: {
             id: "episode", title: "第一幕", series_id: "series",
-            characters: [{ id: "suyan", name: "苏砚（雪痕客）", source: "series" }],
+            characters: [{ id: "suyan", name: "苏砚（雪痕客）", source: "series" },
+                { id: "bandits", name: "流民匪寇" }],
             scenes: [], props: [], frames: [], crowd_group_candidates: [],
         } as any,
         currentSeries: {
             id: "series", title: "青溪镇",
-            extra_roster: [
-                { extra_id: "bandits", label: "流民匪寇", kind: "extra_template" },
-                { extra_id: "townspeople", label: "青溪镇市井百姓", kind: "extra_template" },
-            ],
+            extra_roster: [],
         } as any,
         generatingTasks: [],
     });
@@ -36,22 +34,15 @@ it("shows merged characters and series crowd groups in Cast", () => {
 
     expect(screen.getByText("苏砚（雪痕客）")).toBeTruthy();
     expect(screen.getByText("流民匪寇")).toBeTruthy();
-    expect(screen.getByText("青溪镇市井百姓")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /流民匪寇/ }));
-    expect(screen.getByRole("dialog", { name: "编辑群演：流民匪寇" })).toBeTruthy();
+    expect(screen.queryByText("背景群演")).toBeNull();
 });
 
 
-it("refreshes newly merged crowd groups when the project response changes", async () => {
+it("refreshes newly extracted crowd characters when the project response changes", async () => {
     useProjectStore.setState({
         currentProject: {
             id: "episode-refresh", title: "第一幕", series_id: "series",
-            characters: [], scenes: [], props: [], frames: [],
-            crowd_groups: [
-                { extra_id: "crowd_001", label: "流民匪寇", kind: "extra_template" },
-                { extra_id: "crowd_002", label: "江湖打手", kind: "extra_template" },
-                { extra_id: "crowd_004", label: "青溪镇市井百姓", kind: "extra_template" },
-            ],
+            characters: [{ id: "crowd_001", name: "流民匪寇" }], scenes: [], props: [], frames: [],
             crowd_group_candidates: [],
         } as any,
         currentSeries: null,
@@ -64,13 +55,9 @@ it("refreshes newly merged crowd groups when the project response changes", asyn
 
     await act(async () => {
         useProjectStore.getState().updateProject("episode-refresh", {
-            crowd_groups: [
-                { extra_id: "crowd_001", label: "流民匪寇", kind: "extra_template" },
-                { extra_id: "crowd_002", label: "江湖打手", kind: "extra_template" },
-                { extra_id: "crowd_003", label: "玄宸阁随行探子", kind: "extra_template" },
-                { extra_id: "crowd_004", label: "青溪镇市井百姓", kind: "extra_template" },
-                { extra_id: "crowd_005", label: "往来江湖客", kind: "extra_template" },
-            ],
+            characters: [{ id: "crowd_001", name: "流民匪寇" },
+                { id: "crowd_003", name: "玄宸阁随行探子" },
+                { id: "crowd_005", name: "往来江湖客" }],
         } as any);
     });
 
