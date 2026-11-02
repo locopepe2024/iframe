@@ -228,7 +228,18 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
                         if (currentVideo.timeline_end_ms >= plan.target_duration_ms) { setPlaying(false); setPosition(plan.target_duration_ms); }
                         else setPosition(currentVideo.timeline_end_ms);
                     } else setPosition(Math.max(currentVideo.timeline_start_ms, time));
-                }} onEnded={() => { if (currentVideo && currentVideo.timeline_end_ms < plan.target_duration_ms) setPosition(currentVideo.timeline_end_ms); else setPlaying(false); }} /> : <div className="flex h-full items-center justify-center text-sm text-white">{t("此位置没有可用视频，请选择时间线中的镜头。", "No video at this position. Select a shot on the timeline.")}</div>}
+                }} onEnded={() => { if (currentVideo && currentVideo.timeline_end_ms < plan.target_duration_ms) setPosition(currentVideo.timeline_end_ms); else setPlaying(false); }} /> : <div role="status" className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center text-sm text-white">
+                    {sequence.length === 0
+                        ? materials && Object.keys(materials).length > 0
+                            ? t("素材已导入工作区。点击素材右侧的 ＋ 加入时间线，开始剪辑。", "Materials are in your workspace. Click + beside a material to add it to the timeline.")
+                            : t("时间线为空。先导入视频到工作区，再点击素材右侧的 ＋ 加入时间线。", "The timeline is empty. Import a video into your workspace, then click + beside it to add it to the timeline.")
+                        : currentVideo
+                            ? t("当前片段的源素材无法解析，请重新加载项目或检查素材。", "The current clip's source could not be resolved. Reload the project or check the material.")
+                            : videos.length === 0
+                                ? t("视频轨道已隐藏或片段已禁用，请检查时间线设置。", "Video tracks are hidden or clips are disabled. Check the timeline settings.")
+                                : t("播放头位于片段外，请选择时间线中的镜头。", "The playhead is outside a clip. Select a shot on the timeline.")}
+                    {sequence.length === 0 && onImport && <button type="button" className={control} onClick={onImport}>{t("导入素材", "Import materials")}</button>}
+                </div>}
             {active.length > 0 && <div className="pointer-events-none absolute inset-x-4 bottom-6 whitespace-pre-wrap text-center text-lg text-white [text-shadow:0_1px_3px_black]">{active.map(c => c.text).join("\n")}</div>}
         </div>
         {audioClips.filter(item => item.url).map(({ lane, clip, url }) => <TimelineAudioPreview key={project.id + lane.id + clip.id + url} url={url} position={position} start={clip.timeline_start_ms} end={clip.timeline_end_ms} sourceStart={clip.source_start_ms ?? 0} sourceEnd={clip.source_end_ms ?? (clip.source_start_ms ?? 0) + clip.timeline_end_ms - clip.timeline_start_ms} gain={clip.gain ?? 1} playing={playing && !buffering} label={laneName(lane.kind) + " · " + (clip.label || clip.id)} onError={reportAudioError} />)}

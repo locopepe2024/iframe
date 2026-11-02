@@ -61,6 +61,21 @@ it('keeps a workspace import after reloading the project without inserting a cli
   fireEvent.click(screen.getByRole('button', { name: 'Reload / discard changes' }));
   await waitFor(() => expect(editing.get).toHaveBeenCalledTimes(2));
   expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeInTheDocument();
+  expect(screen.getByText('Materials are in your workspace. Click + beside a material to add it to the timeline.')).toBeInTheDocument();
+});
+
+it('guides a revision-zero project through import and timeline insertion', async () => {
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  expect(await screen.findByText('The timeline is empty. Import a video into your workspace, then click + beside it to add it to the timeline.')).toBeInTheDocument();
+  expect(screen.getByRole('slider', { name: 'Timeline ruler' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Import materials' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  expect(await screen.findByText('Materials are in your workspace. Click + beside a material to add it to the timeline.')).toBeInTheDocument();
+  expect(screen.queryByLabelText('Timeline video preview')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Add to edit Original.mp4' }));
+  expect(await screen.findByLabelText('Timeline video preview')).toHaveAttribute('src', expect.stringContaining('video.mp4'));
 });
 
 it('uploads every selected material and keeps per-file failures visible after refreshing', async () => {
