@@ -33,3 +33,5 @@ The browser preview needs a continuous low-poly facial shell with a small set of
 ## Geometry refinement
 
 The head shell now uses one indexed surface with a tapered chin, jaw, cheek and forehead profile. Its front surface has bounded relief for the eye sockets, cheekbones, nose bridge, nose tip, nose wings and chin. The same mesh drives front and side views; small ear, eye and lip meshes remain visual landmarks. Preset changes restart from the selected preset's neutral baseline, so values from a previous preset cannot silently carry over. This is a proportion preview, not an anatomical reconstruction or a guarantee of identity preservation in generated images.
+
+The preview camera backs away on narrow canvases so the front and profile heads remain fully visible together. Desktop and 390px mobile browser captures are the visual acceptance check for this first low-poly version.

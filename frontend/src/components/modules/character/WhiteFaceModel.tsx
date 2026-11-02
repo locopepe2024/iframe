@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useThree } from "@react-three/fiber";
 import { BufferGeometry, Float32BufferAttribute, Uint16BufferAttribute } from "three";
 import { api, type AssetLibraryReference } from "@/lib/api";
 import { FACE_BASE_PRESETS, faceBaseShape, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape } from "@/lib/whiteFaceShape";
@@ -17,7 +17,7 @@ export function faceShellGeometry(shape: FaceShape): BufferGeometry {
         const value = normalizeFaceShape(shape);
         const width = value.faceWidth / 100;
         const length = value.faceLength / 100;
-        const rows = [-1, -0.92, -0.78, -0.64, -0.5, -0.34, -0.18, -0.04, 0.1, 0.24, 0.4, 0.56, 0.72, 0.88, 1];
+        const rows = [-1, -0.97, -0.92, -0.78, -0.64, -0.5, -0.34, -0.18, -0.04, 0.1, 0.24, 0.4, 0.56, 0.72, 0.88, 0.95, 0.99, 1];
         const segments = 40;
         const vertices: number[] = [];
         const indices: number[] = [];
@@ -48,7 +48,7 @@ export function faceShellGeometry(shape: FaceShape): BufferGeometry {
                 const noseBridge = gaussian(x, 0.11 * value.noseBridgeWidth / 100)
                     * gaussian(y - 0.22, 0.23) * 0.09 * value.noseBridgeHeight / 100;
                 const noseTip = gaussian(x, 0.13 * value.noseTipWidth / 100)
-                    * gaussian(y + 0.08, 0.12) * 0.22 * value.noseProjection / 100;
+                    * gaussian(y + 0.08, 0.12) * 0.15 * value.noseProjection / 100;
                 const noseWings = (gaussian(x - 0.13 * value.nostrilWidth / 100, 0.07)
                     + gaussian(x + 0.13 * value.nostrilWidth / 100, 0.07)) * gaussian(y + 0.17, 0.07) * 0.035;
                 const chin = center * gaussian(y + 0.73, 0.16) * 0.12 * value.chinProjection / 100;
@@ -75,6 +75,17 @@ function FaceShell({ shape }: { shape: FaceShape }) {
     const geometry = useMemo(() => faceShellGeometry(shape), [shape]);
     useEffect(() => () => geometry.dispose(), [geometry]);
     return <mesh geometry={geometry}><meshStandardMaterial color="#e0e4e2" roughness={0.88} flatShading /></mesh>;
+}
+
+function ResponsiveCamera() {
+    const { camera, size, invalidate } = useThree();
+    useEffect(() => {
+        const aspect = size.width / size.height;
+        camera.position.z = Math.max(5, 2.1 / (Math.tan(Math.PI / 9) * aspect));
+        camera.updateProjectionMatrix();
+        invalidate();
+    }, [camera, size.width, size.height, invalidate]);
+    return null;
 }
 
 function Head({ shape, side = false, x }: { shape: FaceShape; side?: boolean; x: number }) {
@@ -158,6 +169,7 @@ export default function WhiteFaceModel({ characterName, initialShape, onSaved, s
         </label>
         <div ref={stageRef} className={`${standalone ? "aspect-[16/7] min-h-[360px]" : "aspect-[2/1]"} w-full overflow-hidden rounded bg-[#28302f]`}>
             <Canvas gl={{ preserveDrawingBuffer: true, antialias: true }} camera={{ position: [0, 0, 5], fov: 40 }}>
+                <ResponsiveCamera />
                 <color attach="background" args={["#28302f"]} />
                 <ambientLight intensity={1.5} />
                 <directionalLight position={[2, 3, 5]} intensity={2} />

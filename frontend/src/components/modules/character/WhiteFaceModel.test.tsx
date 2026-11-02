@@ -89,13 +89,13 @@ it("builds one closed facial shell with nose and eye-socket relief", () => {
     const positions = neutral.getAttribute("position");
     const nosePositions = longNose.getAttribute("position");
     const indices = neutral.getIndex();
-    expect(positions.count).toBe(15 * 40);
-    expect(indices?.count).toBe(14 * 40 * 6);
+    expect(positions.count).toBe(18 * 40);
+    expect(indices?.count).toBe(17 * 40 * 6);
     expect(Math.max(...Array.from({ length: indices!.count }, (_, i) => indices!.getX(i)))).toBeLessThan(positions.count);
-    const tip = 7 * 40 + 10;
+    const tip = 8 * 40 + 10;
     expect(nosePositions.getZ(tip)).toBeGreaterThan(positions.getZ(tip));
     expect(neutral.getAttribute("normal").getZ(tip)).toBeGreaterThan(0);
-    const eye = 8 * 40 + 7;
+    const eye = 9 * 40 + 7;
     expect(deepEyes.getAttribute("position").getZ(eye)).toBeLessThan(positions.getZ(eye));
     neutral.dispose();
     longNose.dispose();
