@@ -18,6 +18,9 @@ class RevisionRequest(BaseModel):
 class SaveRequest(RevisionRequest):
     plan: AssemblyEditPlan
 
+class ImportMaterialRequest(RevisionRequest):
+    material_id: str = Field(min_length=1)
+
 class RestoreRequest(RevisionRequest):
     target_revision: int = Field(ge=0)
 
@@ -87,6 +90,10 @@ def project(edit_id: str, user: UserContext = Depends(require_studio_user)):
 @router.put('/projects/{edit_id}/plan')
 def save(edit_id: str, body: SaveRequest, user: UserContext = Depends(require_studio_user)):
     return public(EditingService(user).save(edit_id, body.revision, body.plan), user)
+
+@router.post('/projects/{edit_id}/materials')
+def import_material(edit_id: str, body: ImportMaterialRequest, user: UserContext = Depends(require_studio_user)):
+    return public(EditingService(user).import_material(edit_id, body.revision, body.material_id), user)
 
 @router.get('/projects/{edit_id}/versions')
 def versions(edit_id: str, user: UserContext = Depends(require_studio_user)):

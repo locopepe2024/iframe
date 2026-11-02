@@ -8,7 +8,7 @@ import { AssemblyTracks } from '../AssemblyTracks';
 import { extractErrorDetail, getAssetUrl } from '@/lib/utils';
 
 export { EditingMaterials, EditingMaterialManager } from './EditingMaterials';
-import { EditingMaterials, EditingMaterialManager } from './EditingMaterials';
+import { EditingMaterials, EditingMaterialManager, EditingMaterialPicker } from './EditingMaterials';
 
 export default function EditingPage() {
   const zh = useLocale().startsWith('zh');
@@ -26,12 +26,33 @@ export default function EditingPage() {
   const [versions, setVersions] = useState<{ revision: number }[]>([]);
   const [pendingMedia, setPendingMedia] = useState('');
   const [tab, setTab] = useState<'edit' | 'materials'>('edit');
+  const [importOpen, setImportOpen] = useState(false);
   useEffect(() => { const read = () => setTab(new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab') === 'materials' ? 'materials' : 'edit'); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const read = () => setPendingMedia(new URLSearchParams(window.location.hash.split('?')[1] || '').get('media') || ''); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
   const [audioLane, setAudioLane] = useState<'bgm' | 'dialogue' | 'sfx'>('bgm');
-  const accept = (p: EditProject) => { setProject(p); setPlan(p.plan); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); };
+  const emptyPlan = (id: string): AssemblyEditPlan => ({ id: `assembly-${id}`, scope: 'project', revision: 1, target_duration_ms: 1000, lanes: [], markers: [], provenance: {} });
+  const accept = (p: EditProject) => { setProject(p); setPlan(p.plan || emptyPlan(p.id)); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); };
   useEffect(() => { editing.list().then(setProjects).catch(e => setError(extractErrorDetail(e))); }, []);
+  // Older projects can contain a saved timeline reference without the
+  // corresponding source snapshot in `sources` (for example, after a
+  // migration or an interrupted import). Hydrate those references when the
+  // project is opened so the preview can resolve the current video instead of
+  // treating the playhead as an empty position.
+  useEffect(() => {
+    if (!project || !plan) return;
+    const ids = Array.from(new Set(plan.lanes.flatMap(lane => lane.clips
+      .filter(clip => lane.kind !== 'subtitle' && lane.kind !== 'markers' && clip.source_media_id)
+      .map(clip => clip.source_media_id as string))));
+    const missing = ids.filter(id => !sources[id]?.url);
+    if (!missing.length) return;
+    let active = true;
+    void Promise.all(missing.map(id => editing.material(id))).then(items => {
+      if (!active) return;
+      setSources(current => ({ ...current, ...Object.fromEntries(items.map(item => [item.id, item])) }));
+    }).catch(error => { if (active) setError(extractErrorDetail(error)); });
+    return () => { active = false; };
+  }, [project?.id, plan, sources]);
   const run = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(extractErrorDetail(e)); } finally { setBusy(false); } };
   const change = (next: AssemblyEditPlan) => { if (plan) setUndo(old => [...old.slice(-49), plan]); setRedo([]); setPlan(next); setDirty(true); };
   const add = (item: EditMaterial) => {
@@ -40,7 +61,8 @@ export default function EditingPage() {
     const current: AssemblyEditPlan = plan || { id: `assembly-${project.id}`, scope: 'project', revision: 1, target_duration_ms: item.duration_ms, lanes: [], markers: [], provenance: {} };
     const kind: 'video' | 'bgm' | 'dialogue' | 'sfx' = item.video ? 'video' : audioLane;
     const lane = current.lanes.find(l => l.kind === kind);
-    const start = item.video && plan ? plan.target_duration_ms : 0;
+    const hasVideo = current.lanes.some(l => l.kind === 'video' && l.clips.length > 0);
+    const start = item.video && hasVideo ? current.target_duration_ms : 0;
     const duration = item.video ? item.duration_ms : Math.min(item.duration_ms, current.target_duration_ms);
     const clip = { id: createRenderRequestId(), timeline_start_ms: start, timeline_end_ms: start + duration, source_start_ms: 0, source_end_ms: duration, source_media_id: item.id, source_refs: [`media:${item.id}`], label: item.name, enabled: true, gain: 1 };
     const lanes = lane ? current.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, clip] } : l) : [...current.lanes, { id: createRenderRequestId(), kind, label: kind, allow_overlap: kind !== 'video', clips: [clip] }];
@@ -48,6 +70,17 @@ export default function EditingPage() {
     setSources(old => ({ ...old, [item.id]: item }));
     change({ ...current, lanes, target_duration_ms: item.video ? start + duration : current.target_duration_ms });
   };
+  const importToWorkspace = async (item: EditMaterial) => {
+    if (!project) return;
+    setBusy(true);
+    try {
+      const updated = await editing.importMaterial(project.id, project.revision, item.id);
+      setProject(updated);
+      setSources(current => ({ ...current, ...updated.sources }));
+      setImportOpen(false);
+    } finally { setBusy(false); }
+  };
+  const importMaterials = () => { setImportOpen(true); };
   const deleteCurrentProject = () => {
     if (!project || dirty || busy) return;
     if (!window.confirm(t('删除这个剪辑项目？项目源素材不会被删除。', 'Delete this editing project? Source materials will remain.'))) return;
@@ -60,7 +93,8 @@ export default function EditingPage() {
   return <div className="h-full space-y-5 overflow-y-auto p-4 md:p-7">
     <div className="flex flex-wrap items-center gap-2"><h1 className="font-display mr-3 text-2xl font-semibold">{t('独立剪辑', 'Independent editing')}</h1><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'edit'} onClick={() => { setTab('edit'); window.location.hash = '#/editing'; }}>{t('剪辑工作区', 'Editing')}</button><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'materials'} onClick={() => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; }}>{t('素材管理', 'Materials')}</button></div>
     <p className="text-sm text-text-secondary">{tab === 'materials' ? t('管理上传素材和目录；生成素材仍由来源项目维护。', 'Manage uploaded materials and folders; generated materials remain owned by their source project.') : t('从素材库选择视频，按顺序剪辑，添加音轨和字幕后合成。', 'Select videos, arrange the sequence, add audio and captions, then render.')}</p>
-    {tab === 'materials' ? <EditingMaterialManager onSelect={item => { add(item); setTab('edit'); window.location.hash = '#/editing'; }} disabled={!project || busy} /> : <>
+    {importOpen && <EditingMaterialPicker onSelect={importToWorkspace} onClose={() => setImportOpen(false)} />}
+    {tab === 'materials' ? <EditingMaterialManager /> : <>
     {error && <p role="alert" className="text-red-300">{error}</p>}
     <div className="flex flex-wrap gap-3">
       <select className="glass-input px-3 py-2" aria-label={t('剪辑项目', 'Editing project')} disabled={busy || dirty} value={project?.id || ''} onChange={e => { const id = e.target.value; if (id) void run(async () => accept(await editing.get(id))); }}><option value="">{t('选择项目', 'Select project')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
@@ -81,14 +115,13 @@ export default function EditingPage() {
       {versions.length > 0 && <div className="flex flex-wrap gap-2">{versions.filter(v => v.revision > 0).map(v => <button className="glass-button px-3 py-2" key={v.revision} disabled={busy || dirty || v.revision === project.revision} onClick={() => void run(async () => accept(await editing.restore(project.id, project.revision, v.revision)))}>{t('恢复', 'Restore')} v{v.revision}</button>)}</div>}
       <fieldset disabled={busy} className="space-y-4 disabled:opacity-60">
         {plan && <>
-          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} materialPanel={<EditingMaterials onSelect={add} disabled={busy} />} onChange={change}
+          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onImport={importMaterials} materialPanel={<EditingMaterials onSelect={add} materials={sources} disabled={busy} />} onChange={change}
             audioLane={audioLane} onAudioLaneChange={setAudioLane} canUndo={undo.length > 0} canRedo={redo.length > 0}
             onUndo={() => { setRedo(old => [...old, plan]); setPlan(undo[undo.length - 1]); setUndo(old => old.slice(0, -1)); setDirty(true); }}
             onRedo={() => { setUndo(old => [...old, plan]); setPlan(redo[redo.length - 1]); setRedo(old => old.slice(0, -1)); setDirty(true); }}
             onExportSubtitles={lane => editing.subtitles(project.id, lane)} onUploadAudio={async file => { const item = await editing.upload(file); setSources(old => ({ ...old, [item.id]: item })); return { media_id: item.id, url: item.url, duration_ms: item.duration_ms }; }} />
         </>}
-        {!plan && <EditingMaterials onSelect={add} disabled={busy} />}
-        <button type="button" className="glass-button px-3 py-2 text-sm" onClick={() => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; }}>{t('上传或管理素材', 'Upload or manage materials')}</button>
+        {!plan && <EditingMaterials onSelect={add} onImport={importMaterials} materials={sources} disabled={busy} />}
       </fieldset>
     </>}
     </>}

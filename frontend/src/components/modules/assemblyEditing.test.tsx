@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssemblyEditPlan } from "@/lib/api";
-import { insertAssemblyVideo, snapAssemblyTimelineTime, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip } from "./assemblyEditing";
+import { insertAssemblyVideo, snapAssemblyTimelineTime, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
 function plan(): AssemblyEditPlan { return { id: "p", scope: "project", revision: 1, target_duration_ms: 6000, provenance: {}, markers: [], lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [
     { id: "a", timeline_start_ms: 0, timeline_end_ms: 4000, source_start_ms: 1000, source_end_ms: 5000, source_refs: ["frame:a"], enabled: true },
     { id: "b", timeline_start_ms: 4000, timeline_end_ms: 6000, source_start_ms: 0, source_end_ms: 2000, source_refs: ["frame:b"], enabled: true },
@@ -79,4 +79,44 @@ it("snaps a timeline edit to nearby boundaries and leaves distant edits unchange
     expect(snapAssemblyTimelineTime(source, "s", "one", 3050)).toBe(3000);
     expect(snapAssemblyTimelineTime(source, "s", "one", 2181)).toBe(2181);
     expect(snapAssemblyTimelineTime(source, "s", "one", 45)).toBe(0);
+});
+
+
+describe('playhead directional trimming', () => {
+    it.each([
+        ['left', 2500, 5000, 2500, 4500],
+        ['right', 1000, 2500, 1500, 3500],
+    ] as const)('removes the %s side of a trimmed source and ripples following video', (side, sourceStart, sourceEnd, duration, total) => {
+        const original = plan();
+        const result = trimAssemblyClipAtPlayhead(original, 'v', 'a', 1500, side);
+        expect(result.lanes[0].clips[0]).toMatchObject({ source_start_ms: sourceStart, source_end_ms: sourceEnd, timeline_start_ms: 0, timeline_end_ms: duration });
+        expect(result.lanes[0].clips[1]).toMatchObject({ timeline_start_ms: duration, timeline_end_ms: total, source_start_ms: 0, source_end_ms: 2000 });
+        expect(result.target_duration_ms).toBe(total);
+        expect(original).toEqual(plan());
+    });
+    it.each(['left', 'right'] as const)('preserves source mapping and placement for audio when trimming %s', side => {
+        const original = plan();
+        original.lanes.push({ id: 'music', kind: 'bgm', allow_overlap: true, clips: [{ id: 'sound', timeline_start_ms: 1000, timeline_end_ms: 4000, source_start_ms: 5000, source_end_ms: 8000, enabled: true, source_refs: [] }] });
+        const result = trimAssemblyClipAtPlayhead(original, 'music', 'sound', 2200, side);
+        expect(result.lanes[1].clips[0]).toMatchObject(side === 'left'
+            ? { timeline_start_ms: 2200, timeline_end_ms: 4000, source_start_ms: 6200, source_end_ms: 8000 }
+            : { timeline_start_ms: 1000, timeline_end_ms: 2200, source_start_ms: 5000, source_end_ms: 6200 });
+        expect(result.lanes[0]).toEqual(original.lanes[0]);
+        expect(result.target_duration_ms).toBe(6000);
+    });
+    it.each(['left', 'right'] as const)('shortens captions on the %s without rewriting their content', side => {
+        const original = plan();
+        original.lanes.push({ id: 's', kind: 'subtitle', allow_overlap: false, clips: [{ id: 'cue', text: 'Keep these words', timeline_start_ms: 1000, timeline_end_ms: 4000, enabled: true, source_refs: [] }] });
+        const result = trimAssemblyClipAtPlayhead(original, 's', 'cue', 2200, side);
+        expect(result.lanes[1].clips[0]).toMatchObject({ text: 'Keep these words', timeline_start_ms: side === 'left' ? 2200 : 1000, timeline_end_ms: side === 'right' ? 2200 : 4000 });
+        expect(result.lanes[0]).toEqual(original.lanes[0]);
+    });
+    it('rejects boundaries and does not partially edit when late captions would be orphaned', () => {
+        const original = plan();
+        for (const time of [0, 4000, -1, 1.5, NaN]) expect(() => trimAssemblyClipAtPlayhead(original, 'v', 'a', time, 'left')).toThrow('inside');
+        original.lanes.push({ id: 's', kind: 'subtitle', allow_overlap: false, clips: [{ id: 'cue', text: 'Late', timeline_start_ms: 5500, timeline_end_ms: 6000, enabled: true, source_refs: [] }] });
+        const snapshot = JSON.stringify(original);
+        expect(() => trimAssemblyClipAtPlayhead(original, 'v', 'a', 1500, 'left')).toThrow('adjust those first');
+        expect(JSON.stringify(original)).toBe(snapshot);
+    });
 });

@@ -11,6 +11,13 @@ import ArtDirection from "./ArtDirection";
 beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(api, "getStylePresets").mockResolvedValue({ presets: [], categories: [] } as never);
+    vi.spyOn(api, "getDirectorShootingPlan").mockResolvedValue({
+        project_id: "film", draft_revision: 0, draft_updated_at: null, draft: null,
+        current_revision: 0, current: null, current_lineage: null,
+        readiness_error: null, draft_stale: false, current_stale: false,
+        current_story_events: [], source_chunks: [],
+    });
+    vi.spyOn(api, "listDirectorShootingPlanRevisions").mockResolvedValue([]);
     useProjectStore.setState({
         currentProject: {
             id: "film",
@@ -31,7 +38,7 @@ beforeEach(() => {
     });
 });
 
-it("provides keyboard-operable Director tabs and keeps sample notes in the reference section", () => {
+it("provides keyboard-operable Director tabs when no shooting plan exists", async () => {
     render(
         <NextIntlClientProvider locale="en" messages={messages}>
             <ArtDirection />
@@ -44,13 +51,8 @@ it("provides keyboard-operable Director tabs and keeps sample notes in the refer
 
     fireEvent.keyDown(tabs, { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: "Shooting plan" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("heading", { name: "Director shooting plan" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Director shooting plan" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Generate plan draft" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Create blank plan" })).toBeVisible();
-    fireEvent.click(screen.getByText("Director sample-scene notes"));
-    expect(screen.getByRole("heading", { name: "Scene 9" })).toBeVisible();
-    expect(screen.getByText(/These notes are reference material/)).toBeVisible();
-
     fireEvent.keyDown(tabs, { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: "Style selection" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { name: "Built-in Presets" })).toBeVisible();

@@ -371,8 +371,10 @@ it("does not submit an empty AI source or include shot-only crowd settings in sc
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
     expect(screen.queryByText("近景 / 中景 / 远景人群")).toBeNull();
     expect(screen.queryByRole("spinbutton", { name: "可见人脸上限" })).toBeNull();
+    fireEvent.change(screen.getByRole("textbox", { name: "场景空间与固定外观" }), { target: { value: "暮秋长街" } });
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     const text = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
+    expect(text).toContain("场景空间：暮秋长街");
     expect(text).not.toMatch(/可见人脸上限|近景人群|避让/);
 });
 

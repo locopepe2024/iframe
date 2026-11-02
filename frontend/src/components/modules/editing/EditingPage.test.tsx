@@ -3,10 +3,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import EditingPage, { EditingMaterials, EditingMaterialManager } from './EditingPage';
 import { editing, type EditProject, type EditMaterial } from '@/lib/editing';
 vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
-vi.mock('@/lib/editing', () => ({ editing: { folders: vi.fn(), createFolder: vi.fn(), renameFolder: vi.fn(), deleteFolder: vi.fn(), moveMaterial: vi.fn(), deleteMaterial: vi.fn(), list: vi.fn(), create: vi.fn(), get: vi.fn(), materials: vi.fn(), material: vi.fn(), upload: vi.fn(), save: vi.fn(), render: vi.fn(), versions: vi.fn(), restore: vi.fn(), subtitles: vi.fn() } }));
+vi.mock('@/lib/editing', () => ({ editing: { folders: vi.fn(), createFolder: vi.fn(), renameFolder: vi.fn(), deleteFolder: vi.fn(), moveMaterial: vi.fn(), deleteMaterial: vi.fn(), list: vi.fn(), create: vi.fn(), get: vi.fn(), materials: vi.fn(), material: vi.fn(), upload: vi.fn(), importMaterial: vi.fn(), save: vi.fn(), render: vi.fn(), versions: vi.fn(), restore: vi.fn(), subtitles: vi.fn() } }));
 const project: EditProject = { id: 'independent', title: 'My edit', revision: 0, plan: null, sources: {}, output: null };
 const material: EditMaterial = { id: 'core:source', name: 'Original.mp4', url: '/video.mp4', sha256: 'digest', duration_ms: 1000, video: true, audio: true, origin: 'upload', deletable: true };
 beforeEach(() => {
+  HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
+  HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
   vi.mocked(editing.folders).mockResolvedValue([]);
   vi.mocked(editing.list).mockResolvedValue([project]);
   vi.mocked(editing.get).mockResolvedValue(project);
@@ -14,8 +16,9 @@ beforeEach(() => {
   vi.mocked(editing.materials).mockResolvedValue({ items: [material], next_cursor: null });
   vi.mocked(editing.material).mockResolvedValue(material);
   vi.mocked(editing.upload).mockResolvedValue(material);
+  vi.mocked(editing.importMaterial).mockImplementation(async (_id, revision) => ({ ...project, revision: revision + 1, sources: { [material.id]: material } }));
   vi.mocked(editing.save).mockImplementation(async (_id, revision, plan) => ({ ...project, revision: revision + 1, plan, sources: { [material.id]: material } }));
-  vi.mocked(editing.render).mockImplementation(async () => ({ ...project, revision: 1, output: { url: '/result.mp4', revision: 1 } }));
+  vi.mocked(editing.render).mockImplementation(async (_id, revision) => ({ ...project, revision, output: { url: '/result.mp4', revision } }));
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); window.location.hash = ''; });
 
@@ -24,13 +27,16 @@ it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', 
   render(<EditingPage />);
   await screen.findByRole('option', { name: project.title });
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
-  fireEvent.click(await screen.findByRole('button', { name: 'Select material' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
-  fireEvent.click(screen.getByRole('button', { name: 'Toggle material panel' }));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Select material' })).toBeEnabled());
-  fireEvent.click(screen.getByRole('button', { name: 'Select material' }));
-  await waitFor(() => expect(editing.material).toHaveBeenCalledTimes(2));
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Select material' })).toBeEnabled());
+  if (!screen.queryByRole('button', { name: 'Add to edit Original.mp4' })) fireEvent.click(screen.getByRole('button', { name: 'Toggle material panel' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Add to edit Original.mp4' }));
+  await waitFor(() => expect(editing.material).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeEnabled());
+  fireEvent.click(screen.getByText('Track settings'));
   fireEvent.click(screen.getByRole('button', { name: 'Add Music' }));
   fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
   await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
@@ -39,6 +45,81 @@ it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', 
   expect(plan.lanes[1].kind).toBe('bgm');
   const ids = plan.lanes.flatMap(l => [l.id, ...l.clips.map(c => c.id)]);
   expect(new Set(ids).size).toBe(ids.length);
+});
+
+it('keeps a workspace import after reloading the project without inserting a clip', async () => {
+  const imported = { ...project, revision: 1, sources: { [material.id]: material } };
+  vi.mocked(editing.importMaterial).mockResolvedValue(imported);
+  vi.mocked(editing.get).mockResolvedValueOnce(project).mockResolvedValueOnce(imported);
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  await waitFor(() => expect(editing.importMaterial).toHaveBeenCalledWith(project.id, 0, material.id));
+  expect(await screen.findByText(/Revision 1/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeInTheDocument();
+  expect(editing.save).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Reload / discard changes' }));
+  await waitFor(() => expect(editing.get).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeInTheDocument();
+  expect(screen.getByText('Materials are in your workspace. Click + beside a material to add it to the timeline.')).toBeInTheDocument();
+});
+
+it('guides a revision-zero project through import and timeline insertion', async () => {
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  expect(await screen.findByText('The timeline is empty. Import a video into your workspace, then click + beside it to add it to the timeline.')).toBeInTheDocument();
+  expect(screen.getByRole('slider', { name: 'Timeline ruler' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Import materials' }));
+  expect(screen.getByRole('dialog', { name: 'Import from library' })).toBeInTheDocument();
+  expect(screen.queryByLabelText('Upload video or audio')).not.toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  expect(await screen.findByText('Materials are in your workspace. Click + beside a material to add it to the timeline.')).toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Timeline video preview')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Add to edit Original.mp4' }));
+  expect(await screen.findByLabelText('Timeline video preview')).toHaveAttribute('src', expect.stringContaining('video.mp4'));
+});
+
+it('keeps material management free of workspace import actions even with a project selected', async () => {
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  await screen.findByRole('button', { name: 'Import' });
+  fireEvent.click(screen.getByRole('button', { name: 'Materials' }));
+  await screen.findByText(material.name);
+  expect(screen.queryByRole('button', { name: /Import to workspace/ })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Upload video or audio')).toBeInTheDocument();
+  expect(screen.getByLabelText('Move material Original.mp4')).toBeInTheDocument();
+  expect(editing.importMaterial).not.toHaveBeenCalled();
+});
+
+it('allows closing the workspace picker without importing or changing the edit', async () => {
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled();
+  expect(editing.importMaterial).not.toHaveBeenCalled();
+});
+
+it('keeps import errors in the picker and allows retrying', async () => {
+  vi.mocked(editing.importMaterial).mockRejectedValueOnce(new Error('Import failed'));
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Import failed');
+  expect(screen.getByRole('dialog')).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Import to workspace Original.mp4' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Import to workspace Original.mp4' }));
+  expect(await screen.findByRole('button', { name: 'Add to edit Original.mp4' })).toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
 it('uploads every selected material and keeps per-file failures visible after refreshing', async () => {
@@ -62,7 +143,9 @@ it('references library media in an independent plan then saves and renders that 
   render(<EditingPage />);
   await screen.findByRole('option', { name: project.title });
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
-  fireEvent.click(await screen.findByRole('button', { name: 'Select material' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
   expect(screen.getByRole('button', { name: 'Render MP4' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
@@ -72,15 +155,17 @@ it('references library media in an independent plan then saves and renders that 
   expect(plan.lanes[0].clips[0].source_project_id).toBeUndefined();
   await waitFor(() => expect(screen.getByRole('button', { name: 'Render MP4' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: 'Render MP4' }));
-  await screen.findByRole('link', { name: 'Download output · v1' });
-  expect(editing.render).toHaveBeenCalledWith(project.id, 1);
+  await screen.findByRole('link', { name: 'Download output · v2' });
+  expect(editing.render).toHaveBeenCalledWith(project.id, 2);
 });
 
 it('separates material management from the timeline and preserves unsaved edits across tabs', async () => {
   render(<EditingPage />);
   await screen.findByRole('option', { name: project.title });
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
-  fireEvent.click(await screen.findByRole('button', { name: 'Select material' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
   expect(screen.queryByLabelText('Upload video or audio')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Materials' }));
@@ -115,7 +200,7 @@ it('creates a folder, uploads into it, moves a material and reports deletion con
   fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: folder.name } });
   fireEvent.click(screen.getByRole('button', { name: 'Save folder' }));
   await waitFor(() => expect(editing.createFolder).toHaveBeenCalledWith(folder.name, null));
-  expect(screen.getByRole('button', { name: 'Open' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Root' })).toBeInTheDocument();
   const upload = screen.getByLabelText('Upload video or audio');
   await waitFor(() => expect(upload).toBeEnabled());
   const file = new File(['test'], 'clip.mp4', { type: 'video/mp4' });
@@ -133,7 +218,7 @@ it('creates a folder, uploads into it, moves a material and reports deletion con
 
 it('loads subsequent pages using the selected folder', async () => {
   vi.mocked(editing.materials).mockResolvedValueOnce({ items: [material], next_cursor: 24 }).mockResolvedValue({ items: [{ ...material, id: 'next', name: 'Next.mp4' }], next_cursor: null });
-  render(<EditingMaterials onSelect={vi.fn()} />);
+  render(<EditingMaterialManager onSelect={vi.fn()} />);
   fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
   expect(await screen.findByText('Next.mp4')).toBeInTheDocument();
   expect(editing.materials).toHaveBeenLastCalledWith('', 24, '__root');
@@ -153,6 +238,60 @@ it('navigates nested folders with a breadcrumb and scopes materials to the curre
   expect(editing.materials).toHaveBeenLastCalledWith('', 0, 'root-folder');
   fireEvent.click(screen.getByRole('button', { name: 'Day 1' }));
   await waitFor(() => expect(editing.materials).toHaveBeenLastCalledWith('', 0, 'child-folder'));
-  expect(screen.getByRole('button', { name: 'Open' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Root' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Rushes' })).toBeInTheDocument();
+});
+
+
+it('shows only project materials in the workspace and opens the library through Import', async () => {
+  const onImport = vi.fn();
+  const onSelect = vi.fn();
+  render(<EditingMaterials onImport={onImport} onSelect={onSelect} materials={{ [material.id]: material }} />);
+  expect(screen.queryByRole('textbox', { name: 'Search materials' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('navigation', { name: 'Folder path' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Root' })).not.toBeInTheDocument();
+  expect(editing.materials).not.toHaveBeenCalled();
+  expect(editing.folders).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+  expect(onImport).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole('button', { name: 'Add to edit Original.mp4' }));
+  expect(onSelect).toHaveBeenCalledWith(material);
+});
+
+it('hydrates a saved timeline source that is missing from the project snapshot', async () => {
+  const saved = {
+    ...project,
+    plan: {
+      id: 'assembly-independent', scope: 'project' as const, revision: 1, target_duration_ms: 1000,
+      lanes: [{ id: 'video', kind: 'video' as const, allow_overlap: false, clips: [{ id: 'clip', source_media_id: material.id, timeline_start_ms: 0, timeline_end_ms: 1000, source_start_ms: 0, source_end_ms: 1000, enabled: true, source_refs: [] }] }],
+      markers: [], provenance: {},
+    },
+  };
+  vi.mocked(editing.get).mockResolvedValue(saved);
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  await waitFor(() => expect(editing.material).toHaveBeenCalledWith(material.id));
+  expect(screen.queryByText('No video at this position. Select a shot on the timeline.')).not.toBeInTheDocument();
+});
+
+
+it('undoes and redoes a directional trim before saving the source interval', async () => {
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
+  const playhead = await screen.findByRole('spinbutton', { name: 'Playhead (seconds)' });
+  fireEvent.change(playhead, { target: { value: '0.4' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Trim left' }));
+  expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('max', '600');
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('max', '1000');
+  fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+  expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('max', '600');
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  expect(vi.mocked(editing.save).mock.calls[0][2].lanes[0].clips[0]).toMatchObject({ source_start_ms: 400, source_end_ms: 1000, timeline_start_ms: 0, timeline_end_ms: 600 });
 });

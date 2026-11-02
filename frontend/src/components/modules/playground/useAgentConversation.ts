@@ -29,6 +29,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   const active = useRef(sessionId);
   active.current = sessionId;
   const sending = useRef(false);
+  const lastSubmittedAt = useRef(0);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     setCompanionSkills(readCompanionSkills(window.localStorage));
@@ -61,10 +62,11 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     let first = true;
     setLoading(true); setError(''); setMessages([]); setRemoteBusy(false);
     async function refresh() {
+      const startedAt = Date.now();
       try {
         const conversation = await agentRequest<{ session: ChatSession | null; messages: ChatMessage[]; busy_until: number }>(`/playground/${sessionId}`);
         if (cancelled) return;
-        setMessages(conversation.messages);
+        if (!sending.current && startedAt >= lastSubmittedAt.current) setMessages(conversation.messages);
         setRemoteBusy(conversation.busy_until > Date.now() / 1000);
         if (first && conversation.session) setModel(conversation.session.model);
         if (!conversation.busy_until) setError(current => current === '当前会话正在回复' ? '' : current);
@@ -112,6 +114,13 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
       return;
     }
     sending.current = true; setBusy(true); setError('');
+    const pendingId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const assetNames = inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history));
+    setMessages(current => [...current, {
+      id: pendingId, role: 'user', content: snapshot.prompt,
+      input_media: inputMedia, asset_names: assetNames,
+      created_at: Date.now() / 1000, model, pending: true,
+    }]);
     usePlaygroundStore.getState().setPrompt('');
     try {
       const { session } = await agentRequest<{ session: ChatSession }>('/sessions', 'POST', {
@@ -123,15 +132,17 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
         knowledge_search: knowledgeSearch || currentResearch,
         live_research: (knowledgeSearch && liveResearch && liveResearchAvailable) || currentResearch,
         knowledge_query: knowledgeSearch && knowledgeQuery.trim() ? knowledgeQuery.trim() : undefined,
-        asset_names: inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history)),
+        asset_names: assetNames,
         duration: typeof snapshot.parameters.duration === 'number' ? snapshot.parameters.duration : undefined,
         ratio: typeof snapshot.parameters.ratio === 'string' ? snapshot.parameters.ratio : undefined,
       });
       if (active.current === sessionId) {
-        setMessages(m => [...m.filter(x => x.id !== result.user_message.id && x.id !== result.assistant_message.id), result.user_message, result.assistant_message]);
+        lastSubmittedAt.current = Date.now();
+        setMessages(m => [...m.filter(x => x.id !== pendingId && x.id !== result.user_message.id && x.id !== result.assistant_message.id), result.user_message, result.assistant_message]);
       }
     } catch (e) {
       if (active.current === sessionId) {
+        setMessages(m => m.filter(x => x.id !== pendingId));
         const message = e instanceof Error ? e.message : '发送失败';
         setError(message);
         if (message === '当前会话正在回复') setRemoteBusy(true);
