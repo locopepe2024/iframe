@@ -100,6 +100,21 @@ def parse_scene_tool(value: object) -> SceneToolParams:
     raise ValueError("scene_tool.kind must be lighting or camera")
 
 
+def scene_generation_lighting_prompt(tool: SceneLightingParams) -> str:
+    """Lighting constraints for creating a new scene, not relighting an existing image."""
+    side = describe_scene_direction(tool.azimuth, tool.elevation) if tool.azimuth is not None else LIGHT_SIDES[tool.light_side]
+    return "\n".join(filter(None, [
+        f"主光从{side}进入，受光方向与阴影方向一致。",
+        f"主光方位角 {tool.azimuth}°，仰角 {tool.elevation}°。" if tool.azimuth is not None else "",
+        f"主光颜色 {tool.color}，亮度约 {tool.brightness}%。",
+        "保留克制的轮廓光。" if tool.rim_light else "不要额外添加明显轮廓光。",
+        LIGHT_PRESETS.get(tool.preset, "") if tool.intelligent else "",
+        compile_tool_panel(tool.panel_settings) if tool.panel_settings is not None else "",
+        tool.extra.strip() if tool.intelligent else "",
+        "保留参考图的色温、明暗分布和阴影方向；新场景的物体与空间结构由本次场景设计决定。",
+    ]))
+
+
 def scene_tool_prompt(tool: SceneToolParams, has_lighting_reference: bool = False) -> str:
     if isinstance(tool, SceneLightingParams):
         side = describe_scene_direction(tool.azimuth, tool.elevation) if tool.azimuth is not None else LIGHT_SIDES[tool.light_side]

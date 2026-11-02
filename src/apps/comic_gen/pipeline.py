@@ -2877,6 +2877,73 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         return AssetReferenceIndex(project_id=script.id, assets=entries)
 
+    def scene_reference_lighting(self, script_id: str, reference: Any, *, analyze: bool = False) -> Dict[str, Any]:
+        """Read or explicitly analyze lighting for one owner-visible image version."""
+        from .scene_image_tools import SceneLightingParams, scene_generation_lighting_prompt
+        from .llm import _strip_markdown_json
+        from ...utils.provider_media import resolve_vision_image_input
+
+        script = self.get_script(script_id)
+        if script is None:
+            raise ValueError("Project not found")
+        image, identity = self._resolve_asset_library_reference(script, reference)
+        asset, source = self._find_asset_with_source(script, identity["asset_id"], identity["asset_type"])
+        variant = next(item for item in self._asset_image_variants(asset, identity["asset_type"])
+                       if item.id == identity["variant_id"])
+        tool = variant.scene_tool if isinstance(variant.scene_tool, dict) else None
+        if tool and tool.get("kind") == "lighting":
+            params = SceneLightingParams.model_validate(tool)
+            return {"source": "structured", "params": params.model_dump(exclude_none=True),
+                    "prompt": scene_generation_lighting_prompt(params)}
+        if variant.lighting_analysis:
+            params = SceneLightingParams.model_validate(variant.lighting_analysis)
+            return {"source": "cached", "params": params.model_dump(exclude_none=True),
+                    "prompt": scene_generation_lighting_prompt(params)}
+        snapshot = variant.submission_snapshot
+        design = snapshot.visual_design if snapshot and isinstance(snapshot.visual_design, dict) else {}
+        lighting = design.get("prompt_layers", {}).get("lighting", {}) if isinstance(design.get("prompt_layers"), dict) else {}
+        notes = [design.get("ambient_lighting"), design.get("local_lighting", {}).get("effect")
+                 if isinstance(design.get("local_lighting"), dict) else None]
+        notes += [f"{key}: {value}" for key, value in lighting.items() if isinstance(value, str) and value.strip()]
+        direction = design.get("visual_constraints", {})
+        if isinstance(direction, dict) and direction.get("key_light_direction") not in (None, "", "unspecified"):
+            notes.append(f"主光方向: {direction['key_light_direction']}")
+        notes = [str(note).strip() for note in notes if isinstance(note, str) and note.strip()]
+        if notes:
+            params = SceneLightingParams(kind="lighting", extra="；".join(notes)[:2000])
+            return {"source": "structured", "params": params.model_dump(exclude_none=True),
+                    "prompt": "\n".join(notes) + "\n保留参考图的色温、明暗分布和阴影方向；新场景的空间结构由本次设计决定。"}
+        if not analyze:
+            return {"source": "requires_analysis", "params": None, "prompt": None}
+        try:
+            resolved = resolve_vision_image_input(image, output_root=self.output_root)
+        except ValueError as exc:
+            raise ValueError("参考图片无法用于光影解析") from exc
+        vision_model = os.getenv("SCENE_LIGHTING_VISION_MODEL") or (
+            "gpt-4o" if self.script_processor.llm.provider == "openai" else "qwen-vl-plus"
+        )
+        raw = self.script_processor.llm.chat(
+            messages=[
+                {"role": "system", "content": "你是摄影灯光分析师。只分析图片可见的光影，不推测不可见灯具。返回 JSON 对象，字段为 brightness(0-100整数), color(#RRGGBB), light_side(left/top/right/front/bottom/back), rim_light(布尔), extra(200字内的色温、阴影、反差和氛围描述)。不得描述场景物体。"},
+                {"role": "user", "content": [
+                    {"type": "image_url", "image_url": {"url": resolved}},
+                    {"type": "text", "text": "提取这张图片的可见光影参数。只返回 JSON。"},
+                ]},
+            ], model=vision_model, response_format={"type": "json_object"},
+        )
+        try:
+            parsed = json.loads(_strip_markdown_json(raw))
+            required = {"brightness", "color", "light_side", "rim_light", "extra"}
+            if not isinstance(parsed, dict) or not required.issubset(parsed) or not str(parsed["extra"]).strip():
+                raise ValueError("missing lighting observations")
+            params = SceneLightingParams.model_validate({"kind": "lighting", **parsed})
+        except (ValueError, TypeError) as exc:
+            raise ValueError("光影解析结果无效，请重试") from exc
+        variant.lighting_analysis = params.model_dump(exclude_none=True)
+        self._save_after_asset_mutation(source)
+        return {"source": "analyzed", "params": variant.lighting_analysis,
+                "prompt": scene_generation_lighting_prompt(params)}
+
     def get_asset_library_reference_index(self, owner_profile_id: Optional[str] = None) -> AssetReferenceIndex:
         """Return the normalized cross-container asset view for the library."""
         entries: List[AssetReferenceIndexEntry] = []

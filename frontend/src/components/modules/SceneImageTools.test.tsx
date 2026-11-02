@@ -3,13 +3,32 @@ import { expect, it, vi } from "vitest";
 import { SceneImageTools, containedImageBounds } from "./SceneImageTools";
 
 const apiMocks = vi.hoisted(() => ({
-    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(),
+    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(), getSceneReferenceLighting: vi.fn(),
 }));
 vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks }));
 vi.mock("next/dynamic", () => ({ default: () => ({ onChange }: { onChange: (a: number, e: number) => void }) =>
     <button type="button" onClick={() => onChange(45, 30)}>选择三维方向</button> }));
 
 const sources = [{ key: "source", label: "场景图片 · 1", url: "/source.png", variantId: "source" }];
+
+it("charges for image lighting analysis only after explicit execution", async () => {
+    const reference = { asset_type: "prop" as const, asset_id: "uploaded", variant_id: "v1" };
+    apiMocks.getSceneReferenceLighting.mockImplementation((_project, _reference, analyze) => Promise.resolve(
+        analyze ? { source: "analyzed", params: { kind: "lighting", view_mode: "perspective", intelligent: true,
+            brightness: 65, color: "#aabbcc", light_side: "right", rim_light: false, preset: null, extra: "暮色阴影" },
+            prompt: "主光从右侧进入" } : { source: "requires_analysis", params: null, prompt: null },
+    ));
+    render(<SceneImageTools kind="lighting" sources={sources} projectId="project" sceneAssetId="scene"
+        lightingReferences={[{ key: "uploaded", label: "外部图片", url: "/uploaded.png", reference }]}
+        busy={false} onGenerate={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("光影参考图（可选）"), { target: { value: "uploaded" } });
+    await screen.findByRole("dialog", { name: "确认解析光影参考图" });
+    expect(apiMocks.getSceneReferenceLighting).toHaveBeenCalledWith("project", reference, false);
+    expect(apiMocks.getSceneReferenceLighting).not.toHaveBeenCalledWith("project", reference, true);
+    fireEvent.click(screen.getByRole("button", { name: "执行" }));
+    await waitFor(() => expect(screen.getByLabelText("主光颜色")).toHaveValue("#aabbcc"));
+    expect(apiMocks.getSceneReferenceLighting).toHaveBeenCalledWith("project", reference, true);
+});
 
 it("compiles picked light coordinates and resets to a cardinal direction explicitly", () => {
     const onGenerate = vi.fn();

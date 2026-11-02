@@ -70,6 +70,30 @@ def _encode_image_as_data_uri(local_path: str) -> str:
     return f"data:{mime_type};base64,{encoded}"
 
 
+def resolve_vision_image_input(ref: str, *, output_root: str = "output") -> str:
+    """Convert a validated image reference into a vision-chat image URL."""
+    from .oss_utils import OSSImageUploader
+
+    if not isinstance(ref, str) or not ref.strip():
+        raise ValueError("Image reference is required")
+    uploader = OSSImageUploader()
+    ref_type = classify_media_ref(
+        ref, output_root=output_root,
+        oss_base_path=getattr(uploader, "base_path", None),
+    )
+    if ref_type in {MEDIA_REF_REMOTE_URL, MEDIA_REF_DATA_URI}:
+        return ref
+    if ref_type == MEDIA_REF_LOCAL_PATH:
+        local_path = resolve_local_media_path(ref, output_root=output_root)
+        if local_path and os.path.isfile(local_path):
+            return _encode_image_as_data_uri(local_path)
+    if ref_type == MEDIA_REF_OBJECT_KEY:
+        signed_url = _signed_url_from_object_key(ref, uploader)
+        if signed_url:
+            return signed_url
+    raise ValueError("Image reference cannot be resolved for vision input")
+
+
 def _encode_local_file_base64(local_path: str) -> str:
     with open(local_path, "rb") as f:
         return base64.b64encode(f.read()).decode("ascii")

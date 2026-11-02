@@ -2754,6 +2754,21 @@ def get_project_asset_index(
         raise HTTPException(status_code=404, detail=str(exc))
 
 
+@app.post("/projects/{script_id}/scene-reference-lighting")
+def read_scene_reference_lighting(
+    script_id: str,
+    reference: AssetLibraryReference,
+    analyze: bool = False,
+    user: UserContext = Depends(require_studio_user),
+):
+    if not pipeline.get_script(script_id, user.owner_profile_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    try:
+        return pipeline.scene_reference_lighting(script_id, reference, analyze=analyze)
+    except (InvalidAssetReference, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.get("/asset-index")
 def get_asset_library_index(user: UserContext = Depends(require_studio_user)):
     """Return the normalized cross-series/project/global asset view."""

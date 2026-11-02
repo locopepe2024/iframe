@@ -289,6 +289,13 @@ export interface AssetReferenceIndexVariant {
     reference_distance?: string;
     scene_tool?: import("@/components/modules/SceneImageTools").SceneToolParams | null;
     scene_tool_source_variant_id?: string | null;
+    lighting_analysis?: import("@/components/modules/SceneImageTools").SceneToolParams | null;
+}
+
+export interface SceneReferenceLighting {
+    source: "structured" | "cached" | "analyzed" | "requires_analysis";
+    params: import("@/components/modules/SceneImageTools").SceneToolParams | null;
+    prompt: string | null;
 }
 
 export interface AssetReferenceIndexEntry {
@@ -747,6 +754,13 @@ export const api = {
     getAssetReferenceIndex: async (scriptId: string): Promise<AssetReferenceIndex> => {
         const res = await axios.get<AssetReferenceIndex>(`${API_URL}/projects/${scriptId}/asset-index`, {
             headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
+
+    getSceneReferenceLighting: async (scriptId: string, reference: AssetLibraryReference, analyze = false): Promise<SceneReferenceLighting> => {
+        const res = await axios.post<SceneReferenceLighting>(`${API_URL}/projects/${scriptId}/scene-reference-lighting`, reference, {
+            params: { analyze },
         });
         return res.data;
     },

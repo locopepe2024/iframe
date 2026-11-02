@@ -321,6 +321,7 @@ class ImageVariant(BaseModel):
     camera_pitch: Optional[float] = Field(None, description="Optional camera pitch in degrees")
     scene_tool: Optional[Dict[str, Any]] = Field(None, description="Validated scene image tool settings used for this candidate")
     scene_tool_source_variant_id: Optional[str] = Field(None, description="Source scene variant for a derived image candidate")
+    lighting_analysis: Optional[Dict[str, Any]] = Field(None, description="Cached image-derived lighting parameters for this exact variant")
 
 
 def image_variant_storage_key(variant: Optional[ImageVariant]) -> Optional[str]:
@@ -417,6 +418,13 @@ class AssetLibraryReference(BaseModel):
     applied_fields: List[str] = Field(default_factory=list, max_length=16)
 
 
+class SceneLightingInheritance(BaseModel):
+    model_config = {"extra": "forbid"}
+    reference: AssetLibraryReference
+    label: str = Field(max_length=240)
+    prompt: str = Field(min_length=1, max_length=5000)
+
+
 class ScenePromptSource(BaseModel):
     """Editable prompt and explicit references, independent of the other source."""
 
@@ -424,6 +432,7 @@ class ScenePromptSource(BaseModel):
     prompt: str = Field(default="", max_length=30000, strict=True)
     mode: Literal["text", "reference"] = "text"
     references: List[AssetLibraryReference] = Field(default_factory=list, max_length=32)
+    lighting_inheritance: Optional[SceneLightingInheritance] = None
 
 
 class ScenePromptWorkspace(BaseModel):

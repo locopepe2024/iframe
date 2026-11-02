@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon, Sparkles } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { agentRequest, api, API_URL, authenticatedFetch, crudApi, type AssetImageReviewRequest, type AssetLibraryReference, type ChatModel } from "@/lib/api";
+import { agentRequest, api, API_URL, authenticatedFetch, crudApi, type AssetImageReviewRequest, type AssetLibraryReference, type ChatModel, type SceneReferenceLighting } from "@/lib/api";
 import { extractErrorDetail, getAssetUrl } from "@/lib/utils";
 import { includeVisibleStyle } from "@/lib/assetPromptStyle";
 import CharacterWorkbench from "./CharacterWorkbench";
@@ -1171,8 +1171,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const setVisibleReferences = usingSceneAi ? setAiReferences : setPromptReferences;
     const visibleGenerationMode = usingSceneAi ? aiGenerationMode : imageGenerationMode;
     const setVisibleGenerationMode = usingSceneAi ? setAiGenerationMode : setImageGenerationMode;
+    type LightingInheritance = { reference: AssetLibraryReference; label: string; prompt: string };
+    const [designLighting, setDesignLighting] = useState<LightingInheritance | null>(savedWorkspace?.design?.lighting_inheritance ?? null);
+    const [aiLighting, setAiLighting] = useState<LightingInheritance | null>(savedWorkspace?.ai?.lighting_inheritance ?? null);
+    const inheritedLighting = usingSceneAi ? aiLighting : designLighting;
+    const setInheritedLighting = usingSceneAi ? setAiLighting : setDesignLighting;
     const currentSceneSnapshot = { sceneDesign, imagePrompt, optimizedPrompt, imageGenerationMode,
-        aiGenerationMode, promptReferences, aiReferences, sceneDesignNeedsApply };
+        aiGenerationMode, promptReferences, aiReferences, sceneDesignNeedsApply, designLighting, aiLighting };
     const savedSceneSnapshot = useRef(currentSceneSnapshot);
     const [hasSavedSceneDesign, setHasSavedSceneDesign] = useState(Boolean(savedWorkspace || savedSceneDesign.visual_notes));
     const [savedSceneSource, setSavedSceneSource] = useState<"design" | "ai">(savedWorkspace?.active_source === "ai" ? "ai" : "design");
@@ -1187,6 +1192,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         setPromptReferences(snapshot.promptReferences);
         setAiReferences(snapshot.aiReferences);
         setSceneDesignNeedsApply(snapshot.sceneDesignNeedsApply);
+        setDesignLighting(snapshot.designLighting);
+        setAiLighting(snapshot.aiLighting);
         setScenePromptTab("design");
         setPendingPromptReview(null);
         setMention(null);
@@ -1210,6 +1217,9 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const [mentionIndex, setMentionIndex] = useState(0);
     const [referencePickerOpen, setReferencePickerOpen] = useState(false);
     const [referencePickerQuery, setReferencePickerQuery] = useState("");
+    const [lightingPickerOpen, setLightingPickerOpen] = useState(false);
+    const [lightingPendingReference, setLightingPendingReference] = useState<ReferenceCandidate | null>(null);
+    const [lightingLoading, setLightingLoading] = useState(false);
 
     // Style Controls
     const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || DEFAULT_CHARACTER_NEGATIVE_PROMPT);
@@ -1292,6 +1302,36 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         .sort((left, right) => Number(Boolean(right.isActive)) - Number(Boolean(left.isActive)));
     const pickerCandidates = searchReferenceCandidates(referenceCandidates, referencePickerQuery);
     const lightingReferences = useMemo<LightingReference[]>(() => referenceCandidates.flatMap((candidate) => candidate.reference && candidate.previewUrl ? [{ key: `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`, label: candidate.label, url: candidate.previewUrl, reference: candidate.reference, tool: candidate.sceneTool?.kind === "lighting" ? candidate.sceneTool : undefined }] : []), [referenceCandidates]);
+
+    const lightingBlock = (label: string, prompt: string) => `【继承光影】\n来源：${label.replace(/[\r\n]/g, " ")}\n${prompt}\n【/继承光影】`;
+    const removeLightingBlock = (prompt: string) => prompt.replace(/\n?【继承光影】[\s\S]*?【\/继承光影】/g, "").trim();
+    const applyInheritedLighting = (candidate: ReferenceCandidate, result: SceneReferenceLighting) => {
+        if (!candidate.reference || !result.prompt) throw new Error("参考图没有可用的光影约束");
+        const prompt = result.prompt;
+        setInheritedLighting({ reference: candidate.reference, label: candidate.label, prompt });
+        setVisibleImagePrompt((current: string) => [removeLightingBlock(current), lightingBlock(candidate.label, prompt)].filter(Boolean).join("\n\n"));
+        setLightingPendingReference(null);
+        setLightingPickerOpen(false);
+        setPromptError("");
+    };
+    const chooseInheritedLighting = async (candidate: ReferenceCandidate, analyze = false) => {
+        if (!currentProject?.id || !candidate.reference) return;
+        setLightingLoading(true);
+        setPromptError("");
+        try {
+            const result = await api.getSceneReferenceLighting(currentProject.id, candidate.reference, analyze);
+            if (result.source === "requires_analysis") {
+                setLightingPendingReference(candidate);
+            } else {
+                applyInheritedLighting(candidate, result);
+            }
+        } catch (error) {
+            setPromptError(extractErrorDetail(error));
+            toast.error("光影解析失败", { body: extractErrorDetail(error) });
+        } finally {
+            setLightingLoading(false);
+        }
+    };
 
     const handleMentionKeyDown = (event: KeyboardEvent) => {
         if (!mention) return false;
@@ -1464,6 +1504,15 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     };
 
     const handleGenerateClick = (batchSize: number) => {
+        if (inheritedLighting && !visibleReferences.some((reference) =>
+            reference.asset_type === inheritedLighting.reference.asset_type && reference.asset_id === inheritedLighting.reference.asset_id && reference.variant_id === inheritedLighting.reference.variant_id)) {
+            toast.warning("继承光影的来源版本已从参考素材中移除，请重新选择光影来源。");
+            return;
+        }
+        if (inheritedLighting && !visibleImagePrompt.includes(lightingBlock(inheritedLighting.label, inheritedLighting.prompt))) {
+            toast.warning("继承光影的提示词已变化，请重新选择光影来源或移除继承。");
+            return;
+        }
         if (type === "scene" && !usingSceneAi && sceneDesignNeedsApply) {
             toast.warning("场景设置已修改；请先应用到可见提示词，或选择保留当前提示词。");
             return;
@@ -1519,11 +1568,12 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         const text = buildSceneDesignText();
         const block = text ? `【场景结构化设置】\n${text}\n【/场景结构化设置】` : "";
         setImagePrompt((current: string) => {
-            const withoutPrevious = current.replace(/\n?【场景结构化设置】[\s\S]*?【\/场景结构化设置】/g, "").trim();
+            const withoutPrevious = removeLightingBlock(current).replace(/\n?【场景结构化设置】[\s\S]*?【\/场景结构化设置】/g, "").trim();
             const base = withoutPrevious === sceneDesign.visual_notes.trim() ? "" : withoutPrevious;
             return [base, block].filter(Boolean).join("\n\n");
         });
         setSceneDesignNeedsApply(false);
+        setDesignLighting(null);
     };
 
     const saveSceneDesign = async () => {
@@ -1556,8 +1606,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                 prompt_workspace: {
                     active_source: source,
                     settings_pending: sceneDesignNeedsApply,
-                    design: { prompt: imagePrompt, mode: imageGenerationMode, references: promptReferences },
-                    ai: { prompt: optimizedPrompt, mode: aiGenerationMode, references: aiReferences },
+                    design: { prompt: imagePrompt, mode: imageGenerationMode, references: promptReferences,
+                        ...(designLighting ? { lighting_inheritance: designLighting } : {}) },
+                    ai: { prompt: optimizedPrompt, mode: aiGenerationMode, references: aiReferences,
+                        ...(aiLighting ? { lighting_inheritance: aiLighting } : {}) },
                 },
                 confirmed: true,
             } });
@@ -1609,7 +1661,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                         </>}
                     </div>
 
-                {activeTab === "lighting" || activeTab === "camera" ? <SceneImageTools kind={activeTab} sources={sceneImageSources} sceneAssetId={asset.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, params, compiledPrompt, lightReference) => {
+                {activeTab === "lighting" || activeTab === "camera" ? <SceneImageTools kind={activeTab} sources={sceneImageSources} sceneAssetId={asset.id} projectId={currentProject?.id} lightingReferences={lightingReferences} busy={isGenerating} onGenerate={(source, params, compiledPrompt, lightReference) => {
                             const sourceReference: AssetLibraryReference = { asset_type: "scene", asset_id: asset.id, variant_id: source.variantId };
                             const references = [sourceReference];
                             if (lightReference && !(lightReference.asset_type === sourceReference.asset_type && lightReference.asset_id === sourceReference.asset_id && lightReference.variant_id === sourceReference.variant_id)) references.push(lightReference);
@@ -1822,7 +1874,31 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                         <button type="button" onClick={() => setReferencePickerOpen((open) => !open)}
                                             aria-expanded={referencePickerOpen} aria-label="添加场景参考素材"
                                             className="flex min-h-9 items-center gap-1 rounded border border-glass-border px-2 text-xs hover:bg-hover-bg"><Plus size={14} />参考素材</button>
+                                        {type === "scene" && <button type="button" onClick={() => setLightingPickerOpen(open => !open)}
+                                            disabled={!selectedCandidates.length || lightingLoading} aria-expanded={lightingPickerOpen}
+                                            className="min-h-9 rounded border border-glass-border px-2 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">
+                                            {lightingLoading ? "读取光影中…" : "继承光影"}
+                                        </button>}
                                     </div>
+                                    {type === "scene" && lightingPickerOpen && <div className="mb-2 rounded border border-glass-border bg-surface p-2">
+                                        <div className="mb-1 flex items-center justify-between"><span className="text-xs text-foreground">选择光影来源版本</span>
+                                            <button type="button" aria-label="关闭光影来源列表" onClick={() => setLightingPickerOpen(false)} className="flex h-9 w-9 items-center justify-center"><X size={16} /></button></div>
+                                        {selectedCandidates.map(candidate => <button key={`${candidate.reference?.asset_type}:${candidate.reference?.asset_id}:${candidate.reference?.variant_id}`}
+                                            type="button" disabled={lightingLoading} onClick={() => void chooseInheritedLighting(candidate)}
+                                            className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-hover-bg disabled:opacity-50">
+                                            {candidate.previewUrl && <img src={candidate.previewUrl} alt="" className="h-8 w-8 rounded object-cover" />}
+                                            <span className="truncate">{candidate.label}</span>
+                                        </button>)}
+                                    </div>}
+                                    {type === "scene" && lightingPendingReference && <div role="dialog" aria-label="确认解析参考图光影" className="mb-2 rounded border border-primary/40 bg-surface p-3 text-xs">
+                                        <p>“{lightingPendingReference.label}”没有保存的光影参数。解析此参考图将调用视觉模型并产生费用。</p>
+                                        <div className="mt-2 flex gap-2">
+                                            <button type="button" disabled={lightingLoading} onClick={() => void chooseInheritedLighting(lightingPendingReference, true)} className="min-h-9 rounded bg-primary px-3 text-primary-foreground disabled:opacity-50">执行</button>
+                                            <button type="button" onClick={() => setLightingPendingReference(null)} className="min-h-9 rounded border border-glass-border px-3">返回</button>
+                                        </div>
+                                    </div>}
+                                    {type === "scene" && inheritedLighting && <p className="mb-2 flex items-center gap-2 text-xs text-primary">已继承：{inheritedLighting.label}
+                                        <button type="button" onClick={() => { setVisibleImagePrompt((current: string) => removeLightingBlock(current)); setInheritedLighting(null); }} className="underline">移除继承</button></p>}
                                     {referencePickerOpen && <div className="mb-2 rounded border border-glass-border bg-surface p-2">
                                         <div className="mb-2 flex items-center justify-between gap-2">
                                             <span className="text-xs font-medium text-foreground">场景参考素材</span>

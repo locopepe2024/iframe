@@ -7,6 +7,7 @@ from src.utils.provider_media import (
     RESOLVE_HEADER_DASHSCOPE_OSS_RESOURCE,
     resolve_media_input,
     resolve_media_inputs,
+    resolve_vision_image_input,
 )
 
 
@@ -38,6 +39,34 @@ def _write_output_png(project_root: Path, rel_path: str) -> Path:
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(base64.b64decode(PNG_1X1_BASE64))
     return file_path
+
+
+def test_vision_image_input_resolves_local_reference_with_explicit_root(tmp_path, monkeypatch):
+    source = _write_output_png(tmp_path, "uploads/ref.png")
+    monkeypatch.setattr("src.utils.oss_utils.OSSImageUploader", lambda: FakeUploader(configured=False))
+
+    resolved = resolve_vision_image_input(str(source), output_root=str(tmp_path / "output"))
+
+    assert resolved == f"data:image/png;base64,{PNG_1X1_BASE64}"
+
+
+def test_vision_image_input_resolves_object_reference_at_media_boundary(tmp_path, monkeypatch):
+    uploader = FakeUploader(configured=True)
+    uploader.base_path = "lumenx"
+    monkeypatch.setattr("src.utils.oss_utils.OSSImageUploader", lambda: uploader)
+
+    assert resolve_vision_image_input("lumenx/assets/ref.png", output_root=str(tmp_path)) == (
+        "https://oss.example/lumenx/assets/ref.png"
+    )
+
+
+def test_vision_image_input_rejects_path_outside_media_root(tmp_path, monkeypatch):
+    source = tmp_path / "outside.png"
+    source.write_bytes(base64.b64decode(PNG_1X1_BASE64))
+    monkeypatch.setattr("src.utils.oss_utils.OSSImageUploader", lambda: FakeUploader(configured=False))
+
+    with pytest.raises(ValueError, match="cannot be resolved"):
+        resolve_vision_image_input(str(source), output_root=str(tmp_path / "output"))
 
 
 def test_dashscope_image_local_without_oss_uses_data_uri(tmp_path):
