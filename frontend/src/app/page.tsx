@@ -728,8 +728,8 @@ export default function Home() {
   // A series list request can fail independently from the project list (for
   // example during API-key session renewal). Keep episode projects visible
   // instead of silently dropping every project that has a series_id.
-  const loadedEpisodeIds = new Set(Object.values(seriesEpisodes).flat().map((p) => p.id));
-  const standaloneProjects = projects.filter((p) => !p.series_id || !loadedEpisodeIds.has(p.id));
+  const knownSeriesIds = new Set(seriesList.map((series) => series.id));
+  const standaloneProjects = projects.filter((p) => !p.series_id || !knownSeriesIds.has(p.series_id));
 
   const totalCount = seriesList.length + standaloneProjects.length;
 
@@ -798,14 +798,17 @@ export default function Home() {
     // and the filtered-empty count below (avoids the two diverging).
     const wsSeriesGroups = seriesList.map((s) => {
       const seriesTitleMatched = wsQuery.length > 0 && s.title.toLowerCase().includes(wsQuery);
-      const eps = [...(seriesEpisodes[s.id] || [])]
-        .sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0))
+      const episodes = [...(seriesEpisodes[s.id] || projects.filter((project) => project.series_id === s.id))]
+        .sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
+      const eps = [...episodes]
         .filter((ep) => wsMatch(ep, seriesTitleMatched));
-      return { s, eps };
+      const cover = episodes.map(deriveCover).find(Boolean);
+      return { s, eps, cover, episodeCount: episodes.length || s.episode_ids?.length || 0 };
     });
     const wsVisibleStandalone = standaloneProjects.filter((p) => wsMatch(p));
-    const wsVisibleCount =
-      wsVisibleStandalone.length + wsSeriesGroups.reduce((n, g) => n + g.eps.length, 0);
+    const wsVisibleCount = wsVisibleStandalone.length + wsSeriesGroups.filter(({ s, eps }) =>
+      eps.length > 0 || (wsStatus === "all" && (!wsQuery || s.title.toLowerCase().includes(wsQuery)))
+    ).length;
     return (
       <div className="flex flex-col h-full overflow-hidden">
         {/* Page header — eyebrow + Fraunces title + actions */}
@@ -1003,66 +1006,28 @@ export default function Home() {
             </motion.div>
           ) : (
             <div className="flex flex-col gap-2">
-              {/* Per-series groups — Line B editorial gallery */}
-              {wsSeriesGroups.map(({ s, eps }) => {
-                if (eps.length === 0 && wsFiltering) return null;
+              {/* One directory entry per series; episodes live in the series view. */}
+              <div className={viewMode === "list" ? "flex flex-col gap-2" : "grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-4"}>
+              {wsSeriesGroups.map(({ s, eps, cover, episodeCount }) => {
+                if (eps.length === 0 && wsFiltering && (wsStatus !== "all" || !s.title.toLowerCase().includes(wsQuery))) return null;
                 return (
                   <section key={`grp-${s.id}`} aria-label={s.title}>
-                    <div className="flex items-baseline gap-3 mt-4 mb-4 mx-0.5">
-                      <button
-                        onClick={() => { window.location.hash = `#/series/${s.id}`; }}
-                        className="font-display atelier-display text-[1.5rem] font-semibold tracking-tight text-foreground hover:text-primary transition-colors"
-                      >
-                        {s.title}
-                      </button>
-                      <span className="font-mono text-[0.625rem] uppercase tracking-wider text-text-muted">
-                        {t("series")} · {t("frames", { count: eps.length })}
-                      </span>
-                      <span className="atelier-group-line h-px flex-1 bg-glass-border" />
-                    </div>
-                    {viewMode === "list" ? (
-                      <div className="flex flex-col gap-1.5">
-                        {eps.map((ep, i) => (
-                          <div
-                            key={`ep-${ep.id}`}
-                            className="atelier-reveal"
-                            style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
-                          >
-                            <ProjectRow
-                              project={ep}
-                              crumb={`${s.title}${ep.episode_number ? ` · EP.${String(ep.episode_number).padStart(2, "0")}` : ""}`}
-                            />
-                          </div>
-                        ))}
-                        {!wsFiltering && (
-                          <button
-                            onClick={() => { setDialogSeries({ id: s.id, title: s.title }); setIsDialogOpen(true); }}
-                            className="group flex items-center gap-3 rounded-xl border border-dashed border-border bg-transparent px-3 py-2.5 text-text-secondary hover:text-foreground hover:border-primary transition-colors"
-                          >
-                            <span className="w-8 h-8 rounded-lg grid place-items-center bg-surface group-hover:text-primary transition-colors flex-shrink-0">
-                              <Plus size={15} />
-                            </span>
-                            <span className="text-[0.8125rem] font-semibold">{t("newEpisode")}</span>
-                          </button>
-                        )}
+                    <button type="button" onClick={() => { window.location.hash = `#/series/${s.id}`; }}
+                      className={`group w-full overflow-hidden rounded border border-glass-border bg-surface text-left transition-colors hover:border-primary hover:bg-hover-bg ${viewMode === "list" ? "flex items-center gap-4 p-2.5" : ""}`}>
+                      <div className={`shrink-0 overflow-hidden bg-surface-inset ${viewMode === "list" ? "h-16 w-24 rounded" : "aspect-[16/9] w-full"}`}>
+                        {cover ? <img src={cover} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full w-full place-items-center text-text-muted"><Film size={viewMode === "list" ? 22 : 36} /></div>}
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-8">
-                        {eps.map((ep, i) => (
-                          <div
-                            key={`ep-${ep.id}`}
-                            className="atelier-reveal"
-                            style={{ animationDelay: `${Math.min(i * 60, 300)}ms` }}
-                          >
-                            <ProjectCard project={ep} onDelete={deleteProject} />
-                          </div>
-                        ))}
-                        {!wsFiltering && <NewProjectTile episode onClick={() => { setDialogSeries({ id: s.id, title: s.title }); setIsDialogOpen(true); }} />}
+                      <div className={`min-w-0 ${viewMode === "list" ? "flex-1" : "p-4"}`}>
+                        <h2 className="truncate font-display text-base font-semibold text-foreground group-hover:text-primary">{s.title}</h2>
+                        <p className="mt-1 text-xs text-text-secondary">{t("series")} · {t("episodes", { count: episodeCount })}</p>
+                        {s.description && <p className="mt-1 truncate text-xs text-text-muted">{s.description}</p>}
                       </div>
-                    )}
+                      {viewMode === "list" && <ChevronDown size={16} className="mr-2 -rotate-90 text-text-muted" />}
+                    </button>
                   </section>
                 );
               })}
+              </div>
 
               {/* Standalone projects group */}
               {(() => {

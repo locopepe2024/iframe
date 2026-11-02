@@ -26,7 +26,6 @@ export type SidebarItem =
   | { kind: "series_director" }
   | { kind: "art_direction" }   // R2V v2 — series-level style baseline
   | { kind: "assembly" }        // Series-level editorial swimlane
-  | { kind: "extras" }
   | { kind: "asset"; tab: "characters" | "scenes" | "props" }
   | { kind: "episode"; episodeId: string };
 
@@ -272,18 +271,6 @@ export default function SeriesSidebar({
             </button>
           );
         })}
-      </div>
-
-      <div className="px-3 pb-2">
-        <button
-          onClick={() => onItemChange({ kind: "extras" })}
-          aria-label="群演资产库"
-          className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg", activeItem.kind === "extras" ? "bg-primary/10 text-foreground" : "text-text-secondary hover:text-foreground hover:bg-hover-bg")}
-        >
-          <Users size={18} className={activeItem.kind === "extras" ? "text-primary" : ""} />
-          <span className="text-sm font-medium flex-1 text-left truncate">群演资产库</span>
-          <span className="text-xs font-mono text-text-muted">{series.extra_roster?.length ?? 0}</span>
-        </button>
       </div>
 
       <div className="px-3 pb-2">
