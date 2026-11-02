@@ -34,6 +34,7 @@ export const editing = {
   deleteFolder: async (id: string) => (await axios.delete(`${base}/folders/${encodeURIComponent(id)}`)).data,
   materials: async (q = '', cursor = 0, folderId?: string | null): Promise<{ items: EditMaterial[]; next_cursor: number | null }> => materialPage((await axios.get(`${base}/materials`, { params: { q, cursor, folder_id: folderId || undefined } })).data),
   material: async (id: string): Promise<EditMaterial> => (await axios.get(`${base}/materials/${encodeURIComponent(id)}`)).data,
+  transcriptionAudio: async (id: string, startMs: number, endMs: number): Promise<Blob> => (await axios.post(`${base}/materials/${encodeURIComponent(id)}/transcription-audio`, { start_ms: startMs, end_ms: endMs }, { responseType: 'blob' })).data,
   upload: async (file: File, folderId?: string | null): Promise<EditMaterial> => { const data = new FormData(); data.append('file', file); return (await axios.post(`${base}/materials`, data, { params: { folder_id: folderId || undefined } })).data; },
   deleteMaterial: async (id: string) => (await axios.delete(`${base}/materials/${encodeURIComponent(id)}`)).data,
   save: async (id: string, revision: number, plan: AssemblyEditPlan): Promise<EditProject> => project((await axios.put(`${base}/projects/${id}/plan`, { revision, plan })).data),

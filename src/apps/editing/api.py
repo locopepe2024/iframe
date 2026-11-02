@@ -31,6 +31,10 @@ class FolderRequest(BaseModel):
 class MaterialFolderRequest(BaseModel):
     folder_id: str | None = Field(None, max_length=80)
 
+class TranscriptionAudioRequest(BaseModel):
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
+
 
 def public(value, user):
     return sign_studio_media_paths(value, user.owner_profile_id)
@@ -74,6 +78,11 @@ def upload(file: UploadFile = File(...), folder_id: str | None = Query(None), us
 @router.get('/materials/{key}')
 def material(key: str, user: UserContext = Depends(require_studio_user)):
     return public(EditingService(user).resolve(key)[0], user)
+
+@router.post('/materials/{key}/transcription-audio')
+def transcription_audio(key: str, body: TranscriptionAudioRequest, user: UserContext = Depends(require_studio_user)):
+    data = EditingService(user).transcription_audio(key, body.start_ms, body.end_ms)
+    return Response(data, media_type='audio/wav')
 
 @router.delete('/materials/{key}')
 def delete_material(key: str, user: UserContext = Depends(require_studio_user)):

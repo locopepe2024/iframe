@@ -3,12 +3,14 @@ import { useEffect, useState } from 'react';
 import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from 'next-intl';
 import { editing, type EditMaterial, type EditProject } from '@/lib/editing';
-import type { AssemblyEditPlan } from '@/lib/api';
+import type { AssemblyClip, AssemblyEditPlan } from '@/lib/api';
 import { AssemblyTracks } from '../AssemblyTracks';
 import { extractErrorDetail, getAssetUrl } from '@/lib/utils';
 
 export { EditingMaterials, EditingMaterialManager } from './EditingMaterials';
 import { EditingMaterials, EditingMaterialManager, EditingMaterialPicker } from './EditingMaterials';
+import EditingTranscriptionDialog from './EditingTranscriptionDialog';
+import type { TranscriptCue } from './transcriptDraft';
 
 export default function EditingPage() {
   const zh = useLocale().startsWith('zh');
@@ -27,12 +29,13 @@ export default function EditingPage() {
   const [pendingMedia, setPendingMedia] = useState('');
   const [tab, setTab] = useState<'edit' | 'materials'>('edit');
   const [importOpen, setImportOpen] = useState(false);
+  const [transcriptClip, setTranscriptClip] = useState<AssemblyClip | null>(null);
   useEffect(() => { const read = () => setTab(new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab') === 'materials' ? 'materials' : 'edit'); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const read = () => setPendingMedia(new URLSearchParams(window.location.hash.split('?')[1] || '').get('media') || ''); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
   const [audioLane, setAudioLane] = useState<'bgm' | 'dialogue' | 'sfx'>('bgm');
   const emptyPlan = (id: string): AssemblyEditPlan => ({ id: `assembly-${id}`, scope: 'project', revision: 1, target_duration_ms: 1000, lanes: [], markers: [], provenance: {} });
-  const accept = (p: EditProject) => { setProject(p); setPlan(p.plan || emptyPlan(p.id)); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); };
+  const accept = (p: EditProject) => { setProject(p); setPlan(p.plan || emptyPlan(p.id)); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); setTranscriptClip(null); };
   useEffect(() => { editing.list().then(setProjects).catch(e => setError(extractErrorDetail(e))); }, []);
   // Older projects can contain a saved timeline reference without the
   // corresponding source snapshot in `sources` (for example, after a
@@ -55,6 +58,14 @@ export default function EditingPage() {
   }, [project?.id, plan, sources]);
   const run = async (fn: () => Promise<void>) => { setBusy(true); setError(''); try { await fn(); } catch (e) { setError(extractErrorDetail(e)); } finally { setBusy(false); } };
   const change = (next: AssemblyEditPlan) => { if (plan) setUndo(old => [...old.slice(-49), plan]); setRedo([]); setPlan(next); setDirty(true); };
+  const addTranscript = (cues: TranscriptCue[]) => {
+    if (!plan || !transcriptClip || plan.lanes.length >= 8 || !plan.lanes.some(lane => lane.kind === 'video' && lane.clips.some(clip => clip.id === transcriptClip.id))) return;
+    change({ ...plan, lanes: [...plan.lanes, {
+      id: createRenderRequestId(), kind: 'subtitle', label: t('原声字幕', 'Source captions'), allow_overlap: false,
+      clips: cues.map(cue => ({ id: createRenderRequestId(), timeline_start_ms: cue.start_ms, timeline_end_ms: cue.end_ms, text: cue.text.trim(), source_refs: [...transcriptClip.source_refs], enabled: true })),
+    }] });
+    setTranscriptClip(null);
+  };
   const add = (item: EditMaterial) => {
     if (!project) return;
     if (!item.video && !plan) { setError(t('请先添加视频。', 'Add a video first.')); return; }
@@ -94,6 +105,7 @@ export default function EditingPage() {
     <div className="flex flex-wrap items-center gap-2"><h1 className="font-display mr-3 text-2xl font-semibold">{t('独立剪辑', 'Independent editing')}</h1><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'edit'} onClick={() => { setTab('edit'); window.location.hash = '#/editing'; }}>{t('剪辑工作区', 'Editing')}</button><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'materials'} onClick={() => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; }}>{t('素材管理', 'Materials')}</button></div>
     <p className="text-sm text-text-secondary">{tab === 'materials' ? t('管理上传素材和目录；生成素材仍由来源项目维护。', 'Manage uploaded materials and folders; generated materials remain owned by their source project.') : t('从素材库选择视频，按顺序剪辑，添加音轨和字幕后合成。', 'Select videos, arrange the sequence, add audio and captions, then render.')}</p>
     {importOpen && <EditingMaterialPicker onSelect={importToWorkspace} onClose={() => setImportOpen(false)} />}
+    {transcriptClip && <EditingTranscriptionDialog clip={transcriptClip} onClose={() => setTranscriptClip(null)} onApply={addTranscript} />}
     {tab === 'materials' ? <EditingMaterialManager /> : <>
     {error && <p role="alert" className="text-red-300">{error}</p>}
     <div className="flex flex-wrap gap-3">
@@ -115,7 +127,7 @@ export default function EditingPage() {
       {versions.length > 0 && <div className="flex flex-wrap gap-2">{versions.filter(v => v.revision > 0).map(v => <button className="glass-button px-3 py-2" key={v.revision} disabled={busy || dirty || v.revision === project.revision} onClick={() => void run(async () => accept(await editing.restore(project.id, project.revision, v.revision)))}>{t('恢复', 'Restore')} v{v.revision}</button>)}</div>}
       <fieldset disabled={busy} className="space-y-4 disabled:opacity-60">
         {plan && <>
-          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onImport={importMaterials} materialPanel={<EditingMaterials onSelect={add} materials={sources} disabled={busy} />} onChange={change}
+          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onImport={importMaterials} materialPanel={<EditingMaterials onSelect={add} materials={sources} disabled={busy} />} onChange={change} onTranscribe={clip => { if (plan.lanes.length >= 8) setError(t('最多支持 8 条泳道。', 'At most 8 lanes.')); else setTranscriptClip(clip); }}
             audioLane={audioLane} onAudioLaneChange={setAudioLane} canUndo={undo.length > 0} canRedo={redo.length > 0}
             onUndo={() => { setRedo(old => [...old, plan]); setPlan(undo[undo.length - 1]); setUndo(old => old.slice(0, -1)); setDirty(true); }}
             onRedo={() => { setUndo(old => [...old, plan]); setPlan(redo[redo.length - 1]); setRedo(old => old.slice(0, -1)); setDirty(true); }}

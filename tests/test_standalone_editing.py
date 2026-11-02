@@ -25,6 +25,38 @@ def material(service, video):
         return service.upload(stream, 'clip.mp4')
 
 
+def test_transcription_audio_owner_range_and_ffmpeg_failure(service, video, monkeypatch):
+    item = material(service, video)
+    wav = service.transcription_audio(item['id'], 0, 500)
+    assert wav.startswith(b'RIFF')
+    assert len(wav) > 44
+    stranger = EditingService(UserContext('other', 'other', 'Other', ''), output_root=service.output_root)
+    with pytest.raises(HTTPException) as error:
+        stranger.transcription_audio(item['id'], 0, 500)
+    assert error.value.status_code == 404
+    for start, end in ((-1, 500), (500, 500), (0, 60_001)):
+        with pytest.raises(HTTPException) as error:
+            service.transcription_audio(item['id'], start, end)
+        assert error.value.status_code == 422
+    monkeypatch.setattr('src.apps.editing.service.get_ffmpeg_path', lambda: None)
+    with pytest.raises(HTTPException) as error:
+        service.transcription_audio(item['id'], 0, 500)
+    assert error.value.status_code == 503
+
+
+def test_transcription_audio_rejects_silent_video_and_extraction_error(service, video, monkeypatch, tmp_path):
+    item = material(service, video)
+    monkeypatch.setattr(service, 'resolve', lambda key: ({'audio': False, 'duration_ms': 1000}, str(video)))
+    with pytest.raises(HTTPException) as error:
+        service.transcription_audio(item['id'], 0, 500)
+    assert error.value.status_code == 422
+    monkeypatch.setattr(service, 'resolve', lambda key: ({'audio': True, 'duration_ms': 1000}, str(video)))
+    monkeypatch.setattr('src.apps.editing.service.subprocess.run', lambda *args, **kwargs: (_ for _ in ()).throw(OSError('ffmpeg failed')))
+    with pytest.raises(HTTPException) as error:
+        service.transcription_audio(item['id'], 0, 500)
+    assert error.value.status_code == 422
+
+
 def plan_for(item):
     return AssemblyEditPlan.model_validate(dict(scope='project', target_duration_ms=1000, lanes=[dict(id='video', kind='video', clips=[dict(id='clip', timeline_start_ms=0, timeline_end_ms=1000, source_media_id=item['id'], source_refs=['media:'+item['id']])])]))
 

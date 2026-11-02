@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, type PointerEvent, type KeyboardEvent, type ReactNode } from "react";
 import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from "next-intl";
-import { api, type AssemblyEditPlan } from "@/lib/api";
+import { api, type AssemblyClip, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
 import { duplicateAssemblyVideo, insertAssemblyVideo, reorderAssemblyVideo, snapAssemblyTimelineTime, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
@@ -11,13 +11,14 @@ import TimelineAudioPreview, { usePreviewGain } from './TimelineAudioPreview';
 import TimelineWaveform from './TimelineWaveform';
 import { ChevronLeft, ChevronRight, Copy, Undo2, Redo2 } from 'lucide-react';
 
-export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, materialPanel, onImport, audioLane, onAudioLaneChange, canUndo, canRedo, onUndo, onRedo }: {
+export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, onTranscribe, materialPanel, onImport, audioLane, onAudioLaneChange, canUndo, canRedo, onUndo, onRedo }: {
     plan: AssemblyEditPlan; resourceId: string; saved: boolean; project: Pick<Project, "id" | "frames" | "video_tasks" | "bgm_url">;
     materialPanel?: ReactNode;
     onImport?: () => void;
-    materials?: Record<string, { url: string }>;
+    materials?: Record<string, { url: string; audio?: boolean }>;
     onUploadAudio?: (file: File) => Promise<{ media_id: string; url: string; duration_ms: number }>;
     onExportSubtitles?: (lane: string) => Promise<Blob>;
+    onTranscribe?: (clip: AssemblyClip) => void;
     audioLane?: 'bgm' | 'dialogue' | 'sfx';
     onAudioLaneChange?: (lane: 'bgm' | 'dialogue' | 'sfx') => void;
     canUndo?: boolean;
@@ -254,6 +255,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
             {selectedAudioUrl && <label className="w-full text-xs text-text-secondary">{t("试听素材", "Preview source")}
                 <audio controls preload="metadata" src={selectedAudioUrl} aria-label={t("选中音频试听", "Selected audio preview")} className="mt-1 h-9 w-full" />
             </label>}
+            {selectedLane?.kind === 'video' && selectedClip?.source_media_id && materials?.[selectedClip.source_media_id]?.audio && onTranscribe && <button type="button" className={control} onClick={() => onTranscribe(selectedClip)}>{t('原声转字幕', 'Source audio to captions')}</button>}
             {selectedLane?.kind !== "subtitle" && <>
                 <label className="text-xs text-text-secondary">{t("源入点（秒）", "Source in (seconds)")}<input className={`${control} block w-28`} type="number" min={0} step={0.001} value={sourceIn / 1000} onChange={e => setSourceIn(Math.round(Number(e.target.value) * 1000))} /></label>
                 <label className="text-xs text-text-secondary">{t("源出点（秒）", "Source out (seconds)")}<input className={`${control} block w-28`} type="number" min={0.001} step={0.001} value={sourceOut / 1000} onChange={e => setSourceOut(Math.round(Number(e.target.value) * 1000))} /></label>

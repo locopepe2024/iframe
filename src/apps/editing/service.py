@@ -266,6 +266,28 @@ class EditingService:
             raise HTTPException(422, 'Material duration is empty')
         return dict(id=key, name=name, url=stored, sha256=actual, duration_ms=duration_ms, video='video' in kinds, audio='audio' in kinds), str(path)
 
+    def transcription_audio(self, key, start_ms, end_ms):
+        material, path = self.resolve(key)
+        if not material['audio']:
+            raise HTTPException(422, 'Material has no audio stream')
+        if start_ms < 0 or end_ms <= start_ms or end_ms > material['duration_ms'] or end_ms - start_ms > 60_000:
+            raise HTTPException(422, 'Select up to 60 seconds within the source material')
+        ffmpeg = get_ffmpeg_path()
+        if not ffmpeg:
+            raise HTTPException(503, 'FFmpeg is unavailable')
+        try:
+            result = subprocess.run([
+                ffmpeg, '-nostdin', '-hide_banner', '-loglevel', 'error',
+                '-ss', f'{start_ms / 1000:.3f}', '-i', path,
+                '-t', f'{(end_ms - start_ms) / 1000:.3f}',
+                '-vn', '-ac', '1', '-ar', '16000', '-f', 'wav', 'pipe:1',
+            ], check=True, capture_output=True, timeout=90)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise HTTPException(422, 'Could not extract source audio') from exc
+        if len(result.stdout) <= 44 or len(result.stdout) > 50 * 1024 * 1024:
+            raise HTTPException(422, 'Source audio is empty or too large to transcribe')
+        return result.stdout
+
     def _check_not_deleted(self, db, key):
         if db.execute('SELECT 1 FROM editing_deleted_materials WHERE owner=? AND material_key=?', (self.user.owner_profile_id, key)).fetchone():
             raise HTTPException(404, 'Material not found')
