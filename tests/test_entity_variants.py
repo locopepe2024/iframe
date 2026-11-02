@@ -109,7 +109,7 @@ def test_performer_skill_changes_entity_extraction_revision(monkeypatch):
     assert entity_extraction_prompt_revision() != current
 
 
-def test_entity_extraction_preserves_crowd_group_candidates():
+def test_entity_extraction_creates_normal_character_assets_for_crowd():
     from src.apps.comic_gen.llm import ScriptProcessor
 
     processor = ScriptProcessor.__new__(ScriptProcessor)
@@ -126,9 +126,10 @@ def test_entity_extraction_preserves_crowd_group_candidates():
         "测试", "长街上百姓避让",
         {"characters": [], "crowd_groups": [{"extra_id": "crowd-town", "label": "青溪镇市井百姓", "role_tags": ["普通路人", "围观避让", "商贩"]}], "scenes": [scene], "props": []},
     )
-    assert [item.label for item in script.crowd_group_candidates] == ["青溪镇市井百姓"]
-    assert script.crowd_group_candidates[0].kind == "extra_template"
-    assert script.crowd_group_candidates[0].role_tags == ["普通路人", "围观避让", "商贩"]
+    assert [item.name for item in script.characters] == ["青溪镇市井百姓"]
+    assert script.characters[0].visual_weight == 1
+    assert "商贩" in script.characters[0].description
+    assert script.crowd_group_candidates == []
 
 
 def test_entity_extraction_prompt_separates_distinct_crowd_identities():
@@ -173,5 +174,6 @@ def test_extraction_repairs_missing_crowd_groups_once():
 
     result = processor.parse_novel("测试", "长街百姓围观数名匪寇")
 
-    assert [group.label for group in result.crowd_group_candidates] == ["市井百姓", "流民匪寇"]
+    assert [character.name for character in result.characters] == ["市井百姓", "流民匪寇"]
+    assert result.crowd_group_candidates == []
     assert processor.llm.chat.call_count == 2

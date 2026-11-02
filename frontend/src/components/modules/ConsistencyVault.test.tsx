@@ -71,9 +71,9 @@ beforeEach(() => {
     vi.spyOn(window, "alert").mockImplementation(() => {});
 });
 
-it("shows all merged crowd templates in Assets without treating them as character assets", () => {
+it("shows crowd performers in the normal character asset grid", () => {
     useProjectStore.setState({ currentProject: {
-        id: "episode-1", characters: [], scenes: [], props: [],
+        id: "episode-1", characters: [{ id: "crowd_003", name: "玄宸阁随行探子", description: "" }], scenes: [], props: [],
         series_id: "series-1", crowd_groups: [],
     } as any, currentSeries: { id: "series-1", extra_roster: [
             { extra_id: "crowd_001", label: "流民匪寇", kind: "extra_template" },
@@ -87,13 +87,11 @@ it("shows all merged crowd templates in Assets without treating them as characte
 
     render(<ConsistencyVault />);
 
-    const crowdSection = screen.getByRole("region", { name: "背景群演" });
-    expect(within(crowdSection).getByText("玄宸阁随行探子")).toBeInTheDocument();
-    expect(within(crowdSection).getByText("往来江湖客")).toBeInTheDocument();
-    expect(within(crowdSection).getAllByText(/流民匪寇|江湖打手|青溪镇市井百姓/)).toHaveLength(3);
+    expect(screen.getByText("玄宸阁随行探子")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "背景群演" })).toBeNull();
     expect(screen.queryByText("No characters found")).not.toBeInTheDocument();
-    fireEvent.click(within(crowdSection).getByRole("button", { name: /玄宸阁随行探子/ }));
-    expect(screen.getByRole("dialog", { name: "编辑群演：玄宸阁随行探子" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("玄宸阁随行探子"));
+    expect(screen.getByRole("dialog", { name: "角色工作台" })).toBeInTheDocument();
 });
 
 it("saves only character design and retains current assets without refetching the project", async () => {
@@ -352,9 +350,13 @@ it("saves both scene sources and restores independent edits when reopened", asyn
     expect(screen.getAllByText("保持原文不变").length).toBeGreaterThan(0);
 });
 
-it("does not submit an empty AI source or add unselected people-view constraints", async () => {
+it("does not submit an empty AI source or include shot-only crowd settings in scene design", async () => {
     const asset = { id: "street", name: "空优化长街", description: "长街原文", source: "episode",
-        image_asset: { variants: [{ id: "v1", url: "/street.png" }] } };
+        image_asset: { variants: [{ id: "v1", url: "/street.png" }] },
+        asset_design: { design_draft: { crowd_design: {
+            near: { identity_policy: "asset_required", density: "3人", subjects: ["路人"], text_elements: [], motion: "避让" },
+            mid: {}, far: {},
+        } } } };
     useProjectStore.setState({ currentProject: { id: "episode-1", characters: [], scenes: [asset], props: [] } as any });
     mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
     render(<ConsistencyVault />);
@@ -367,11 +369,11 @@ it("does not submit an empty AI source or add unselected people-view constraints
     expect(mocks.generateAsset).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("tab", { name: "场景设计" }));
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "可见人脸上限" }), { target: { value: "3" } });
+    expect(screen.queryByText("近景 / 中景 / 远景人群")).toBeNull();
+    expect(screen.queryByRole("spinbutton", { name: "可见人脸上限" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     const text = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
-    expect(text).toContain("可见人脸上限：3 张");
-    expect(text).not.toMatch(/侧身|远景/);
+    expect(text).not.toMatch(/可见人脸上限|近景人群|避让/);
 });
 
 it("keeps the last successful scene save when a later save fails", async () => {

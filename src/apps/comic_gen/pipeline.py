@@ -3809,24 +3809,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                 value = scene_design.get(key)
                 if isinstance(value, str) and value.strip():
                     scene_design_parts.append(f"{label}：{value.strip()}")
-            crowd = scene_design.get("crowd_design")
-            if isinstance(crowd, dict):
-                layer_labels = {"near": "近景人群", "mid": "中景人群", "far": "远景人群"}
-                for layer_name, label in layer_labels.items():
-                    layer = crowd.get(layer_name)
-                    if not isinstance(layer, dict):
-                        continue
-                    policy = layer.get("identity_policy")
-                    density = layer.get("density")
-                    motion = layer.get("motion")
-                    subjects = "、".join(item for item in layer.get("subjects", []) if isinstance(item, str))
-                    texts = "、".join(item for item in layer.get("text_elements", []) if isinstance(item, str))
-                    details = [f"身份策略：{policy}"] if policy else []
-                    if density: details.append(f"密度：{density}")
-                    if subjects: details.append(f"对象：{subjects}")
-                    if texts: details.append(f"固定文字：{texts}")
-                    if motion: details.append(f"运动：{motion}")
-                    if details: scene_design_parts.append(f"{label}：" + "；".join(details))
             constraints = scene_design.get("visual_constraints")
             if isinstance(constraints, dict):
                 light_names = {"front": "正面光", "back": "背面光", "side": "侧面光",
@@ -8305,18 +8287,6 @@ class ComicGenPipeline(StudioOwnerMixin):
                         value = "、".join(item for item in value if isinstance(item, str) and item.strip())
                     if isinstance(value, str) and value.strip():
                         scene_parts.append(f"{label}：{value.strip()}")
-            crowd = design.get("crowd_design")
-            if isinstance(crowd, dict):
-                for layer_name, label in (("near", "近景人群"), ("mid", "中景人群"), ("far", "远景人群")):
-                    layer = crowd.get(layer_name)
-                    if not isinstance(layer, dict):
-                        continue
-                    values = [f"身份策略：{layer.get('identity_policy', 'unidentified')}"]
-                    if layer.get("density"): values.append(f"密度：{layer['density']}")
-                    if layer.get("subjects"): values.append("对象：" + "、".join(layer["subjects"]))
-                    if layer.get("text_elements"): values.append("固定文字：" + "、".join(layer["text_elements"]))
-                    if layer.get("motion"): values.append(f"运动：{layer['motion']}")
-                    scene_parts.append(f"{label}：" + "；".join(values))
             for key, label in (
                 (("style", "场景风格"), ("ambient_lighting", "环境光"),
                  ("reference_viewpoint", "基础视角"), ("reference_framing", "占位与深度"))
