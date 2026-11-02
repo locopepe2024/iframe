@@ -1,11 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocale } from 'next-intl';
 import { editing, type EditFolder, type EditMaterial } from '@/lib/editing';
 import { extractErrorDetail, getVideoPosterUrl } from '@/lib/utils';
 import { ChevronRight, Folder, FolderInput, Lock, Music, Plus, Search, Trash2, Upload } from 'lucide-react';
 
-type Props = { onSelect?: (item: EditMaterial) => void; disabled?: boolean };
+type Props = { onSelect?: (item: EditMaterial) => void | Promise<void>; disabled?: boolean };
 export function EditingMaterials({ onSelect, onImport, materials = {}, disabled = false }: Props & { onImport?: () => void; materials?: Record<string, EditMaterial> }) {
   const zh = useLocale().startsWith('zh');
   const t = (cn: string, en: string) => zh ? cn : en;
@@ -25,7 +25,23 @@ export function EditingMaterials({ onSelect, onImport, materials = {}, disabled 
 }
 export function EditingMaterialManager(props: Props) { return <MaterialBrowser {...props} manage />; }
 
-function MaterialBrowser({ onSelect, disabled = false, manage }: Props & { manage: boolean }) {
+export function EditingMaterialPicker({ onSelect, onClose }: Props & { onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [busy, setBusy] = useState(false);
+  const zh = useLocale().startsWith('zh');
+  useEffect(() => {
+    const element = dialog.current;
+    const previous = document.activeElement as HTMLElement | null;
+    element?.showModal();
+    return () => { element?.close(); previous?.focus(); };
+  }, []);
+  return <dialog ref={dialog} aria-label={zh ? '从素材库导入' : 'Import from library'} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }} className="m-auto max-h-[85dvh] w-[min(64rem,94vw)] overflow-y-auto rounded-xl border border-glass-border bg-elevated p-4 text-foreground backdrop:bg-black/60">
+    <header className="mb-3 flex items-center justify-between gap-3"><h2 className="font-semibold">{zh ? '从素材库导入' : 'Import from library'}</h2><button type="button" autoFocus className="glass-button px-3 py-2" disabled={busy} onClick={onClose}>{zh ? '关闭' : 'Close'}</button></header>
+    <MaterialBrowser manage={false} disabled={busy} onBusyChange={setBusy} onSelect={onSelect} />
+  </dialog>;
+}
+
+function MaterialBrowser({ onSelect, disabled = false, manage, onBusyChange }: Props & { manage: boolean; onBusyChange?: (busy: boolean) => void }) {
   const zh = useLocale().startsWith('zh');
   const t = (cn: string, en: string) => zh ? cn : en;
   const [query, setQuery] = useState('');
@@ -70,8 +86,8 @@ function MaterialBrowser({ onSelect, disabled = false, manage }: Props & { manag
     return () => { active = false; };
   }, [query, folderId, reload]);
   const run = async (action: () => Promise<void>) => {
-    setMutating(true); setError('');
-    try { await action(); } catch (err) { setError(message(err)); } finally { setMutating(false); }
+    setMutating(true); onBusyChange?.(true); setError('');
+    try { await action(); } catch (err) { setError(message(err)); } finally { setMutating(false); onBusyChange?.(false); }
   };
   return <section className="min-w-0 space-y-3 rounded-xl border border-glass-border p-3" aria-label={manage ? t('素材管理', 'Material management') : t('剪辑素材库', 'Editing materials')}>
     <div className="flex flex-wrap items-center gap-2">
@@ -121,7 +137,7 @@ function MaterialBrowser({ onSelect, disabled = false, manage }: Props & { manag
         {item.video ? <video className="h-full w-full object-cover" src={item.url} poster={getVideoPosterUrl(item.url) || undefined} muted preload="metadata" aria-label={item.name} /> : <div className="flex h-full items-center justify-center text-text-muted"><Music size={24} aria-hidden="true" /></div>}
         <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/60 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           <span className="pointer-events-none absolute bottom-1 left-1 right-1 truncate text-[10px] text-white">{item.name} · {item.duration_ms > 0 ? `${(item.duration_ms / 1000).toFixed(1)}s` : t('打开后查看时长', 'Open to inspect duration')}</span>
-          {onSelect && <button type="button" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary p-2 text-white" aria-label={`${manage ? t('导入工作区', 'Import to workspace') : t('加入剪辑', 'Add to edit')} ${item.name}`} title={manage ? t('导入到工作区', 'Import to workspace') : t('加入时间线', 'Add to timeline')} disabled={busy || disabled} onClick={() => void run(async () => { onSelect(await editing.material(item.id)); })}><Plus size={16} aria-hidden="true" /></button>}
+          {!manage && onSelect && <button type="button" className="rounded-md bg-primary px-3 py-2 text-sm text-white" aria-label={`${t('导入工作区', 'Import to workspace')} ${item.name}`} disabled={busy || disabled} onClick={() => void run(async () => { await onSelect(await editing.material(item.id)); })}>{t('导入', 'Import')}</button>}
           {manage && item.deletable && <button type="button" className="rounded-full bg-red-500/80 p-3 text-white" aria-label={`${t('删除素材', 'Delete material')} ${item.name}`} disabled={busy} onClick={() => { if (window.confirm(t(`确认删除「${item.name}」？`, `Delete “${item.name}”?`))) void run(async () => { await editing.deleteMaterial(item.id); setReload(n => n + 1); }); }}><Trash2 size={16} /></button>}
           {!item.deletable && manage && <span className="rounded-full bg-black/60 p-3 text-text-muted" title={t('来源素材不可删除', 'Source material is read-only')}><Lock size={16} /></span>}
         </div>

@@ -8,7 +8,7 @@ import { AssemblyTracks } from '../AssemblyTracks';
 import { extractErrorDetail, getAssetUrl } from '@/lib/utils';
 
 export { EditingMaterials, EditingMaterialManager } from './EditingMaterials';
-import { EditingMaterials, EditingMaterialManager } from './EditingMaterials';
+import { EditingMaterials, EditingMaterialManager, EditingMaterialPicker } from './EditingMaterials';
 
 export default function EditingPage() {
   const zh = useLocale().startsWith('zh');
@@ -26,6 +26,7 @@ export default function EditingPage() {
   const [versions, setVersions] = useState<{ revision: number }[]>([]);
   const [pendingMedia, setPendingMedia] = useState('');
   const [tab, setTab] = useState<'edit' | 'materials'>('edit');
+  const [importOpen, setImportOpen] = useState(false);
   useEffect(() => { const read = () => setTab(new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab') === 'materials' ? 'materials' : 'edit'); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const read = () => setPendingMedia(new URLSearchParams(window.location.hash.split('?')[1] || '').get('media') || ''); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
@@ -69,17 +70,17 @@ export default function EditingPage() {
     setSources(old => ({ ...old, [item.id]: item }));
     change({ ...current, lanes, target_duration_ms: item.video ? start + duration : current.target_duration_ms });
   };
-  const importToWorkspace = (item: EditMaterial) => {
+  const importToWorkspace = async (item: EditMaterial) => {
     if (!project) return;
-    void run(async () => {
+    setBusy(true);
+    try {
       const updated = await editing.importMaterial(project.id, project.revision, item.id);
       setProject(updated);
-      setSources(updated.sources);
-      setTab('edit');
-      window.location.hash = '#/editing';
-    });
+      setSources(current => ({ ...current, ...updated.sources }));
+      setImportOpen(false);
+    } finally { setBusy(false); }
   };
-  const importMaterials = () => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; };
+  const importMaterials = () => { setImportOpen(true); };
   const deleteCurrentProject = () => {
     if (!project || dirty || busy) return;
     if (!window.confirm(t('删除这个剪辑项目？项目源素材不会被删除。', 'Delete this editing project? Source materials will remain.'))) return;
@@ -92,7 +93,8 @@ export default function EditingPage() {
   return <div className="h-full space-y-5 overflow-y-auto p-4 md:p-7">
     <div className="flex flex-wrap items-center gap-2"><h1 className="font-display mr-3 text-2xl font-semibold">{t('独立剪辑', 'Independent editing')}</h1><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'edit'} onClick={() => { setTab('edit'); window.location.hash = '#/editing'; }}>{t('剪辑工作区', 'Editing')}</button><button type="button" className="glass-button px-3 py-2" aria-pressed={tab === 'materials'} onClick={() => { setTab('materials'); window.location.hash = '#/editing?tab=materials'; }}>{t('素材管理', 'Materials')}</button></div>
     <p className="text-sm text-text-secondary">{tab === 'materials' ? t('管理上传素材和目录；生成素材仍由来源项目维护。', 'Manage uploaded materials and folders; generated materials remain owned by their source project.') : t('从素材库选择视频，按顺序剪辑，添加音轨和字幕后合成。', 'Select videos, arrange the sequence, add audio and captions, then render.')}</p>
-    {tab === 'materials' ? <EditingMaterialManager onSelect={importToWorkspace} disabled={!project || busy} /> : <>
+    {importOpen && <EditingMaterialPicker onSelect={importToWorkspace} onClose={() => setImportOpen(false)} />}
+    {tab === 'materials' ? <EditingMaterialManager /> : <>
     {error && <p role="alert" className="text-red-300">{error}</p>}
     <div className="flex flex-wrap gap-3">
       <select className="glass-input px-3 py-2" aria-label={t('剪辑项目', 'Editing project')} disabled={busy || dirty} value={project?.id || ''} onChange={e => { const id = e.target.value; if (id) void run(async () => accept(await editing.get(id))); }}><option value="">{t('选择项目', 'Select project')}</option>{projects.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
