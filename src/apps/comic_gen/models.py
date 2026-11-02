@@ -305,7 +305,7 @@ class ImageVariant(BaseModel):
         if self.url and not self.storage_key:
             self.storage_key = self.url
         return self
-    reference_inputs: List[Dict[str, str]] = Field(
+    reference_inputs: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Ordered stable asset-library inputs used to generate this variant",
     )
@@ -1580,6 +1580,10 @@ class DirectorPlanShot(_DirectorShootingPlanModel):
     cast_bindings: List[DirectorPlanCastBinding] = Field(default_factory=list, max_length=20)
     scene_binding: Optional[DirectorPlanSceneBinding] = None
     prop_bindings: List[DirectorPlanPropBinding] = Field(default_factory=list, max_length=20)
+    crowd_instances: List[ExtraShotInstance] = Field(
+        default_factory=list, max_length=40,
+        description="Shot-scoped fixed extras or crowd templates; placement remains Storyboard-owned after handoff",
+    )
     unresolved_entity_refs: List[str] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
@@ -1760,6 +1764,7 @@ class EpisodeVisualShotContext(BaseModel):
     character_ids: List[str] = Field(default_factory=list)
     person_ids: List[str] = Field(default_factory=list)
     prop_ids: List[str] = Field(default_factory=list)
+    crowd_instances: List[ExtraShotInstance] = Field(default_factory=list)
     visual_intent: str = ""
     director_effect: str = ""
     performance_action: str = ""
