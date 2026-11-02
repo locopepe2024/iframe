@@ -1,15 +1,16 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { SCENE_LAYER_FIELDS, type SceneLayer, type SceneLayerAngles, type ScenePromptLayers } from "@/lib/scenePromptLayers";
 
 const SceneDirectionSphere = dynamic(() => import("./SceneDirectionSphere"), { ssr: false });
 const layerNames: Record<SceneLayer, string> = { lighting: "光影", camera: "镜头", composition: "构图" };
 
-export default function ScenePromptLayersPanel({ value, onChange, fields }: {
+export default function ScenePromptLayersPanel({ value, onChange, fields, lightingTemplates }: {
     value: ScenePromptLayers; onChange: (value: ScenePromptLayers) => void;
     fields?: Partial<Record<SceneLayer, readonly string[]>>;
+    lightingTemplates?: ReactNode;
 }) {
     const [openSpheres, setOpenSpheres] = useState<Partial<Record<SceneLayer, boolean>>>({});
     const update = (layer: SceneLayer, patch: Record<string, unknown>) => onChange({
@@ -26,6 +27,7 @@ export default function ScenePromptLayersPanel({ value, onChange, fields }: {
             return <details key={layer} className="rounded-lg border border-glass-border p-3">
                 <summary className="min-h-11 cursor-pointer text-sm font-medium text-foreground">{layerNames[layer]}</summary>
                 <div className="space-y-4 pt-2">
+                    {layer === "lighting" && lightingTemplates}
                     {layerFields.map(field => <fieldset key={field.key}>
                         <legend className="mb-2 text-xs text-text-secondary">{field.label}</legend>
                         <div className="grid grid-cols-3 gap-2">

@@ -73,6 +73,20 @@ function appendPromptTemplate(editor: Editor, source: Editor['state']['doc'], te
   return editor.getText({ blockSeparator: '\n' });
 }
 
+function isInsidePromptQuote(text: string, index: number): boolean {
+  const closing: Record<string, string> = { '“': '”', '「': '」', '『': '』', '"': '"', "'": "'" };
+  const stack: string[] = [];
+  for (let cursor = 0; cursor < index; cursor++) {
+    const char = text[cursor];
+    if (char === '\\' && (text[cursor + 1] === '"' || text[cursor + 1] === "'")) { cursor++; continue; }
+    if (char === "'" && /[A-Za-z0-9\u3400-\u9fff]/.test(text[cursor - 1] || '')
+      && /[A-Za-z0-9\u3400-\u9fff]/.test(text[cursor + 1] || '')) continue;
+    if (char === stack[stack.length - 1]) { stack.pop(); continue; }
+    if (closing[char]) stack.push(closing[char]);
+  }
+  return stack.length > 0;
+}
+
 function slashSuggestion(editor: Editor): PromptSlashSuggestion | null {
   const { selection } = editor.state;
   const parentText = selection.$from.parent.textBetween(0, selection.$from.parent.content.size, '\n', '\ufffc');
@@ -97,6 +111,8 @@ function slashSuggestion(editor: Editor): PromptSlashSuggestion | null {
   const before = selection.$from.parent.textBetween(0, selection.$from.parentOffset, '\n', '\ufffc');
   const match = before.match(/(?:^|[\s（(，。！？、\u3400-\u9fff])\/([^/@\n]*)$/);
   if (!match) return null;
+  const prefix = editor.state.doc.textBetween(0, selection.from, '\n', '\ufffc');
+  if (isInsidePromptQuote(prefix, prefix.length - match[1].length - 1)) return null;
   const from = selection.from - match[1].length - 1;
   const to = selection.from;
   const sourceDocument = editor.state.doc;
@@ -127,6 +143,8 @@ function referenceSuggestion(editor: Editor): ReferenceSuggestion | null {
   const before = selection.$from.parent.textBetween(0, selection.$from.parentOffset, '\n', '\ufffc');
   const match = before.match(/(?:^|[\s“”"'（(，。！？、\u3400-\u9fff])@([^@\n]*)$/);
   if (!match) return null;
+  const prefix = editor.state.doc.textBetween(0, selection.from, '\n', '\ufffc');
+  if (isInsidePromptQuote(prefix, prefix.length - match[1].length - 1)) return null;
   const from = selection.from - match[1].length - 1;
   const to = selection.from;
   return { query: match[1], choose: (candidate) => {
@@ -180,12 +198,14 @@ export function referencePromptDocument(
     typeof candidate === 'string' ? { label: candidate } : candidate,
   );
   const names = Array.from(new Set(candidates.map((candidate) => candidate.label))).filter(Boolean).sort((a, b) => b.length - a.length);
+  let lineStart = 0;
   return { type: 'doc', content: value.split('\n').map((line) => {
     const content: JSONContent[] = [];
     let plain = '';
     const flush = () => { if (plain) content.push({ type: 'text', text: plain }); plain = ''; };
     for (let index = 0; index < line.length;) {
-      const isMention = line[index] === '@' && (index === 0 || /[\s“”"'（(，。！？、\u3400-\u9fff]/.test(line[index - 1]));
+      const isMention = line[index] === '@' && !isInsidePromptQuote(value, lineStart + index)
+        && (index === 0 || /[\s“”"'（(，。！？、\u3400-\u9fff]/.test(line[index - 1]));
       const label = isMention
         ? (allowImplicitMentions ? names.find((name) => line.startsWith('@' + name, index)) : undefined)
           || (restoreNames ? restoredReferenceName(line.slice(index + 1)) : undefined)
@@ -199,6 +219,7 @@ export function referencePromptDocument(
       else { plain += line[index++]; }
     }
     flush();
+    lineStart += line.length + 1;
     return { type: 'paragraph', content };
   }) };
 }

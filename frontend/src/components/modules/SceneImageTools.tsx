@@ -58,10 +58,11 @@ export function buildSceneToolPrompt(params: SceneToolParams, hasLightingReferen
     return ["基于来源场景图片重定位相机视角。保持同一场景的主体、材质、结构、物体位置关系和核心风格；不要生成新场景。", `${params.panel_settings ? "镜头设置" : `预设视角：${preset}`}；水平环绕 ${params.yaw}°；垂直俯仰 ${params.pitch}°；景别 ${distances[params.zoom]}。`, params.focus ? `对焦点：图片坐标 x=${params.focus_x}%、y=${params.focus_y}%，影响半径约 ${params.focus_radius}%；保持该区域清晰稳定。` : "", params.prompt_enabled ? params.extra.trim() : "", params.panel_settings ? compileScenePromptLayers(params.panel_settings) : ""].filter(Boolean).join("\n");
 }
 
-export function SceneImageTools({ kind, sources, sceneAssetId, lightingReferences = [], busy, onGenerate }: {
+export function SceneImageTools({ kind, sources, sceneAssetId, projectId, lightingReferences = [], busy, onGenerate }: {
     kind: "lighting" | "camera";
     sources: SceneImageSource[];
     sceneAssetId?: string;
+    projectId?: string;
     lightingReferences?: LightingReference[];
     busy: boolean;
     onGenerate: (source: SceneImageSource, params: SceneToolParams, compiledPrompt: string, lightingReference?: AssetLibraryReference) => void;
@@ -80,6 +81,9 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
     const [uploadedLightingReference, setUploadedLightingReference] = useState<LightingReference | null>(null);
     const [uploadingLightingReference, setUploadingLightingReference] = useState(false);
     const [lightingReferenceError, setLightingReferenceError] = useState("");
+    const [resolvedLightingReference, setResolvedLightingReference] = useState<LightingReference | null>(null);
+    const [pendingLightingAnalysis, setPendingLightingAnalysis] = useState<LightingReference | null>(null);
+    const [lightingResolveBusy, setLightingResolveBusy] = useState(false);
     const [reviewedPrompt, setReviewedPrompt] = useState("");
     const manualLightingSettings = useRef<{
         brightness: number; viewMode: "perspective" | "front"; color: string;
@@ -101,7 +105,8 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
     const [cameraPromptEnabled, setCameraPromptEnabled] = useState(false);
     const [extra, setExtra] = useState("");
     const source = sources.find((item) => item.key === sourceKey) ?? sources[0];
-    const allLightingReferences = uploadedLightingReference ? [uploadedLightingReference, ...lightingReferences] : lightingReferences;
+    const allLightingReferences = (uploadedLightingReference ? [uploadedLightingReference, ...lightingReferences] : lightingReferences)
+        .map(item => resolvedLightingReference?.key === item.key ? resolvedLightingReference : item);
     const lightingReference = allLightingReferences.find((item) => item.key === lightingReferenceKey);
     const activeLightingReference = intelligent && !(lightingReference?.reference.asset_type === "scene" && lightingReference.reference.asset_id === sceneAssetId && lightingReference.reference.variant_id === source?.variantId)
         ? lightingReference : undefined;
@@ -140,8 +145,32 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
         }
     }
 
+    async function chooseLightingReference(key: string, analyze = false, selected = allLightingReferences.find(item => item.key === key)) {
+        if (!selected) { setPendingLightingAnalysis(null); selectLightingReference(""); return; }
+        selectLightingReference(key, selected);
+        if (selected.tool || !projectId) return;
+        setLightingResolveBusy(true);
+        try {
+            const result = await api.getSceneReferenceLighting(projectId, selected.reference, analyze);
+            if (result.source === "requires_analysis") {
+                setPendingLightingAnalysis(selected);
+            } else if (result.params?.kind === "lighting") {
+                const loaded = { ...selected, tool: result.params };
+                setResolvedLightingReference(loaded);
+                selectLightingReference(key, loaded);
+                setPendingLightingAnalysis(null);
+            } else {
+                throw new Error("参考图没有可用的光影参数");
+            }
+        } catch (error) {
+            setLightingReferenceError(error instanceof Error ? error.message : "光影解析失败");
+        } finally {
+            setLightingResolveBusy(false);
+        }
+    }
+
     function submit() {
-        if (!source || busy) return;
+        if (!source || busy || pendingLightingAnalysis || lightingResolveBusy) return;
         const params: SceneToolParams = kind === "lighting" ? {
             kind, view_mode: viewMode, intelligent, brightness, color,
             light_side: ({ 左侧: "left", 顶部: "top", 右侧: "right", 前方: "front", 底部: "bottom", 后方: "back" } as const)[lightSide],
@@ -264,9 +293,16 @@ export function SceneImageTools({ kind, sources, sceneAssetId, lightingReference
                     <fieldset className="space-y-2"><legend className="text-sm font-medium text-foreground">观察模式</legend><div className="flex gap-2"><button type="button" className={option} aria-pressed={viewMode === "perspective"} onClick={() => setViewMode("perspective")}>透视</button><button type="button" className={option} aria-pressed={viewMode === "front"} onClick={() => setViewMode("front")}>正面</button></div></fieldset>
                     <label className="flex min-h-10 items-center gap-2 text-sm text-text-secondary"><input type="checkbox" checked={intelligent} onChange={(event) => setIntelligent(event.target.checked)} className="accent-primary" />智能模式</label>
                     <label className="block text-sm text-text-secondary" htmlFor="lighting-reference">光影参考图（可选）</label>
-                    <select id="lighting-reference" className={`${control} w-full`} value={activeLightingReference?.key ?? ""} onChange={(event) => selectLightingReference(event.target.value)} disabled={!intelligent || !allLightingReferences.length}>
+                    <select id="lighting-reference" className={`${control} w-full`} value={activeLightingReference?.key ?? ""} onChange={(event) => void chooseLightingReference(event.target.value)} disabled={!intelligent || !allLightingReferences.length || lightingResolveBusy}>
                         <option value="">不使用附加参考图</option>{allLightingReferences.filter((item) => !(item.reference.asset_type === "scene" && item.reference.asset_id === sceneAssetId && item.reference.variant_id === source?.variantId)).map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                     </select>
+                    {pendingLightingAnalysis && <div role="dialog" aria-label="确认解析光影参考图" className="rounded border border-primary/40 p-3 text-xs text-text-secondary">
+                        <p>“{pendingLightingAnalysis.label}”没有保存的光影参数。解析将调用视觉模型并产生费用。</p>
+                        <div className="mt-2 flex gap-2">
+                            <button type="button" disabled={lightingResolveBusy} onClick={() => void chooseLightingReference(pendingLightingAnalysis.key, true, pendingLightingAnalysis)} className="min-h-9 rounded bg-primary px-3 text-primary-foreground disabled:opacity-50">执行</button>
+                            <button type="button" onClick={() => { setPendingLightingAnalysis(null); selectLightingReference(""); }} className="min-h-9 rounded border border-glass-border px-3">返回</button>
+                        </div>
+                    </div>}
                     <label className="inline-flex min-h-10 cursor-pointer items-center rounded-md border border-glass-border px-3 text-sm text-text-secondary hover:bg-hover-bg focus-within:outline focus-within:outline-2 focus-within:outline-primary">
                         {uploadingLightingReference ? "上传中…" : "上传光影参考图"}
                         <input type="file" accept="image/*" className="sr-only" disabled={!intelligent || uploadingLightingReference || busy} onChange={uploadLightingReference} />

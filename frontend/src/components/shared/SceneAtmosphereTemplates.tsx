@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { SCENE_ATMOSPHERE_TEMPLATES, SCENE_LIGHT_TEMPLATE_CATEGORIES, type SceneLightTemplateCategory } from "@/lib/sceneAtmosphereTemplates";
-export default function SceneAtmosphereTemplates({ onApply }: {
+export default function SceneAtmosphereTemplates({ onApply, embedded = false }: {
     onApply: (template: (typeof SCENE_ATMOSPHERE_TEMPLATES)[number]) => void;
+    embedded?: boolean;
 }) {
     const [category, setCategory] = useState<SceneLightTemplateCategory | "all">("all");
     const [query, setQuery] = useState("");
@@ -11,8 +12,7 @@ export default function SceneAtmosphereTemplates({ onApply }: {
         const text = `${template.title} ${template.keywords || ""}`.toLocaleLowerCase();
         return (category === "all" || template.categories.includes(category)) && terms.every(term => text.includes(term));
     });
-    return <details className="rounded-lg border border-glass-border p-3">
-        <summary className="min-h-11 cursor-pointer text-sm text-foreground">Prompt 模板 · 光影</summary>
+    const content = <>
         <p className="mb-2 text-xs text-text-muted">选择完整方案替换当前光影设置，可在面板中继续调整。</p>
         <div role="tablist" aria-label="光影模板分类" className="mb-3 flex flex-wrap gap-1">
             {([["all", "全部"], ...SCENE_LIGHT_TEMPLATE_CATEGORIES] as const).map(([key, label]) =>
@@ -28,5 +28,13 @@ export default function SceneAtmosphereTemplates({ onApply }: {
             <button key={template.id} type="button" onClick={() => onApply(template)}
                 className="min-h-11 rounded border border-glass-border px-2 py-2 text-sm text-text-secondary hover:border-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{template.title}</button>)}
         </div>
+    </>;
+    if (embedded) return <div className="border-b border-glass-border pb-4">
+        <h4 className="mb-2 text-sm font-medium text-foreground">Prompt 模板</h4>
+        {content}
+    </div>;
+    return <details className="rounded-lg border border-glass-border p-3">
+        <summary className="min-h-11 cursor-pointer text-sm text-foreground">Prompt 模板 · 光影</summary>
+        {content}
     </details>;
 }

@@ -20,6 +20,7 @@ def make_pipeline(tmp_path, monkeypatch):
     scene.image_asset.selected_id = "source"
     script = Script(id="project", title="Project", original_text="", scenes=[scene], created_at=1, updated_at=1, owner_user_id="user", owner_profile_id="owner")
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline.output_root = "output"
     pipeline.scripts = {script.id: script}
     pipeline.series_store = {}
     pipeline.library_store = GlobalAssetLibrary()
@@ -30,6 +31,46 @@ def make_pipeline(tmp_path, monkeypatch):
     pipeline._save_series_data = Mock()
     pipeline.effective_director_profile = lambda _script: None
     return pipeline, scene
+
+
+def test_scene_reference_lighting_requires_explicit_analysis_and_caches_by_variant(tmp_path, monkeypatch):
+    pipeline, scene = make_pipeline(tmp_path, monkeypatch)
+    reference = {"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}
+    chat = Mock(return_value='{"brightness":65,"color":"#aabbcc","light_side":"right","rim_light":false,"extra":"暮色，柔和长阴影"}')
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.llm.chat = chat
+    assert pipeline.scene_reference_lighting("project", reference) == {
+        "source": "requires_analysis", "params": None, "prompt": None,
+    }
+    chat.assert_not_called()
+    analyzed = pipeline.scene_reference_lighting("project", reference, analyze=True)
+    assert analyzed["source"] == "analyzed"
+    assert "右侧" in analyzed["prompt"] and "仅重塑" not in analyzed["prompt"]
+    assert scene.image_asset.variants[0].lighting_analysis["color"] == "#aabbcc"
+    assert chat.call_args.kwargs["model"] == "qwen-vl-plus"
+    pipeline._save_data.assert_called_once()
+    assert pipeline.scene_reference_lighting("project", reference)["source"] == "cached"
+    assert chat.call_count == 1
+
+
+def test_scene_reference_lighting_uses_structured_tool_without_model(tmp_path, monkeypatch):
+    pipeline, scene = make_pipeline(tmp_path, monkeypatch)
+    scene.image_asset.variants[0].scene_tool = {"kind": "lighting", "light_side": "left", "brightness": 70}
+    pipeline.script_processor = Mock()
+    result = pipeline.scene_reference_lighting("project", {"asset_type": "scene", "asset_id": "scene", "variant_id": "source"})
+    assert result["source"] == "structured"
+    assert "左侧" in result["prompt"]
+    pipeline.script_processor.llm.chat.assert_not_called()
+
+
+def test_scene_reference_lighting_rejects_invalid_analysis_without_cache(tmp_path, monkeypatch):
+    pipeline, scene = make_pipeline(tmp_path, monkeypatch)
+    pipeline.script_processor = Mock()
+    pipeline.script_processor.llm.chat.return_value = '{"brightness": 200, "color": "bad"}'
+    with pytest.raises(ValueError, match="解析结果无效"):
+        pipeline.scene_reference_lighting("project", {"asset_type": "scene", "asset_id": "scene", "variant_id": "source"}, analyze=True)
+    assert scene.image_asset.variants[0].lighting_analysis is None
+    pipeline._save_data.assert_not_called()
 
 
 def test_scene_tool_task_keeps_validated_parameters_and_server_prompt(tmp_path, monkeypatch):

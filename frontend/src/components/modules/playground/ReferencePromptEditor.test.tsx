@@ -3,6 +3,17 @@ import { act, render, waitFor } from "@testing-library/react";
 import ReferencePromptEditor, { referencePromptDocument, type PromptSlashSuggestion } from "./ReferencePromptEditor";
 
 describe("reference prompt restoration", () => {
+  it.each(['“@长街”', '"@长街"', '「@长街」', '『@长街』', "'@长街'"])("keeps quoted reference text literal: %s", (value) => {
+    const document = referencePromptDocument(value, [{ label: "长街", reference: { asset_type: "scene", asset_id: "street", variant_id: "v1" } }]);
+    expect(document.content?.[0]?.content).toEqual([{ type: "text", text: value }]);
+  });
+
+  it("keeps references inside multiline quotes literal and binds references after the quote", () => {
+    const document = referencePromptDocument('“第一行\n@长街”\n@长街', ["长街"]);
+    expect(document.content?.[1]?.content).toEqual([{ type: "text", text: "@长街”" }]);
+    expect(document.content?.[2]?.content?.[0]?.type).toBe("referenceToken");
+  });
+
   it("restores only explicitly saved references when candidates arrive after mounting", async () => {
     const reference = { asset_type: "scene", asset_id: "street", variant_id: "v1" } as const;
     const onReferencesChange = vi.fn();
@@ -39,6 +50,36 @@ describe("reference prompt restoration", () => {
     const token = document.content?.[0]?.content?.find((item: any) => item.type === "referenceToken") as any;
     expect(token?.attrs).toMatchObject(reference);
   });
+});
+
+it.each([
+  ['mention', '“@长街', '” @长街', '长街'],
+  ['slash', '“/风格', '” /风格', '风格'],
+  ['mention', '"@长街', '" @长街', '长街'],
+  ['slash', '"/风格', '" /风格', '风格'],
+  ['mention', "'@长街", "' @长街", '长街'],
+])(
+  "ignores %s shortcuts inside quotes and restores them after the closing quote", (_kind, quoted, suffix, query) => {
+    const onMentionChange = vi.fn();
+    const onSlashChange = vi.fn();
+    const view = render(<ReferencePromptEditor value="" placeholder="Prompt" onChange={vi.fn()}
+      onMentionChange={onMentionChange} onSlashChange={onSlashChange} />);
+    const editor = (view.getByRole("textbox") as any).editor;
+    act(() => editor.commands.insertContent(quoted));
+    expect(onMentionChange).toHaveBeenLastCalledWith(null);
+    expect(onSlashChange).toHaveBeenLastCalledWith(null);
+    act(() => editor.commands.insertContent(suffix));
+    if (_kind === 'mention') expect(onMentionChange.mock.lastCall?.[0]?.query).toBe(query);
+    else expect(onSlashChange.mock.lastCall?.[0]?.query).toBe(query);
+  },
+);
+
+it("does not treat an apostrophe in a word as an opening quote", () => {
+  const onSlashChange = vi.fn();
+  const view = render(<ReferencePromptEditor value="" placeholder="Prompt" onChange={vi.fn()} onSlashChange={onSlashChange} />);
+  const editor = (view.getByRole("textbox") as any).editor;
+  act(() => editor.commands.insertContent("don't /style"));
+  expect(onSlashChange.mock.lastCall?.[0]?.query).toBe("style");
 });
 
 it("replaces only the slash range with literal text and preserves reference tokens, suffix and undo", () => {

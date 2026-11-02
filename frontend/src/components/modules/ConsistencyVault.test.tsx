@@ -848,7 +848,9 @@ it("fills an atmosphere Prompt template into editable scene settings without cha
     fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
     fireEvent.click(screen.getByText(asset.name));
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
-    fireEvent.click(screen.getByText("Prompt 模板 · 光影", { selector: "summary" }));
+    expect(screen.queryByText("Prompt 模板 · 光影", { selector: "summary" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("光影", { selector: "summary" }));
+    expect(screen.getByRole("heading", { name: "Prompt 模板" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "黄金时刻" }));
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     const prompt = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
@@ -856,7 +858,6 @@ it("fills an atmosphere Prompt template into editable scene settings without cha
     expect(prompt).toContain("仰角 12°");
     expect(prompt).toContain("温暖舒缓的傍晚氛围");
     expect(prompt).toContain("景深：深景深");
-    fireEvent.click(screen.getByText("光影", { selector: "summary" }));
     fireEvent.click(screen.getByRole("button", { name: "硬光" }));
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     expect((screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value).toContain("硬质定向光");
