@@ -1754,14 +1754,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                 <label className="block text-xs text-text-secondary">风格
                                     <textarea aria-label="场景风格" value={sceneDesign.style} onChange={event => updateSceneDesign("style", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
                                 </label>
-                                <SceneAtmosphereTemplates onApply={template => {
+                                <ScenePromptLayersPanel lightingTemplates={<SceneAtmosphereTemplates embedded onApply={template => {
                                     setSceneDesign(current => ({ ...current,
                                         prompt_layers: { ...current.prompt_layers, ...structuredClone(template.settings) },
                                         visual_constraints: { ...current.visual_constraints, key_light_direction: "unspecified" },
                                     }));
                                     setSceneDesignNeedsApply(true);
-                                }} />
-                                <ScenePromptLayersPanel value={sceneDesign.prompt_layers} onChange={layers => {
+                                }} />} value={sceneDesign.prompt_layers} onChange={layers => {
                                     setSceneDesign(current => ({ ...current, prompt_layers: layers,
                                         visual_constraints: { ...current.visual_constraints,
                                             key_light_direction: layers.lighting?.direction || layers.lighting?.angles ? "unspecified" : current.visual_constraints.key_light_direction },
