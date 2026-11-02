@@ -87,6 +87,30 @@ export function removeAssemblyClip(plan: AssemblyEditPlan, laneId: string, clipI
     }) };
 }
 
+/** Copy a video after its source clip and extend the contiguous video sequence. */
+export function duplicateAssemblyVideo(plan: AssemblyEditPlan, clipId: string, newId: string): AssemblyEditPlan {
+    if (plan.lanes.some(lane => lane.clips.some(clip => clip.id === newId))) throw new Error("Clip ID already exists");
+    const lane = plan.lanes.find(item => item.kind === "video" && item.clips.some(clip => clip.id === clipId));
+    const source = lane?.clips.find(clip => clip.id === clipId);
+    if (!lane || !source) throw new Error("Video clip not found");
+    const duration = source.timeline_end_ms - source.timeline_start_ms;
+    if (duration <= 0) throw new Error("Video clips must have positive duration");
+    const insertAt = source.timeline_end_ms;
+    return {
+        ...plan,
+        target_duration_ms: plan.target_duration_ms + duration,
+        lanes: plan.lanes.map(item => item.kind !== "video" ? item : {
+            ...item,
+            clips: [
+                ...item.clips.map(clip => clip.timeline_start_ms >= insertAt ? {
+                    ...clip, timeline_start_ms: clip.timeline_start_ms + duration, timeline_end_ms: clip.timeline_end_ms + duration,
+                } : clip),
+                ...(item.id === lane.id ? [{ ...source, id: newId, timeline_start_ms: insertAt, timeline_end_ms: insertAt + duration, source_refs: [...source.source_refs] }] : []),
+            ],
+        }),
+    };
+}
+
 /** Move an audio/caption clip without changing its duration or crossing its lane's clips. */
 export function moveAssemblyClipInTimeline(plan: AssemblyEditPlan, laneId: string, clipId: string, start: number): AssemblyEditPlan {
     if (!Number.isInteger(start) || start < 0) throw new Error("Clip position must be a non-negative integer millisecond");

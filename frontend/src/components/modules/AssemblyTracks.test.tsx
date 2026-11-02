@@ -49,6 +49,21 @@ it("previews the exact timeline take and shows gain only after selection", () =>
     expect(screen.getByRole("spinbutton", { name: "Shot 1 · Gain" })).toHaveValue(1);
 });
 
+it("duplicates the selected video as one timeline edit", () => {
+    const videoPlan: AssemblyEditPlan = { ...plan, lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [{ id: "shot", label: "Shot", timeline_start_ms: 0, timeline_end_ms: 5000, source_start_ms: 1000, source_end_ms: 6000, source_refs: ["media:shot"], enabled: true }] }] };
+    const onChange = vi.fn();
+    render(<AssemblyTracks plan={videoPlan} project={project} resourceId="p" saved={false} onChange={onChange} />);
+    const duplicate = screen.getByRole("button", { name: "Duplicate video clip" });
+    expect(duplicate).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Edit clip 1: Shot" }));
+    expect(duplicate).toBeEnabled();
+    fireEvent.click(duplicate);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].lanes[0].clips).toEqual(expect.arrayContaining([
+        expect.objectContaining({ timeline_start_ms: 5000, timeline_end_ms: 10000, source_start_ms: 1000, source_end_ms: 6000 }),
+    ]));
+});
+
 it("maps seeking into a trimmed source and continues into the next shot", () => {
     const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     const videoProject = { id: "p", frames: [], video_tasks: [{ id: "a", video_url: "a.mp4" }, { id: "b", video_url: "b.mp4" }] } as unknown as Project;

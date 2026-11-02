@@ -4,12 +4,12 @@ import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from "next-intl";
 import { api, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
-import { insertAssemblyVideo, reorderAssemblyVideo, snapAssemblyTimelineTime, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
+import { duplicateAssemblyVideo, insertAssemblyVideo, reorderAssemblyVideo, snapAssemblyTimelineTime, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 import TimelineFilmstrip from './TimelineFilmstrip';
 import TimelineAudioPreview, { usePreviewGain } from './TimelineAudioPreview';
 import TimelineWaveform from './TimelineWaveform';
-import { ChevronLeft, ChevronRight, Undo2, Redo2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Undo2, Redo2 } from 'lucide-react';
 
 export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, materialPanel, onImport, audioLane, onAudioLaneChange, canUndo, canRedo, onUndo, onRedo }: {
     plan: AssemblyEditPlan; resourceId: string; saved: boolean; project: Pick<Project, "id" | "frames" | "video_tasks" | "bgm_url">;
@@ -286,6 +286,9 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
             <button type="button" className={`${control} border-primary text-primary`} disabled={!canSplit} onClick={() => {
                 if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId()));
             }}>{t("断开", "Split")}</button>
+            <button type="button" className={`${control} px-2`} aria-label={t("复制视频片段", "Duplicate video clip")} title={t("复制所选视频片段", "Duplicate selected video clip")} disabled={selectedLane?.kind !== "video" || !selectedClip} onClick={() => {
+                if (selectedClip && selectedLane?.kind === "video") applyEdit(() => duplicateAssemblyVideo(plan, selectedClip.id, createRenderRequestId()));
+            }}><Copy size={15} /></button>
             {(['left', 'right'] as const).map(side => <button key={side} type="button" className={control} disabled={!canSplit} title={side === 'left' ? t("删除播放头左侧，保留右侧片段", "Remove the left side; keep the right side of this clip") : t("删除播放头右侧，保留左侧片段", "Remove the right side; keep the left side of this clip")} onClick={() => {
                 if (splitClip && splitLane) applyEdit(() => {
                     const next = trimAssemblyClipAtPlayhead(plan, splitLane.id, splitClip.id, position, side);
