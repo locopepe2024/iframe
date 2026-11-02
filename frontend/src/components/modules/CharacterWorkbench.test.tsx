@@ -748,8 +748,8 @@ function mountSimpleDesign(extra: Record<string, unknown> = {}) {
     return { onUpdateAttributes, onUpdateDescription, onGenerate };
 }
 
-it('includes saved white face proportions once in a panel image prompt', () => {
-    const shape = { faceLength: 90, faceWidth: 120, cheekWidth: 117, jawWidth: 75, eyeSpacing: 80, noseProjection: 75 };
+it('includes saved white face proportions and new geometry once in a panel image prompt', () => {
+    const shape = { faceLength: 90, faceWidth: 120, cheekWidth: 117, jawWidth: 75, eyeSpacing: 80, noseProjection: 75, foreheadWidth: 108, mouthCornerTilt: 115 };
     const saved = {
         confirmed: true,
         active_design_source: 'panel',
@@ -767,6 +767,8 @@ it('includes saved white face proportions once in a panel image prompt', () => {
     const prompt = imagePromptInput().textContent || '';
     expect(prompt.match(/脸长 90%/g)).toHaveLength(1);
     expect(prompt.match(/鼻部突出度 75%/g)).toHaveLength(1);
+    expect(prompt.match(/额头宽 108%/g)).toHaveLength(1);
+    expect(prompt.match(/嘴角倾斜 115%/g)).toHaveLength(1);
     expect(prompt).toContain('最终画面只呈现目标角色');
 });
 

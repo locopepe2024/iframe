@@ -17,7 +17,6 @@ from typing import List, Dict, Any, Optional, Tuple
 from .models import (
     Script,
     Character,
-    ExtraRosterEntry,
     Scene,
     Prop,
     StoryboardFrame,
@@ -1037,10 +1036,6 @@ class ScriptProcessor:
         
         characters = []
         crowd_group_candidates = []
-        for group_data in data.get("crowd_groups", []):
-            candidate = dict(group_data)
-            candidate["kind"] = "extra_template"
-            crowd_group_candidates.append(ExtraRosterEntry.model_validate(candidate))
         name_to_char = {} # For variant linking
         llm_id_to_uuid = {} # For ID resolution
 
@@ -1064,6 +1059,26 @@ class ScriptProcessor:
             )
             characters.append(char)
             name_to_char[char.name] = char
+
+        # Crowd identities are visual characters in the episode asset library.
+        # Keep accepting the extraction response's crowd_groups key, but give
+        # each identity a normal character asset instead of a separate roster.
+        existing_names = {char.name for char in characters}
+        for group_data in data.get("crowd_groups", []):
+            name = (group_data.get("label") or "").strip()
+            if not name or name in existing_names:
+                continue
+            traits = [group_data.get("body_build"), group_data.get("palette")]
+            tags = group_data.get("role_tags") or []
+            if tags:
+                traits.append("、".join(tags))
+            characters.append(Character(
+                id=str(uuid.uuid4()), name=name,
+                description="；".join(value for value in traits if value),
+                clothing=group_data.get("wardrobe"),
+                visual_weight=1, status=GenerationStatus.PENDING,
+            ))
+            existing_names.add(name)
             
         # Pass 2: Link temporal / identity variants to their shared persona.
         # Models use both ASCII and full-width parentheses in Chinese output,
