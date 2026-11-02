@@ -1824,7 +1824,7 @@ export function WorkbenchPanel({
     const [promptSlash, setPromptSlash] = useState<PromptSlashSuggestion | null>(null);
     const [openSlashRequest, setOpenSlashRequest] = useState(0);
     const slashKeyHandler = useRef<((event: globalThis.KeyboardEvent) => boolean) | null>(null);
-    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, designEditor ? (designReferences || []) : pickerReferences), [referenceCandidates, designEditor, designReferences, pickerReferences]);
+    const selectedCandidates = useMemo(() => selectedReferenceCandidates(referenceCandidates, designEditor ? [...(designReferences || []), ...pickerReferences] : pickerReferences), [referenceCandidates, designEditor, designReferences, pickerReferences]);
     // @ should search the complete owner-scoped asset index, including crowd
     // variants. The explicit reference picker remains available for users who
     // want to constrain the generation set before typing the prompt.
@@ -1854,7 +1854,7 @@ export function WorkbenchPanel({
                 {designEditor && <div className="border-b border-border-subtle px-4 py-2 text-[11px] text-text-muted" aria-label={`实际传递的参考图：${title}`}>
                     <span className="font-medium text-text-secondary">本次实际传递的参考图：</span>{effectiveReferenceLabels.length ? ` ${effectiveReferenceLabels.join("、")}` : " 无（白模只作为骨相参数，不上传为参考图）"}
                 </div>}
-                {showReferencePicker && !designEditor && <div className="px-4 pt-2">
+                {showReferencePicker && <div className="px-4 pt-2">
                     <AssetReferencePicker
                         candidates={referenceCandidates}
                         selected={pickerReferences}

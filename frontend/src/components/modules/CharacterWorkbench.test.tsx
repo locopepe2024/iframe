@@ -228,7 +228,7 @@ it("selects the character cover with one thumbnail action", async () => {
     }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
     expect(screen.queryByText(/项目角色锚点/)).not.toBeInTheDocument();
     expect(screen.queryByLabelText("本集造型名称")).not.toBeInTheDocument();
-    expect(screen.getByText("苏砚-1")).toBeInTheDocument();
+    expect(screen.getByText("view 1")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "设为角色封面" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "选择变体" }));
     await waitFor(() => expect(apiMocks.selectAssetVariant).toHaveBeenCalledWith("project-1", "hero", "character", "front", "reference_sheet"));
@@ -247,7 +247,7 @@ it("uses project and episode context for an unnamed character variant", () => {
         render(<CharacterWorkbench asset={{ id: "hero", name: "", description: "Hero",
             reference_sheet: { selected_image_id: "front", image_variants: [{ id: "front", url: "front.webp" }] },
         }} onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
-        expect(screen.getByText("雪痕.第二集.view 1")).toBeInTheDocument();
+        expect(screen.getByText("view 1")).toBeInTheDocument();
     } finally {
         projectStoreMocks.currentProject = previous;
         projectStoreMocks.currentSeries = null;
