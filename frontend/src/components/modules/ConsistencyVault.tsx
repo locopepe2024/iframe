@@ -201,6 +201,22 @@ export default function ConsistencyVault() {
                 });
                 return;
             }
+            if (type === "scene" && Object.keys(attributes).length === 1 && "asset_design" in attributes) {
+                const saved = await api.saveSceneDesign(currentProject.id, assetId, attributes.asset_design);
+                if (saved.project_id !== currentProject.id || saved.asset_id !== assetId || !saved.asset_design
+                    || !Number.isInteger(saved.asset_revision) || saved.asset_revision < 0
+                    || !["episode", "series", "global"].includes(saved.source)) {
+                    throw new Error("Saved scene design response is invalid");
+                }
+                const latest = useProjectStore.getState();
+                const project = latest.currentProject?.id === currentProject.id
+                    ? latest.currentProject : latest.projects.find(item => item.id === currentProject.id);
+                if (project) updateProject(currentProject.id, {
+                    scenes: project.scenes.map(scene => scene.id === assetId
+                        ? { ...scene, asset_design: saved.asset_design, source: saved.source } : scene),
+                });
+                return;
+            }
             const updatedProject = await api.updateAssetAttributes(currentProject.id, assetId, type, attributes);
             await applyAssetMutationProject(assetId, type, updatedProject);
         } catch (error) {
@@ -1808,6 +1824,11 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                             className="flex min-h-9 items-center gap-1 rounded border border-glass-border px-2 text-xs hover:bg-hover-bg"><Plus size={14} />参考素材</button>
                                     </div>
                                     {referencePickerOpen && <div className="mb-2 rounded border border-glass-border bg-surface p-2">
+                                        <div className="mb-2 flex items-center justify-between gap-2">
+                                            <span className="text-xs font-medium text-foreground">场景参考素材</span>
+                                            <button type="button" aria-label="关闭场景参考素材列表" onClick={() => { setReferencePickerOpen(false); setReferencePickerQuery(""); }}
+                                                className="flex h-9 w-9 items-center justify-center rounded hover:bg-hover-bg"><X size={16} /></button>
+                                        </div>
                                         <input aria-label="搜索场景参考素材" value={referencePickerQuery} onChange={(event) => setReferencePickerQuery(event.target.value)}
                                             className="mb-2 min-h-9 w-full rounded border border-glass-border bg-input-bg px-2 text-sm" placeholder="搜索素材" />
                                         <div className="max-h-48 overflow-y-auto" role="listbox" aria-label="可添加的场景参考素材">
@@ -1816,7 +1837,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                                 const reference = candidate.reference!;
                                                 const selected = visibleReferences.some((item) => item.asset_type === reference.asset_type && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
                                                 return <button key={`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`} type="button" role="option" aria-selected={selected}
-                                                    onClick={() => setVisibleReferences(selected ? visibleReferences.filter((item) => item.asset_type !== reference.asset_type || item.asset_id !== reference.asset_id || item.variant_id !== reference.variant_id) : [...visibleReferences, reference])}
+                                                    onClick={() => { setVisibleReferences(selected ? visibleReferences.filter((item) => item.asset_type !== reference.asset_type || item.asset_id !== reference.asset_id || item.variant_id !== reference.variant_id) : [...visibleReferences, reference]); setReferencePickerOpen(false); setReferencePickerQuery(""); }}
                                                     className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-hover-bg">
                                                     {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-8 w-8 rounded object-cover" /> : <ImageIcon size={16} />}
                                                     <span className="min-w-0 flex-1 truncate">{candidate.label}</span>{selected && <Check size={14} aria-label="已选" />}

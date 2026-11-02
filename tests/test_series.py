@@ -127,6 +127,52 @@ def test_character_design_save_can_return_only_persisted_design(pipeline, monkey
     assert "persist;dur=" in response.headers["Server-Timing"]
 
 
+def test_scene_design_save_returns_only_persisted_shared_design(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+
+    series = pipeline.create_series("S")
+    scene = _make_scene("Forest")
+    series.scenes.append(scene)
+    episode = _make_script(series_id=series.id)
+    pipeline.scripts[episode.id] = episode
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    monkeypatch.setattr(api, "get_project", MagicMock(side_effect=AssertionError("No project/cover rebuild")))
+
+    design = {"visual_notes": "Mossy forest at dusk", "confirmed": True}
+    response = api.update_asset_attributes(episode.id, api.UpdateAssetAttributesRequest(
+        asset_id=scene.id, asset_type="scene", response_mode="scene_design",
+        attributes={"asset_design": design},
+    ))
+    payload = json.loads(response.body)
+    persisted = json.loads(Path(pipeline.series_data_file).read_text())
+    saved = persisted[series.id]["scenes"][0]
+    assert payload == {
+        "project_id": episode.id, "asset_id": scene.id,
+        "asset_revision": saved["asset_revision"], "source": "series",
+        "asset_design": saved["asset_design"],
+    }
+    assert saved["asset_design"]["design_draft"] == design
+    assert "persist;dur=" in response.headers["Server-Timing"]
+
+
+def test_scene_design_response_rejects_other_mutations_before_saving(pipeline, monkeypatch):
+    from src.apps.comic_gen import api
+    from fastapi import HTTPException
+
+    mutation = MagicMock()
+    monkeypatch.setattr(api.pipeline, "update_asset_attributes", mutation)
+    for asset_type, attributes in (("character", {"asset_design": {}}),
+                                   ("scene", {"name": "Changed"}),
+                                   ("scene", {"asset_design": {}, "name": "Changed"})):
+        with pytest.raises(HTTPException) as error:
+            api.update_asset_attributes("episode", api.UpdateAssetAttributesRequest(
+                asset_id="forest", asset_type=asset_type, response_mode="scene_design",
+                attributes=attributes,
+            ))
+        assert error.value.status_code == 422
+    mutation.assert_not_called()
+
+
 def test_design_response_rejects_other_mutations_before_saving(pipeline, monkeypatch):
     from src.apps.comic_gen import api
     from fastapi import HTTPException

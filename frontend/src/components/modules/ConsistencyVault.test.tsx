@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     authenticatedFetch: vi.fn(),
     deleteCharacter: vi.fn(), deleteScene: vi.fn(), deleteProp: vi.fn(),
     updateAssetAttributes: vi.fn(),
+    saveSceneDesign: vi.fn(),
     saveCharacterDesign: vi.fn(),
     updateAssetVariantMetadata: vi.fn(), agentRequest: vi.fn(),
     generateAsset: vi.fn(), getTaskStatus: vi.fn(),
@@ -60,6 +61,10 @@ function state(assetType: string, assetId: string, bound = true) {
 beforeEach(() => {
     vi.resetAllMocks();
     mocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
+    mocks.saveSceneDesign.mockImplementation((projectId: string, assetId: string, design: unknown) => Promise.resolve({
+        project_id: projectId, asset_id: assetId, asset_revision: 1, source: "episode",
+        asset_design: { design_draft: design },
+    }));
     mocks.authenticatedFetch.mockResolvedValue({ ok: false });
     mocks.agentRequest.mockImplementation((path: string, _method: string, body: any) => path === "/models"
         ? Promise.resolve({ models: [{ api_model_id: "qwen", display_name: "Qwen" }] })
@@ -199,11 +204,11 @@ it("edits scene light and view before refinement and submits only the applied vi
     fireEvent.change(screen.getByRole("textbox", { name: "场景环境光" }), { target: { value: "街道保持蓝色黄昏" } });
     fireEvent.change(screen.getByRole("textbox", { name: "场景参考图视角" }), { target: { value: "沿街向北" } });
     fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
-    await waitFor(() => expect(mocks.updateAssetAttributes).toHaveBeenCalledWith("episode-1", "street", "scene",
-        expect.objectContaining({ asset_design: expect.objectContaining({
+    await waitFor(() => expect(mocks.saveSceneDesign).toHaveBeenCalledWith("episode-1", "street",
+        expect.objectContaining({
             style: "写实蓝调", ambient_lighting: "街道保持蓝色黄昏",
             reference_viewpoint: "沿街向北", confirmed: true,
-        }) })));
+        })));
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     fireEvent.click(screen.getByRole("button", { name: "提交 AI 完善" }));
     await waitFor(() => expect(mocks.agentRequest).toHaveBeenCalledWith("/asset-image-prompt/refine/preview", "POST",
@@ -237,9 +242,14 @@ it("offers @ only from the scene's selected reference list", async () => {
     const prompt = await screen.findByRole("textbox", { name: "图像提示词" });
     expect(prompt).toHaveAttribute("data-mention-candidates", "");
     fireEvent.click(screen.getByRole("button", { name: "添加场景参考素材" }));
+    expect(screen.getByRole("button", { name: "关闭场景参考素材列表" })).toBeInTheDocument();
     fireEvent.click(within(screen.getByRole("listbox", { name: "可添加的场景参考素材" })).getByRole("option", { name: /青石长街/ }));
+    expect(screen.queryByRole("listbox", { name: "可添加的场景参考素材" })).not.toBeInTheDocument();
     expect(prompt).toHaveAttribute("data-mention-candidates", "青石长街");
     expect(prompt.getAttribute("data-mention-candidates")).not.toContain("粮袋");
+    fireEvent.click(screen.getByRole("button", { name: "添加场景参考素材" }));
+    fireEvent.click(screen.getByRole("button", { name: "关闭场景参考素材列表" }));
+    expect(screen.queryByRole("listbox", { name: "可添加的场景参考素材" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "移除参考素材 青石长街" }));
     expect(prompt).toHaveAttribute("data-mention-candidates", "");
 });
@@ -327,12 +337,12 @@ it("saves both scene sources and restores independent edits when reopened", asyn
     fireEvent.change(screen.getByRole("textbox", { name: "图像提示词" }), { target: { value: "手工修改优化" } });
     fireEvent.click(screen.getByRole("button", { name: "保存并使用 AI 优化" }));
     await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("已保存并使用 AI 优化"));
-    expect(mocks.updateAssetAttributes).toHaveBeenCalledWith("episode-1", "street", "scene",
-        expect.objectContaining({ asset_design: expect.objectContaining({ prompt_workspace: {
+    expect(mocks.saveSceneDesign).toHaveBeenCalledWith("episode-1", "street",
+        expect.objectContaining({ prompt_workspace: {
             active_source: "ai", settings_pending: false,
             design: { ...workspace.design, prompt: "手工修改原设计" },
             ai: { ...workspace.ai, prompt: "手工修改优化" },
-        } }) }));
+        } }));
     fireEvent.click(screen.getByRole("button", { name: "关闭工作台" }));
     await waitFor(() => expect(screen.queryByRole("tab", { name: "AI 优化" })).not.toBeInTheDocument());
     fireEvent.click(screen.getByText(asset.name));
@@ -387,7 +397,7 @@ it("keeps the last successful scene save when a later save fails", async () => {
         } } } };
     useProjectStore.setState({ currentProject: { id: "episode-1", characters: [], scenes: [asset], props: [] } as any });
     mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
-    mocks.updateAssetAttributes.mockRejectedValue(new Error("保存连接失败"));
+    mocks.saveSceneDesign.mockRejectedValue(new Error("保存连接失败"));
     render(<ConsistencyVault />);
     fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
     fireEvent.click(screen.getByText(asset.name));
@@ -757,7 +767,7 @@ it("applies, saves and restores selected scene layers without rewriting the AI s
     expect(prompt).not.toMatch(/奶油|柔肤|ARRI|剪辑/);
     fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
     await waitFor(() => expect(mocks.success).toHaveBeenCalled());
-    const saved = mocks.updateAssetAttributes.mock.calls[0][3].asset_design;
+    const saved = mocks.saveSceneDesign.mock.calls[0][2];
     expect(saved.prompt_layers.lighting.source).toBe("月光");
     expect(saved.prompt_layers.lighting.mood).toContain("宁静平和");
     expect(saved.prompt_layers.lighting.air).toContain("稀薄雾气");
@@ -804,12 +814,12 @@ it("keeps a scene baseline during lighting edits and clears it when the location
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
     fireEvent.change(screen.getByRole("textbox", { name: "场景风格" }), { target: { value: "写实" } });
     fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
-    await waitFor(() => expect(mocks.updateAssetAttributes).toHaveBeenCalled());
-    expect(mocks.updateAssetAttributes.mock.calls.at(-1)?.[3].asset_design.asset_baseline).toEqual(baseline);
+    await waitFor(() => expect(mocks.saveSceneDesign).toHaveBeenCalled());
+    expect(mocks.saveSceneDesign.mock.calls.at(-1)?.[2].asset_baseline).toEqual(baseline);
     fireEvent.change(screen.getByRole("textbox", { name: "场景空间与固定外观" }), { target: { value: "新粮铺空间" } });
     fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
-    await waitFor(() => expect(mocks.updateAssetAttributes).toHaveBeenCalledTimes(2));
-    expect(mocks.updateAssetAttributes.mock.calls.at(-1)?.[3].asset_design.asset_baseline).toBeUndefined();
+    await waitFor(() => expect(mocks.saveSceneDesign).toHaveBeenCalledTimes(2));
+    expect(mocks.saveSceneDesign.mock.calls.at(-1)?.[2].asset_baseline).toBeUndefined();
 });
 
 it("blocks applying a scene light direction forbidden by the same design", async () => {

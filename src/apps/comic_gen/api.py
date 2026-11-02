@@ -895,7 +895,7 @@ class UpdateAssetAttributesRequest(BaseModel):
     asset_id: str
     asset_type: str
     attributes: Dict[str, Any]
-    response_mode: Literal["project", "design"] = "project"
+    response_mode: Literal["project", "design", "scene_design"] = "project"
 
 
 @app.get("/health")
@@ -5211,6 +5211,10 @@ def update_asset_attributes(script_id: str, request: UpdateAssetAttributesReques
         request.asset_type != "character" or set(request.attributes) != {"character_design"}
     ):
         raise HTTPException(status_code=422, detail="Design response requires only a character design update")
+    if request.response_mode == "scene_design" and (
+        request.asset_type != "scene" or set(request.attributes) != {"asset_design"}
+    ):
+        raise HTTPException(status_code=422, detail="Scene design response requires only a scene design update")
     started = time.perf_counter()
     try:
         script = pipeline.update_asset_attributes(
@@ -5227,6 +5231,15 @@ def update_asset_attributes(script_id: str, request: UpdateAssetAttributesReques
                 "asset_id": request.asset_id,
                 "asset_revision": asset.asset_revision,
                 "character_design": asset.character_design,
+            })
+        elif request.response_mode == "scene_design":
+            asset, source = pipeline._find_asset_with_source(script, request.asset_id, "scene")
+            response = signed_response({
+                "project_id": script_id,
+                "asset_id": request.asset_id,
+                "asset_revision": asset.asset_revision,
+                "source": "episode" if source == "script" else source,
+                "asset_design": asset.asset_design,
             })
         else:
             response = get_project(script_id)

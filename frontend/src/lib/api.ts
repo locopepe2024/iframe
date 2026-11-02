@@ -1945,6 +1945,17 @@ export const api = {
         return res.data;
     },
 
+    saveSceneDesign: async (scriptId: string, assetId: string, design: unknown): Promise<{
+        project_id: string; asset_id: string; asset_revision: number; source: "episode" | "series" | "global";
+        asset_design: Record<string, unknown>;
+    }> => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/update_attributes`, {
+            asset_id: assetId, asset_type: "scene",
+            attributes: { asset_design: design }, response_mode: "scene_design",
+        });
+        return res.data;
+    },
+
     saveCharacterDesign: async (scriptId: string, assetId: string, design: unknown): Promise<{
         project_id: string; asset_id: string; asset_revision: number; character_design: Record<string, unknown>;
     }> => {
