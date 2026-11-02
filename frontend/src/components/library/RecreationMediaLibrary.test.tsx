@@ -6,6 +6,15 @@ vi.mock('@/lib/recreation', () => ({ recreationApi: { list: vi.fn(), searchMedia
 vi.mock('@/lib/api', () => ({ API_URL: 'https://api.example.test', authenticatedFetch: vi.fn(async (url: string) => ({
   ok: true, json: async () => ({ url: url.includes('preview=320') ? '/cover.webp' : '/source.mp4' }),
 })) }));
+vi.mock('@/lib/mediaDelivery', () => ({
+  isManagedMedia: () => false,
+  mediaReferenceIdentity: (value: string) => value,
+  resolveRegisteredMediaDelivery: vi.fn(async (_id: string, preview?: number) => `https://api.example.test/files/${preview ? 'cover.webp' : 'source.mp4'}`),
+  resolveMediaDelivery: vi.fn(async () => 'https://api.example.test/files/cover.webp'),
+  resolveVideoDelivery: vi.fn(async () => 'https://api.example.test/files/source.mp4'),
+}));
+vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt }: { alt?: string }) => <img alt={alt || ''} src="https://api.example.test/files/cover.webp" /> }));
+vi.mock('@/components/shared/preview/PreviewVideo', () => ({ default: () => <video controls src="https://api.example.test/files/source.mp4" /> }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
 const item = (id: string): RecreationMedia => ({ media_id: id, project_id: 'p', kind: 'evidence_frame', display_name: id, storage_path: '/frame.jpg?signature=test', sha256: 'hash', created_at: 1, metadata: { parent_media_id: 'original', pts: 61696, time_base: '1/15360' } });
 const videoItem = (id: string, kind: RecreationMedia['kind']): RecreationMedia => ({ media_id: id, project_id: 'p', kind, display_name: id, storage_path: `/${id}.mp4?signature=test`, sha256: 'hash', created_at: 1, metadata: {} });
@@ -19,7 +28,7 @@ it('paginates without duplicate identities, previews lineage, and retries a fail
   render(<RecreationMediaLibrary />);
   fireEvent.click(await screen.findByRole('button', { name: 'preview one' }));
   expect(screen.getByText('original')).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByRole('img', { name: 'one' })).toHaveAttribute('src', 'https://api.example.test/files/cover.webp'));
+  await waitFor(() => expect(screen.getByRole('img')).toHaveAttribute('src', 'https://api.example.test/files/cover.webp'));
   fireEvent.click(screen.getByRole('button', { name: 'more' }));
   await screen.findByRole('alert');
   expect(screen.getByRole('button', { name: 'preview one' })).toBeInTheDocument();

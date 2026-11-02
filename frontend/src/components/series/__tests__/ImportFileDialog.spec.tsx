@@ -125,7 +125,7 @@ describe('ImportFileDialog', () => {
 
         it('disables analyze button when no file or title', () => {
             renderDialog();
-            const analyzeBtn = screen.getByText('开始分析');
+            const analyzeBtn = screen.getByText('解析并预览分集');
             expect(analyzeBtn).toBeDisabled();
         });
 
@@ -170,13 +170,13 @@ describe('ImportFileDialog', () => {
             mockImportFilePreview.mockResolvedValue(mockPreviewResult);
             await setupStep1WithFile();
 
-            fireEvent.click(screen.getByText('开始分析'));
+            fireEvent.click(screen.getByText('解析并预览分集'));
 
             await waitFor(() => {
                 expect(mockImportFilePreview).toHaveBeenCalled();
             });
             await waitFor(() => {
-                expect(screen.getByText(/AI 已将文件分为 2 集/)).toBeInTheDocument();
+                expect(screen.getByText(/导入阶段已经完成一次解析与分集建议/)).toBeInTheDocument();
             });
         });
 
@@ -184,7 +184,7 @@ describe('ImportFileDialog', () => {
             mockImportFilePreview.mockReturnValue(new Promise(() => {}));
             await setupStep1WithFile();
 
-            fireEvent.click(screen.getByText('开始分析'));
+            fireEvent.click(screen.getByText('解析并预览分集'));
 
             expect(screen.getByText('分析中...')).toBeInTheDocument();
         });
@@ -193,7 +193,7 @@ describe('ImportFileDialog', () => {
             mockImportFilePreview.mockRejectedValue({ message: '分析出错' });
             await setupStep1WithFile();
 
-            fireEvent.click(screen.getByText('开始分析'));
+            fireEvent.click(screen.getByText('解析并预览分集'));
 
             await waitFor(() => {
                 expect(screen.getByText('分析出错')).toBeInTheDocument();
@@ -204,7 +204,7 @@ describe('ImportFileDialog', () => {
             mockImportFilePreview.mockResolvedValue(mockPreviewResult);
             await setupStep1WithFile();
 
-            fireEvent.click(screen.getByText('开始分析'));
+            fireEvent.click(screen.getByText('解析并预览分集'));
 
             await waitFor(() => {
                 expect(screen.getByText('第一章')).toBeInTheDocument();
@@ -225,7 +225,7 @@ describe('ImportFileDialog', () => {
             const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
             const file = createMockFile('story.txt');
             fireEvent.change(fileInput, { target: { files: [file] } });
-            fireEvent.click(screen.getByText('开始分析'));
+            fireEvent.click(screen.getByText('解析并预览分集'));
             await waitFor(() => {
                 expect(screen.getByText('确认创建')).toBeInTheDocument();
             });
@@ -291,7 +291,7 @@ describe('ImportFileDialog', () => {
             const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
             const file = createMockFile('story.txt');
             fireEvent.change(fileInput, { target: { files: [file] } });
-            fireEvent.click(screen.getByText('开始分析'));
+            fireEvent.click(screen.getByText('解析并预览分集'));
 
             await waitFor(() => {
                 expect(screen.getByText('返回修改')).toBeInTheDocument();
@@ -300,7 +300,7 @@ describe('ImportFileDialog', () => {
             fireEvent.click(screen.getByText('返回修改'));
 
             // Should be back on step 1
-            expect(screen.getByText('开始分析')).toBeInTheDocument();
+            expect(screen.getByText('解析并预览分集')).toBeInTheDocument();
             expect(screen.getByPlaceholderText('输入系列标题...')).toBeInTheDocument();
         });
     });

@@ -9,6 +9,7 @@ vi.mock('@/lib/api', () => ({ api: { getPlatformReferenceLibrary: vi.fn(async ()
 })) }));
 vi.mock('./PromptTemplateModal', () => ({ default: () => null }));
 vi.mock('./PromptHistoryDrawer', () => ({ default: () => null }));
+vi.mock('@/components/shared/preview/PreviewImage', () => ({ default: ({ alt }: { alt?: string }) => <img alt={alt || ''} src="https://garage.uniart.fun/studio/media/preview.webp?signature=fresh" /> }));
 
 const selected = ['/playground/media/selected/image', '/studio/media/library-image'];
 

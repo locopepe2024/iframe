@@ -8,7 +8,10 @@ vi.mock('@/lib/modelCatalog', () => ({
     VIDEO_I2V_MODELS: [{ id: 'supported', params: { audio: true } }, { id: 'silent', params: {} }],
     VIDEO_R2V_MODELS: [{ id: 'reference', params: { audio: true } }],
 }));
-vi.mock('axios', () => ({ default: { post: vi.fn().mockResolvedValue({ data: [] }) } }));
+vi.mock('axios', () => ({ default: {
+    post: vi.fn().mockResolvedValue({ data: [] }),
+    interceptors: { request: { use: vi.fn() } },
+} }));
 
 it.each(['supported', 'reference'])('serializes audio on and off for %s', async (model) => {
     for (const enabled of [true, false]) {

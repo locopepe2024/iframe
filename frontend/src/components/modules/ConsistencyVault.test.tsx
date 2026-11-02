@@ -367,10 +367,11 @@ it("does not submit an empty AI source or add unselected people-view constraints
     expect(mocks.generateAsset).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("tab", { name: "场景设计" }));
     fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "可见人脸上限" }), { target: { value: "3" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "场景空间与固定外观" }), { target: { value: "暮秋长街" } });
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     const text = (screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value;
-    expect(text).toContain("可见人脸上限：3 张");
+    expect(text).toContain("场景空间：暮秋长街");
+    expect(text).not.toContain("可见人脸上限");
     expect(text).not.toMatch(/侧身|远景/);
 });
 

@@ -198,6 +198,7 @@ it("rejects a malformed story map instead of rendering incomplete arrays", () =>
             source_revision: 1,
             source_revision_id: "source-r1:test-hash",
             fact_ledger_revision: null,
+            people: "invalid",
         },
     });
 
