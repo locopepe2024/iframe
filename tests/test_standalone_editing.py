@@ -50,6 +50,36 @@ def test_transcription_audio_rejects_silent_video_and_extraction_error(service, 
     with pytest.raises(HTTPException) as error:
         service.transcription_audio(item['id'], 0, 500)
     assert error.value.status_code == 422
+
+
+def test_voiceover_registers_owner_audio_and_cleans_failed_generation(service, monkeypatch):
+    from src.apps.editing import service as module
+    from src.audio.uniart_tts import UniArtTTSError
+
+    def synthesize(_self, text, output_path, **params):
+        assert text == 'Hello'
+        assert params['voice'] == 'uniart:speech-2.8-hd:male-qn-qingse'
+        subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', str(output_path)], check=True)
+
+    monkeypatch.setattr(module.UniArtTTSProcessor, 'synthesize', synthesize)
+    item = service.synthesize_voice('Hello', 'uniart:speech-2.8-hd:male-qn-qingse')
+    assert item['audio'] is True and item['video'] is False
+    assert item['id'] in {row['id'] for row in service.materials()['items']}
+    stranger = EditingService(UserContext('other', 'other', 'Other', ''), output_root=service.output_root)
+    with pytest.raises(HTTPException) as error:
+        stranger.resolve(item['id'])
+    assert error.value.status_code == 404
+    before = set(service.root.glob('*.mp3'))
+
+    def fail(_self, text, output_path, **params):
+        output_path.write_bytes(b'partial')
+        raise UniArtTTSError('Voice unavailable', 409)
+
+    monkeypatch.setattr(module.UniArtTTSProcessor, 'synthesize', fail)
+    with pytest.raises(HTTPException) as error:
+        service.synthesize_voice('Hello', 'invalid')
+    assert error.value.status_code == 409
+    assert set(service.root.glob('*.mp3')) == before
     monkeypatch.setattr(service, 'resolve', lambda key: ({'audio': True, 'duration_ms': 1000}, str(video)))
     monkeypatch.setattr('src.apps.editing.service.subprocess.run', lambda *args, **kwargs: (_ for _ in ()).throw(OSError('ffmpeg failed')))
     with pytest.raises(HTTPException) as error:

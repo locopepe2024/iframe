@@ -5,7 +5,8 @@ import { editing, type EditProject, type EditMaterial } from '@/lib/editing';
 import { agentRequest, agentTranscribe } from '@/lib/api';
 vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
 vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), agentRequest: vi.fn(), agentTranscribe: vi.fn() }));
-vi.mock('@/lib/editing', () => ({ editing: { folders: vi.fn(), createFolder: vi.fn(), renameFolder: vi.fn(), deleteFolder: vi.fn(), moveMaterial: vi.fn(), deleteMaterial: vi.fn(), list: vi.fn(), create: vi.fn(), get: vi.fn(), materials: vi.fn(), material: vi.fn(), upload: vi.fn(), importMaterial: vi.fn(), save: vi.fn(), render: vi.fn(), versions: vi.fn(), restore: vi.fn(), subtitles: vi.fn(), transcriptionAudio: vi.fn() } }));
+vi.mock('../cast/VoicePickerModal', () => ({ default: ({ isOpen, onApply }: { isOpen: boolean; onApply: (id: string, name: string) => void }) => isOpen ? <button type="button" onClick={() => onApply('uniart:speech-2.8-hd:male-qn-qingse', 'Qingse')}>Pick Qingse</button> : null }));
+vi.mock('@/lib/editing', () => ({ editing: { folders: vi.fn(), createFolder: vi.fn(), renameFolder: vi.fn(), deleteFolder: vi.fn(), moveMaterial: vi.fn(), deleteMaterial: vi.fn(), list: vi.fn(), create: vi.fn(), get: vi.fn(), materials: vi.fn(), material: vi.fn(), upload: vi.fn(), importMaterial: vi.fn(), save: vi.fn(), render: vi.fn(), versions: vi.fn(), restore: vi.fn(), subtitles: vi.fn(), transcriptionAudio: vi.fn(), synthesizeVoice: vi.fn() } }));
 const project: EditProject = { id: 'independent', title: 'My edit', revision: 0, plan: null, sources: {}, output: null };
 const material: EditMaterial = { id: 'core:source', name: 'Original.mp4', url: '/video.mp4', sha256: 'digest', duration_ms: 1000, video: true, audio: true, origin: 'upload', deletable: true };
 beforeEach(() => {
@@ -47,6 +48,28 @@ it('reviews recognized text and estimated times before adding a subtitle lane', 
   await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
   const lane = vi.mocked(editing.save).mock.calls[0][2].lanes.find(item => item.kind === 'subtitle');
   expect(lane?.clips.map(item => item.text)).toEqual(['Corrected.', 'Second.']);
+});
+
+it('generates a selected system voice into the dialogue lane', async () => {
+  const voiceover = { ...material, id: 'core:voiceover', name: 'voiceover.mp3', video: false, audio: true };
+  vi.mocked(editing.synthesizeVoice).mockResolvedValue(voiceover);
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Voiceover text' }), { target: { value: 'Hello' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Choose voice' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Pick Qingse' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Generate and add dialogue' }));
+  await waitFor(() => expect(editing.synthesizeVoice).toHaveBeenCalledWith('Hello', 'uniart:speech-2.8-hd:male-qn-qingse', 1));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Generate voiceover' })).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  const lane = vi.mocked(editing.save).mock.calls[0][2].lanes.find(item => item.kind === 'dialogue');
+  expect(lane?.clips[0].source_media_id).toBe(voiceover.id);
 });
 
 it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', async () => {

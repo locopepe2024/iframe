@@ -17,6 +17,7 @@ from ..recreation.analysis import fingerprint, MAX_BYTES
 from ..studio_access import resolve_studio_reference, studio_owner_dir
 from ...utils.storage_config import media_root
 from ...utils.system_check import get_ffmpeg_path, get_ffprobe_path
+from ...audio.uniart_tts import UniArtTTSProcessor, UniArtTTSError
 
 
 class EditingService:
@@ -337,6 +338,19 @@ class EditingService:
         except BaseException:
             path.unlink(missing_ok=True)
             raise
+
+    def synthesize_voice(self, text, voice_id, speed=1.0, pitch=1.0, volume=50):
+        path = self.root / (uuid4().hex + '.mp3')
+        try:
+            try:
+                UniArtTTSProcessor().synthesize(text, path, voice=voice_id,
+                                                speech_rate=speed, pitch_rate=pitch, volume=volume)
+            except UniArtTTSError as exc:
+                raise HTTPException(exc.status_code, str(exc)) from exc
+            with path.open('rb') as stream:
+                return self.upload(stream, 'voiceover.mp3')
+        finally:
+            path.unlink(missing_ok=True)
 
     def validate(self, plan, expected_sources=None, db=None):
         if plan.scope != 'project':

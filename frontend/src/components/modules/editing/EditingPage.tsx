@@ -10,6 +10,7 @@ import { extractErrorDetail, getAssetUrl } from '@/lib/utils';
 export { EditingMaterials, EditingMaterialManager } from './EditingMaterials';
 import { EditingMaterials, EditingMaterialManager, EditingMaterialPicker } from './EditingMaterials';
 import EditingTranscriptionDialog from './EditingTranscriptionDialog';
+import EditingVoiceoverDialog from './EditingVoiceoverDialog';
 import type { TranscriptCue } from './transcriptDraft';
 
 export default function EditingPage() {
@@ -30,12 +31,13 @@ export default function EditingPage() {
   const [tab, setTab] = useState<'edit' | 'materials'>('edit');
   const [importOpen, setImportOpen] = useState(false);
   const [transcriptClip, setTranscriptClip] = useState<AssemblyClip | null>(null);
+  const [voiceoverOpen, setVoiceoverOpen] = useState(false);
   useEffect(() => { const read = () => setTab(new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab') === 'materials' ? 'materials' : 'edit'); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const read = () => setPendingMedia(new URLSearchParams(window.location.hash.split('?')[1] || '').get('media') || ''); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
   const [audioLane, setAudioLane] = useState<'bgm' | 'dialogue' | 'sfx'>('bgm');
   const emptyPlan = (id: string): AssemblyEditPlan => ({ id: `assembly-${id}`, scope: 'project', revision: 1, target_duration_ms: 1000, lanes: [], markers: [], provenance: {} });
-  const accept = (p: EditProject) => { setProject(p); setPlan(p.plan || emptyPlan(p.id)); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); setTranscriptClip(null); };
+  const accept = (p: EditProject) => { setProject(p); setPlan(p.plan || emptyPlan(p.id)); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); setTranscriptClip(null); setVoiceoverOpen(false); };
   useEffect(() => { editing.list().then(setProjects).catch(e => setError(extractErrorDetail(e))); }, []);
   // Older projects can contain a saved timeline reference without the
   // corresponding source snapshot in `sources` (for example, after a
@@ -66,11 +68,11 @@ export default function EditingPage() {
     }] });
     setTranscriptClip(null);
   };
-  const add = (item: EditMaterial) => {
+  const add = (item: EditMaterial, laneOverride?: 'bgm' | 'dialogue' | 'sfx') => {
     if (!project) return;
     if (!item.video && !plan) { setError(t('请先添加视频。', 'Add a video first.')); return; }
     const current: AssemblyEditPlan = plan || { id: `assembly-${project.id}`, scope: 'project', revision: 1, target_duration_ms: item.duration_ms, lanes: [], markers: [], provenance: {} };
-    const kind: 'video' | 'bgm' | 'dialogue' | 'sfx' = item.video ? 'video' : audioLane;
+    const kind: 'video' | 'bgm' | 'dialogue' | 'sfx' = item.video ? 'video' : laneOverride || audioLane;
     const lane = current.lanes.find(l => l.kind === kind);
     const hasVideo = current.lanes.some(l => l.kind === 'video' && l.clips.length > 0);
     const start = item.video && hasVideo ? current.target_duration_ms : 0;
@@ -106,6 +108,7 @@ export default function EditingPage() {
     <p className="text-sm text-text-secondary">{tab === 'materials' ? t('管理上传素材和目录；生成素材仍由来源项目维护。', 'Manage uploaded materials and folders; generated materials remain owned by their source project.') : t('从素材库选择视频，按顺序剪辑，添加音轨和字幕后合成。', 'Select videos, arrange the sequence, add audio and captions, then render.')}</p>
     {importOpen && <EditingMaterialPicker onSelect={importToWorkspace} onClose={() => setImportOpen(false)} />}
     {transcriptClip && <EditingTranscriptionDialog clip={transcriptClip} onClose={() => setTranscriptClip(null)} onApply={addTranscript} />}
+    {voiceoverOpen && <EditingVoiceoverDialog onClose={() => setVoiceoverOpen(false)} onCreated={item => { add(item, 'dialogue'); setVoiceoverOpen(false); }} />}
     {tab === 'materials' ? <EditingMaterialManager /> : <>
     {error && <p role="alert" className="text-red-300">{error}</p>}
     <div className="flex flex-wrap gap-3">
@@ -118,6 +121,7 @@ export default function EditingPage() {
     {project && <>
       <div className="flex flex-wrap items-center gap-3">
         <span>{project.title} · {t('版本', 'Revision')} {project.revision}{dirty ? t(' · 未保存', ' · Unsaved') : ''}</span>
+        <button className="glass-button px-3 py-2" disabled={busy || !plan?.lanes.some(lane => lane.kind === 'video' && lane.clips.length > 0) || (plan.lanes.length >= 8 && !plan.lanes.some(lane => lane.kind === 'dialogue'))} onClick={() => setVoiceoverOpen(true)}>{t('生成配音', 'Generate voiceover')}</button>
         <button className="glass-button px-3 py-2" disabled={busy || !plan || !dirty} onClick={() => void run(async () => { const saved = await editing.save(project.id, project.revision, plan!); accept(saved); })}>{t('保存剪辑', 'Save edit')}</button>
         <button className="glass-button px-3 py-2" disabled={busy} onClick={() => void run(async () => accept(await editing.get(project.id)))}>{t('重新加载 / 放弃修改', 'Reload / discard changes')}</button>
         <button className="glass-button px-3 py-2" disabled={busy || dirty || !plan} onClick={() => void run(async () => accept(await editing.render(project.id, project.revision)))}>{busy ? t('处理中…', 'Processing…') : t('合成 MP4', 'Render MP4')}</button>
