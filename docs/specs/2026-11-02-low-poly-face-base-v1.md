@@ -29,3 +29,7 @@ The browser preview needs a continuous low-poly facial shell with a small set of
 - Switching a base preset changes the initial proportions without changing the asset type or prompt contract.
 - Existing face shape fields still round-trip and affect the preview.
 - Existing white face and character workbench tests remain green.
+
+## Geometry refinement
+
+The head shell now uses one indexed surface with a tapered chin, jaw, cheek and forehead profile. Its front surface has bounded relief for the eye sockets, cheekbones, nose bridge, nose tip, nose wings and chin. The same mesh drives front and side views; small ear, eye and lip meshes remain visual landmarks. Preset changes restart from the selected preset's neutral baseline, so values from a previous preset cannot silently carry over. This is a proportion preview, not an anatomical reconstruction or a guarantee of identity preservation in generated images.

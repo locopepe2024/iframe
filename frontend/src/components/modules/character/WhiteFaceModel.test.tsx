@@ -2,7 +2,8 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import WhiteFaceModel from "./WhiteFaceModel";
+import WhiteFaceModel, { faceShellGeometry } from "./WhiteFaceModel";
+import { DEFAULT_FACE_SHAPE } from "@/lib/whiteFaceShape";
 
 const { uploadLibraryImage, createLibraryAsset } = vi.hoisted(() => ({
     uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(),
@@ -69,4 +70,34 @@ it("applies a human base face preset before fine tuning", async () => {
     fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
     expect(onSaved.mock.calls[0][2]).toEqual(expect.objectContaining({ basePreset: "masculine_young" }));
+});
+
+it("starts each base preset from its own proportions", () => {
+    render(<WhiteFaceModel characterName="苏砚" onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    fireEvent.change(screen.getByLabelText("基础脸型"), { target: { value: "masculine_young" } });
+    expect(screen.getByLabelText(/下颌宽度/)).toHaveValue("112");
+    fireEvent.change(screen.getByLabelText("基础脸型"), { target: { value: "neutral_young" } });
+    expect(screen.getByLabelText(/下颌宽度/)).toHaveValue("100");
+    expect(screen.getByLabelText(/鼻尖突出度/)).toHaveValue("100");
+});
+
+it("builds one closed facial shell with nose and eye-socket relief", () => {
+    const neutral = faceShellGeometry(DEFAULT_FACE_SHAPE);
+    const longNose = faceShellGeometry({ ...DEFAULT_FACE_SHAPE, noseProjection: 125 });
+    const deepEyes = faceShellGeometry({ ...DEFAULT_FACE_SHAPE, eyeDepth: 125 });
+    const positions = neutral.getAttribute("position");
+    const nosePositions = longNose.getAttribute("position");
+    const indices = neutral.getIndex();
+    expect(positions.count).toBe(15 * 40);
+    expect(indices?.count).toBe(14 * 40 * 6);
+    expect(Math.max(...Array.from({ length: indices!.count }, (_, i) => indices!.getX(i)))).toBeLessThan(positions.count);
+    const tip = 7 * 40 + 10;
+    expect(nosePositions.getZ(tip)).toBeGreaterThan(positions.getZ(tip));
+    expect(neutral.getAttribute("normal").getZ(tip)).toBeGreaterThan(0);
+    const eye = 8 * 40 + 7;
+    expect(deepEyes.getAttribute("position").getZ(eye)).toBeLessThan(positions.getZ(eye));
+    neutral.dispose();
+    longNose.dispose();
+    deepEyes.dispose();
 });
