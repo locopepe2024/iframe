@@ -19,6 +19,8 @@ function FaceShell({ shape }: { shape: FaceShape }) {
         const width = value.faceWidth / 100;
         const length = value.faceLength / 100;
         const rows = [-1, -0.82, -0.58, -0.28, 0.05, 0.38, 0.68, 0.88, 1];
+        const frontProfile = [0.28, 0.40, 0.52, 0.60, 0.68, 0.54, 0.48, 0.38, 0.22];
+        const backProfile = [-0.28, -0.42, -0.52, -0.55, -0.56, -0.54, -0.50, -0.38, -0.22];
         const segments = 24;
         const vertices: number[] = [];
         const indices: number[] = [];
@@ -29,13 +31,23 @@ function FaceShell({ shape }: { shape: FaceShape }) {
             const forehead = value.foreheadWidth / 100;
             const profile = t < 0.25 ? jaw : t < 0.62 ? cheek : forehead;
             const ellipse = Math.sqrt(Math.max(0, 1 - y * y));
-            return { x: 0.68 * width * profile * ellipse, z: 0.54 * (0.92 + 0.08 * profile) * ellipse };
+            const row = rows.indexOf(y);
+            const featureProjection = row <= 2
+                ? 0.9 + 0.1 * value.chinProjection / 100
+                : 0.9 + 0.1 * value.noseProjection / 100;
+            const front = frontProfile[row] * featureProjection;
+            const back = backProfile[row];
+            return {
+                x: 0.68 * width * profile * ellipse,
+                zCenter: (front + back) / 2,
+                zRadius: (front - back) / 2,
+            };
         };
         rows.forEach(y => {
             const radius = radiusAt(y);
             for (let i = 0; i < segments; i += 1) {
                 const angle = (i / segments) * Math.PI * 2;
-                vertices.push(radius.x * Math.cos(angle), y * 0.9 * length, radius.z * Math.sin(angle));
+                vertices.push(radius.x * Math.cos(angle), y * 0.9 * length, radius.zCenter + radius.zRadius * Math.sin(angle));
             }
         });
         for (let row = 0; row < rows.length - 1; row += 1) {
