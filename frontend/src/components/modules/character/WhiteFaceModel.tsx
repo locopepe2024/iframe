@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
+import { BufferGeometry, Float32BufferAttribute, Uint16BufferAttribute } from "three";
 import { api, type AssetLibraryReference } from "@/lib/api";
-import { faceShapePrompt, normalizeFaceShape, type FaceShape } from "@/lib/whiteFaceShape";
+import { FACE_BASE_PRESETS, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape } from "@/lib/whiteFaceShape";
 
 const CONTROL_GROUPS: Array<[string, Array<[keyof FaceShape, string, number, number]>]> = [
     ["头部轮廓", [["faceLength", "脸部长度", 80, 120], ["faceWidth", "脸部宽度", 80, 120], ["foreheadWidth", "额头宽度", 80, 120], ["cheekWidth", "颧部宽度", 80, 120], ["jawWidth", "下颌宽度", 75, 125], ["chinWidth", "下巴宽度", 75, 125], ["chinProjection", "下巴前突", 75, 125]]],
@@ -11,6 +12,48 @@ const CONTROL_GROUPS: Array<[string, Array<[keyof FaceShape, string, number, num
     ["眼眉", [["eyeSpacing", "眼距", 80, 120], ["eyeSize", "眼睛大小", 80, 120], ["eyeDepth", "眼窝深度", 80, 120], ["eyeTilt", "眼尾倾斜", 80, 120], ["browEyeDistance", "眉眼距离", 80, 120]]],
     ["嘴唇与下巴", [["mouthWidth", "嘴宽", 80, 120], ["upperLipThickness", "上唇厚度", 75, 125], ["lowerLipThickness", "下唇厚度", 75, 125], ["philtrumLength", "人中长度", 80, 120], ["mouthCornerTilt", "嘴角倾斜", 80, 120]]],
 ];
+
+function FaceShell({ shape }: { shape: FaceShape }) {
+    const geometry = useMemo(() => {
+        const value = normalizeFaceShape(shape);
+        const width = value.faceWidth / 100;
+        const length = value.faceLength / 100;
+        const rows = [-1, -0.82, -0.58, -0.28, 0.05, 0.38, 0.68, 0.88, 1];
+        const segments = 24;
+        const vertices: number[] = [];
+        const indices: number[] = [];
+        const radiusAt = (y: number) => {
+            const t = (y + 1) / 2;
+            const jaw = value.jawWidth / 100;
+            const cheek = value.cheekWidth / 100;
+            const forehead = value.foreheadWidth / 100;
+            const profile = t < 0.25 ? jaw : t < 0.62 ? cheek : forehead;
+            const ellipse = Math.sqrt(Math.max(0, 1 - y * y));
+            return { x: 0.68 * width * profile * ellipse, z: 0.54 * (0.92 + 0.08 * profile) * ellipse };
+        };
+        rows.forEach(y => {
+            const radius = radiusAt(y);
+            for (let i = 0; i < segments; i += 1) {
+                const angle = (i / segments) * Math.PI * 2;
+                vertices.push(radius.x * Math.cos(angle), y * 0.9 * length, radius.z * Math.sin(angle));
+            }
+        });
+        for (let row = 0; row < rows.length - 1; row += 1) {
+            for (let i = 0; i < segments; i += 1) {
+                const next = (i + 1) % segments;
+                const a = row * segments + i, b = row * segments + next;
+                const c = (row + 1) * segments + next, d = (row + 1) * segments + i;
+                indices.push(a, b, d, b, c, d);
+            }
+        }
+        const result = new BufferGeometry();
+        result.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+        result.setIndex(new Uint16BufferAttribute(indices, 1));
+        result.computeVertexNormals();
+        return result;
+    }, [shape]);
+    return <mesh geometry={geometry}><meshStandardMaterial color="#e0e4e2" roughness={0.88} flatShading /></mesh>;
+}
 
 function Head({ shape, side = false, x }: { shape: FaceShape; side?: boolean; x: number }) {
     shape = normalizeFaceShape(shape);
@@ -37,10 +80,7 @@ function Head({ shape, side = false, x }: { shape: FaceShape; side?: boolean; x:
     const philtrum = shape.philtrumLength / 100;
     const cornerTilt = (shape.mouthCornerTilt - 100) / 100;
     return <group position={[x, 0, 0]} rotation={[0, side ? Math.PI / 2 : 0, 0]}>
-        <mesh scale={[0.68 * width, 0.9 * length, 0.55]}><sphereGeometry args={[1, 48, 32]} /><meshStandardMaterial color="#e3e6e5" roughness={0.92} /></mesh>
-        <mesh position={[0, 0.34 * length, 0.02]} scale={[0.48 * forehead, 0.34 * length, 0.49]}><sphereGeometry args={[1, 32, 20]} /><meshStandardMaterial color="#e1e4e2" roughness={0.95} /></mesh>
-        <mesh position={[0, -0.5 * length, 0.09 + 0.035 * chinProjection]} scale={[0.46 * jaw, 0.35, 0.48]}><sphereGeometry args={[1, 40, 24]} /><meshStandardMaterial color="#dee1df" roughness={0.95} /></mesh>
-        <mesh position={[0, -0.72 * length, 0.13 + 0.07 * chinProjection]} scale={[0.22 * chin, 0.18, 0.18 * chinProjection]}><sphereGeometry args={[1, 32, 20]} /><meshStandardMaterial color="#d9dddb" roughness={0.95} /></mesh>
+        <FaceShell shape={shape} />
         {[-1, 1].map(sign => <group key={sign}>
             <mesh position={[sign * 0.5 * cheek, -0.12, 0.26]} scale={[0.19, 0.24, 0.28]}><sphereGeometry args={[1, 24, 16]} /><meshStandardMaterial color="#e6e8e7" roughness={0.95} /></mesh>
             <mesh position={[sign * 0.27 * eyes, 0.16, 0.5 - 0.04 * eyeDepth]} rotation={[0, 0, sign * eyeTilt]} scale={[0.095 * eyeSize, 0.045 * eyeSize, 0.03 * eyeDepth]}><sphereGeometry args={[1, 20, 12]} /><meshStandardMaterial color="#7d8586" roughness={1} /></mesh>
@@ -97,6 +137,14 @@ export default function WhiteFaceModel({ characterName, initialShape, onSaved, s
     return <section aria-label="面部比例白模" className={`space-y-3 rounded border border-glass-border ${standalone ? "p-5 lg:p-6" : "p-3"}`}>
         <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className="min-h-10 w-full text-left text-xs font-medium text-foreground">面部比例白模</button>
         {open && <>
+        <label className="block text-xs text-text-secondary">基础脸型
+            <select aria-label="基础脸型" value={shape.basePreset} onChange={event => {
+                const preset = event.target.value as FaceBasePreset;
+                setShape(current => normalizeFaceShape({ ...current, ...FACE_BASE_PRESETS[preset].values, basePreset: preset }));
+            }} className="mt-1 min-h-9 w-full rounded border border-glass-border bg-surface px-2 text-xs text-foreground">
+                {Object.entries(FACE_BASE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
+            </select>
+        </label>
         <div ref={stageRef} className={`${standalone ? "aspect-[16/7] min-h-[360px]" : "aspect-[2/1]"} w-full overflow-hidden rounded bg-[#28302f]`}>
             <Canvas gl={{ preserveDrawingBuffer: true, antialias: true }} camera={{ position: [0, 0, 5], fov: 40 }}>
                 <color attach="background" args={["#28302f"]} />

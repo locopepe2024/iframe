@@ -58,3 +58,15 @@ it("restores saved proportions when the workbench reopens its design", () => {
     expect(screen.getByLabelText(/脸部长度/)).toHaveValue("112");
     expect(screen.getByLabelText(/下颌宽度/)).toHaveValue("85");
 });
+
+it("applies a human base face preset before fine tuning", async () => {
+    const onSaved = vi.fn();
+    render(<WhiteFaceModel characterName="苏砚" onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    fireEvent.change(screen.getByLabelText("基础脸型"), { target: { value: "masculine_young" } });
+    expect(screen.getByLabelText(/下颌宽度/)).toHaveValue("112");
+    expect(screen.getByLabelText(/鼻尖突出度/)).toHaveValue("106");
+    fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(onSaved.mock.calls[0][2]).toEqual(expect.objectContaining({ basePreset: "masculine_young" }));
+});
