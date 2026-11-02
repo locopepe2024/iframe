@@ -59,7 +59,7 @@ function importDirectorFacts(profile: DirectorProfile | undefined, sourceRevisio
                 source_ranges: [],
                 value: {
                     subject,
-                    value: fact.value !== undefined ? { subject, value: fact.value, source_refs: fact.source_refs ?? [] } : { subject, value: fact, source_refs: fact.source_refs ?? [] },
+                    value: fact.value !== undefined ? fact.value : fact,
                     source_refs: fact.source_refs ?? [],
                 },
                 // Director canon items can be useful candidates, but they do
