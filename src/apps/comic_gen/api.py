@@ -88,6 +88,7 @@ from .models import (
     image_variant_storage_key,
     normalize_director_profile_draft,
 )
+from .asset_spatial import ShotSpatialConstraints
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT, director_preset_identity
 from ...utils.oss_utils import OSSImageUploader, is_object_key, managed_object_key_from_url, sign_oss_urls_in_data
 from ...utils.uniart_catalog import fetch_uniart_catalog, normalize_uniart_catalog
@@ -6050,6 +6051,7 @@ def toggle_frame_lock(script_id: str, request: ToggleFrameLockRequest):
 
 class UpdateFrameRequest(BaseModel):
     frame_id: str
+    spatial_constraints: Optional[ShotSpatialConstraints] = None
     image_prompt: Optional[str] = None
     action_description: Optional[str] = None
     workbench_prompt_is_optimized: Optional[bool] = None
@@ -6077,6 +6079,7 @@ def update_frame(script_id: str, request: UpdateFrameRequest):
         updated_script = pipeline.update_frame(
             script_id,
             request.frame_id,
+            spatial_constraints=request.spatial_constraints,
             image_prompt=request.image_prompt,
             action_description=request.action_description,
             workbench_prompt_is_optimized=request.workbench_prompt_is_optimized,

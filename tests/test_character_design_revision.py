@@ -27,6 +27,26 @@ def test_character_design_draft_and_confirmed_revisions_are_separate():
     assert len(saved) == 3
 
 
+def test_character_spatial_constraints_are_revision_owned_and_validated():
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    character = SimpleNamespace(character_design={})
+    script = SimpleNamespace(id="project")
+    pipeline.scripts = {script.id: script}
+    pipeline._find_asset_with_source = lambda *_: (character, script)
+    pipeline._save_after_asset_mutation = lambda *_: None
+    spatial = {"schemaVersion": "iframe.character-spatial.v1", "unit": "meter",
+               "heightM": 1.8, "bodyWidthM": 0.48, "reachM": 0.75}
+    design = {"identity": {"visual_notes": "Brown eyes"}, "spatial_constraints": spatial,
+              "confirmed": True}
+    pipeline.update_asset_attributes("project", "character", "character", {"character_design": design})
+    assert character.character_design["design_revisions"][0]["design"]["spatial_constraints"] == spatial
+    with pytest.raises(ValueError, match="heightM"):
+        pipeline.update_asset_attributes("project", "character", "character", {"character_design": {
+            **design, "spatial_constraints": {**spatial, "heightM": -1},
+        }})
+    assert len(character.character_design["design_revisions"]) == 1
+
+
 def test_character_design_confirmation_requires_concrete_visual_value():
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
     character = SimpleNamespace(character_design={})
