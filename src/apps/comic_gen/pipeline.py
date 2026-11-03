@@ -2547,7 +2547,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         asset_type = raw.get("asset_type")
         asset_id = raw.get("asset_id")
         variant_id = raw.get("variant_id")
-        if asset_type not in ("character", "scene", "prop"):
+        if asset_type not in ("character", "scene", "prop", "platform_reference"):
             raise InvalidAssetReference("reference.asset_type is invalid")
         if not isinstance(asset_id, str) or not asset_id.strip():
             raise InvalidAssetReference("reference.asset_id is required")
@@ -2563,7 +2563,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # explain how a selected asset was applied; legacy callers retain the
         # original three-key shape.
         source_scope = raw.get("source_scope")
-        if source_scope not in (None, "shared", "project", "episode", "series", "private"):
+        if source_scope not in (None, "shared", "project", "episode", "series", "private", "platform"):
             raise InvalidAssetReference("reference.source_scope is invalid")
         revision = raw.get("revision")
         if revision is not None and (isinstance(revision, bool) or not isinstance(revision, int) or revision < 1):
@@ -3027,6 +3027,18 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         asset_type = normalized["asset_type"]
         asset_id = normalized["asset_id"]
+        if asset_type == "platform_reference":
+            if normalized.get("source_scope") not in (None, "platform"):
+                raise InvalidAssetReference("platform reference scope is invalid")
+            try:
+                revision = int(normalized["variant_id"])
+                if str(revision) != normalized["variant_id"] or normalized.get("revision", revision) != revision:
+                    raise ValueError("revision mismatch")
+                from ..platform_reference_catalog import resolve_active_visual_reference
+                media = resolve_active_visual_reference(asset_id, revision)
+            except (ValueError, OSError) as exc:
+                raise InvalidAssetReference("platform reference is unavailable or its revision changed") from exc
+            return str(media), normalized
         if isinstance(container, Script):
             asset, _source = self._find_asset_with_source(container, asset_id, asset_type)
         elif isinstance(container, Series):

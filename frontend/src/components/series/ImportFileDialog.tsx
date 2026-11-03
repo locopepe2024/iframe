@@ -78,8 +78,8 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
 
     const handleFileSelect = useCallback((selectedFile: File) => {
         const ext = selectedFile.name.split('.').pop()?.toLowerCase();
-        if (ext !== 'txt' && ext !== 'md') {
-            setError(t("onlyTxtMd"));
+        if (ext !== 'txt' && ext !== 'md' && ext !== 'docx') {
+            setError(t("onlyTxtMdDocx"));
             return;
         }
         setFile(selectedFile);
@@ -87,7 +87,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
         // Auto-fill title from filename if empty
         setSeriesTitle((prev) => {
             if (!prev) {
-                return selectedFile.name.replace(/\.(txt|md)$/, '');
+                return selectedFile.name.replace(/\.(txt|md|docx)$/i, '');
             }
             return prev;
         });
@@ -250,7 +250,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                         <input
                                             ref={fileInputRef}
                                             type="file"
-                                            accept=".txt,.md"
+                                            accept=".txt,.md,.docx"
                                             className="hidden"
                                             onChange={(e) => {
                                                 const f = e.target.files?.[0];

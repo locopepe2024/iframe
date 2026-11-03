@@ -207,7 +207,7 @@ class ProviderRoutingConfig(BaseModel):
     )
 
 class AssetImageReferenceIdentity(BaseModel):
-    asset_type: Literal["character", "scene", "prop"]
+    asset_type: Literal["character", "scene", "prop", "platform_reference"]
     asset_id: str
     variant_id: str
 
@@ -408,10 +408,10 @@ class AssetLibraryReference(BaseModel):
     task execution time, so delivery URLs never become durable request state.
     """
 
-    asset_type: Literal["character", "scene", "prop"]
+    asset_type: Literal["character", "scene", "prop", "platform_reference"]
     asset_id: str = Field(..., min_length=1)
     variant_id: str = Field(..., min_length=1)
-    source_scope: Optional[Literal["shared", "project", "episode", "series", "private"]] = None
+    source_scope: Optional[Literal["shared", "project", "episode", "series", "private", "platform"]] = None
     revision: Optional[int] = Field(None, ge=1)
     application_mode: Optional[Literal[
         "reference_only", "parameters_only", "parameters_with_media", "parameters_with_video"

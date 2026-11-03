@@ -1,6 +1,7 @@
 import asyncio
 import io
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -24,6 +25,47 @@ def wait_done(store, owner, job):
 
 def upload(text: str) -> UploadFile:
     return UploadFile(filename="script.md", file=io.BytesIO(text.encode("utf-8")))
+
+
+def docx_upload(paragraphs: list[str]) -> UploadFile:
+    content = io.BytesIO()
+    with zipfile.ZipFile(content, "w") as archive:
+        body = "".join(f"<w:p><w:r><w:t>{paragraph}</w:t></w:r></w:p>" for paragraph in paragraphs)
+        archive.writestr("word/document.xml",
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            f"<w:body>{body}</w:body></w:document>")
+    return UploadFile(filename="script.docx", file=io.BytesIO(content.getvalue()))
+
+
+def test_import_preview_extracts_docx_before_episode_split(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    calls = Mock(return_value=[{"episode_number": 1, "title": "第一集"}])
+    pipeline = SimpleNamespace(
+        script_processor=SimpleNamespace(llm=SimpleNamespace(
+            provider="openai", _get_default_model=lambda: "test")),
+        import_file_and_split=calls,
+    )
+    owner = UserContext("user", "owner", "", "")
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        jobs = ExtractionJobs(tmp_path / "jobs.db", executor=executor)
+        monkeypatch.setattr(api, "pipeline", pipeline)
+        monkeypatch.setattr(api, "extraction_jobs", jobs)
+        monkeypatch.setattr(api, "get_user_data_dir", lambda: str(tmp_path / "iframe"))
+        job = asyncio.run(api.import_file_preview(docx_upload(["第一集", "长街开场"]), 3, owner))
+        result = wait_done(jobs, "owner", job)
+        assert result["status"] == "completed"
+        calls.assert_called_once_with("第一集\n长街开场", 3)
+        assert api._load_import_text("owner", result["result"]["import_id"]) == "第一集\n长街开场"
+
+
+def test_import_preview_rejects_invalid_docx():
+    from src.apps.comic_gen import api
+
+    bad_file = UploadFile(filename="broken.docx", file=io.BytesIO(b"not a document"))
+    with pytest.raises(HTTPException, match="文档无法解析") as error:
+        asyncio.run(api.import_file_preview(bad_file, 3, UserContext("user", "owner", "", "")))
+    assert error.value.status_code == 400
 
 
 def test_import_preview_is_durable_deduplicated_and_owner_scoped(tmp_path, monkeypatch):

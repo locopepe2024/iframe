@@ -98,6 +98,8 @@ from ..platform_reference_catalog import (
     CHARACTER_CATEGORIES,
     CHARACTER_TAG_SUGGESTIONS,
     MANIFEST_PATH as PLATFORM_REFERENCE_MANIFEST,
+    platform_resource_by_id,
+    resolve_active_visual_reference,
     list_resources as list_platform_reference_resources,
     list_review_candidates as list_platform_reference_review_candidates,
     list_publisher_grants,
@@ -106,6 +108,7 @@ from ..platform_reference_catalog import (
     reviewer_is_authorized,
     set_publisher_grant,
     submit_generation_candidate,
+    submit_uploaded_visual_candidate,
 )
 from ..workbench_templates import list_workbench_templates
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -253,6 +256,48 @@ class PlatformCandidateRequest(BaseModel):
     dictionary_members: Optional[list[dict[str, Any]]] = None
 
 
+class PlatformUploadedVisualCandidateRequest(BaseModel):
+    source_image_url: str = Field(min_length=1)
+    category_path: Literal["reference/pose", "reference/costume", "reference/character"]
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=20000)
+    tags: list[str] = Field(default_factory=list, max_length=12)
+    rights_confirmed: bool
+    rights_note: str = Field(min_length=1, max_length=2000)
+    source_url: str = Field(default="", max_length=2048)
+
+
+@app.post("/platform-reference-library/upload-candidates")
+def submit_uploaded_platform_visual_candidate(
+    request: PlatformUploadedVisualCandidateRequest,
+    user: UserContext = Depends(require_user_context),
+):
+    if not publisher_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台候选提交权限不足")
+    try:
+        if request.source_image_url.startswith(("http://", "https://")):
+            raise ValueError("Only owner-uploaded images may be submitted")
+        stored = resolve_studio_reference(
+            request.source_image_url, user.owner_profile_id, output_root=pipeline.output_root,
+        )
+        resource = submit_uploaded_visual_candidate(
+            creator_profile_id=user.owner_profile_id,
+            category_path=request.category_path, title=request.title,
+            description=request.description, tags=request.tags,
+            media_source=Path(pipeline.output_root) / stored,
+            media_owner_root=Path(studio_media_dir(
+                user.owner_profile_id, "uploads", output_root=pipeline.output_root,
+            )),
+            rights_confirmed=request.rights_confirmed,
+            rights_note=request.rights_note, source_url=request.source_url,
+        )
+        return private_no_store_signed_response(resource)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.post("/platform-reference-library/candidates")
 def submit_platform_candidate(request: PlatformCandidateRequest, user: UserContext = Depends(require_user_context)):
     if not publisher_is_authorized(user.owner_profile_id):
@@ -289,19 +334,24 @@ def submit_platform_candidate(request: PlatformCandidateRequest, user: UserConte
 
 @app.get("/platform-reference-library/{resource_id}/media")
 def get_platform_reference_media(resource_id: str, preview: bool = False, user: UserContext = Depends(require_user_context)):
-    from ..platform_reference_catalog import _read_manifest
-    resource = next((item for item in _read_manifest().get("resources", []) if item["platform_resource_id"] == resource_id), None)
+    resource = platform_resource_by_id(resource_id)
     if resource is None or (resource.get("status") != "active" and not (
         reviewer_is_authorized(user.owner_profile_id) or resource.get("provenance", {}).get("creator_profile_id") == user.owner_profile_id
     )):
         raise HTTPException(status_code=404, detail="平台媒体不存在")
-    filename = resource.get("payload", {}).get("media_file")
-    if not isinstance(filename, str) or Path(filename).name != filename:
-        raise HTTPException(status_code=404, detail="平台媒体不存在")
     media_dir = PLATFORM_REFERENCE_MANIFEST.parent / "media"
-    source = (media_dir / filename).resolve()
-    if not source.is_relative_to(media_dir.resolve()) or not source.is_file():
-        raise HTTPException(status_code=404, detail="平台媒体不存在")
+    if resource.get("payload", {}).get("remote_url"):
+        try:
+            source = resolve_active_visual_reference(resource_id, resource["revision"])
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    else:
+        filename = resource.get("payload", {}).get("media_file")
+        if not isinstance(filename, str) or Path(filename).name != filename:
+            raise HTTPException(status_code=404, detail="平台媒体不存在")
+        source = (media_dir / filename).resolve()
+        if not source.is_relative_to(media_dir.resolve()) or not source.is_file():
+            raise HTTPException(status_code=404, detail="平台媒体不存在")
     if preview:
         try:
             source = Path(create_media_thumbnail(str(source), str(media_dir), 320))
@@ -2291,27 +2341,41 @@ async def import_file_preview(
     suggested_episodes: int = 3,
     user: UserContext = Depends(require_studio_user),
 ):
-    """Upload text once and start or resume a durable episode-split job."""
+    """Extract uploaded script text and start or resume an episode-split job."""
     if suggested_episodes < 1 or suggested_episodes > 100:
         raise HTTPException(status_code=400, detail="建议集数应在 1-100 之间")
     try:
-        content_bytes = await file.read()
-        if len(content_bytes) > 2 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="TXT 文件超过 2 MB。请拆分文件后分别导入；分集分析上下文上限为约 80,000 字符。")
-        if content_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF")):
-            raise HTTPException(status_code=400, detail="请上传 TXT、Markdown 或 Fountain 文本文件，不能上传图片或视频")
-        try:
-            text = content_bytes.decode("utf-8-sig")
-        except UnicodeDecodeError:
+        filename = file.filename or "import.txt"
+        is_docx = Path(filename).suffix.lower() == ".docx"
+        limit = 10 * 1024 * 1024 if is_docx else 2 * 1024 * 1024
+        content_bytes = await file.read(limit + 1)
+        if len(content_bytes) > limit:
+            detail = "DOCX 文件超过 10 MB，请拆分文件后分别导入" if is_docx else "TXT 文件超过 2 MB。请拆分文件后分别导入；分集分析上下文上限为约 80,000 字符。"
+            raise HTTPException(status_code=413, detail=detail)
+        if is_docx:
+            import tempfile
+            from ...utils.reference_files import read_reference_document
+
+            with tempfile.TemporaryDirectory(prefix="iframe-series-import-") as directory:
+                source = Path(directory) / "source.docx"
+                source.write_bytes(content_bytes)
+                text = await asyncio.get_event_loop().run_in_executor(
+                    None, read_reference_document, str(source)
+                )
+        else:
+            if content_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF")):
+                raise HTTPException(status_code=400, detail="请上传 TXT、Markdown、DOCX 或 Fountain 文本文件，不能上传图片或视频")
             try:
-                text = content_bytes.decode("utf-16")
+                text = content_bytes.decode("utf-8-sig")
             except UnicodeDecodeError:
-                text = content_bytes.decode("gb18030", errors="replace")
+                try:
+                    text = content_bytes.decode("utf-16")
+                except UnicodeDecodeError:
+                    text = content_bytes.decode("gb18030", errors="replace")
         if not text.strip():
             raise HTTPException(status_code=400, detail="文件内容为空")
 
         llm = pipeline.script_processor.llm
-        filename = file.filename or "import.txt"
         fingerprint = hashlib.sha256(json.dumps([
             "source-newlines-v2",
             hashlib.sha256(text.encode("utf-8")).hexdigest(),

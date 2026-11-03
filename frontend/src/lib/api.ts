@@ -234,10 +234,10 @@ export const authenticatedFetch = (
 export type ProviderMode = "dashscope" | "vendor";
 
 export interface AssetLibraryReference {
-    asset_type: "character" | "scene" | "prop";
+    asset_type: "character" | "scene" | "prop" | "platform_reference";
     asset_id: string;
     variant_id: string;
-    source_scope?: "shared" | "project" | "episode" | "series" | "private";
+    source_scope?: "shared" | "project" | "episode" | "series" | "private" | "platform";
     revision?: number;
     application_mode?: "reference_only" | "parameters_only" | "parameters_with_media" | "parameters_with_video";
     applied_fields?: string[];
@@ -838,6 +838,20 @@ export const api = {
         rights_confirmed: boolean;
     }): Promise<PlatformReferenceResource> => {
         const res = await axios.post(`${API_URL}/platform-reference-library/candidates`, request);
+        return res.data;
+    },
+
+    submitUploadedPlatformVisualCandidate: async (request: {
+        source_image_url: string;
+        category_path: "reference/pose" | "reference/costume" | "reference/character";
+        title: string;
+        description: string;
+        tags: string[];
+        rights_confirmed: boolean;
+        rights_note: string;
+        source_url: string;
+    }): Promise<PlatformReferenceResource> => {
+        const res = await axios.post<PlatformReferenceResource>(`${API_URL}/platform-reference-library/upload-candidates`, request);
         return res.data;
     },
 

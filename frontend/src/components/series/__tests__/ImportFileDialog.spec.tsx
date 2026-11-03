@@ -110,7 +110,7 @@ describe('ImportFileDialog', () => {
         it('shows file upload zone', () => {
             renderDialog();
             expect(screen.getByText('拖拽文件到此处，或点击选择')).toBeInTheDocument();
-            expect(screen.getByText(/支持 .txt \/ .md 文件/)).toBeInTheDocument();
+            expect(screen.getByText(/支持 .txt \/ .md \/ .docx 文件/)).toBeInTheDocument();
         });
 
         it('shows series title input', () => {
@@ -146,12 +146,26 @@ describe('ImportFileDialog', () => {
             expect(titleInput.value).toBe('my-story');
         });
 
+        it('accepts a Word document and sends it to the existing preview API', async () => {
+            mockImportFilePreview.mockResolvedValue(mockPreviewResult);
+            renderDialog();
+            const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+            expect(fileInput.accept).toContain('.docx');
+            const file = new File(['word content'], 'my-story.DOCX', {
+                type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            });
+            fireEvent.change(fileInput, { target: { files: [file] } });
+            expect((screen.getByPlaceholderText('输入系列标题...') as HTMLInputElement).value).toBe('my-story');
+            fireEvent.click(screen.getByText('解析并预览分集'));
+            await waitFor(() => expect(mockImportFilePreview).toHaveBeenCalledWith(file, 3));
+        });
+
         it('shows error for unsupported file types', () => {
             renderDialog();
             const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
             const file = new File(['content'], 'doc.pdf', { type: 'application/pdf' });
             fireEvent.change(fileInput, { target: { files: [file] } });
-            expect(screen.getByText('仅支持 .txt 和 .md 文件')).toBeInTheDocument();
+            expect(screen.getByText('仅支持 .txt、.md 和 .docx 文件')).toBeInTheDocument();
         });
     });
 

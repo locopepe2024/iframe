@@ -79,7 +79,7 @@ it('submits an authorized image with the reviewed description and stable output 
   fireEvent.change(screen.getByLabelText('nameLabel'), { target: { value: '面部基准' } });
   fireEvent.change(screen.getByLabelText('配套 Prompt（可编辑）'), { target: { value: '编辑后的可复用描述' } });
   fireEvent.click(screen.getByRole('button', { name: '角色设定稿' }));
-  fireEvent.change(screen.getByLabelText('角色标签'), { target: { value: '角色设定稿，转面三视图' } });
+  fireEvent.change(screen.getByLabelText('检索标签'), { target: { value: '角色设定稿，转面三视图' } });
   fireEvent.click(screen.getByRole('checkbox', { name: '我确认拥有将此内容提交平台审核的权利' }));
   fireEvent.click(screen.getByRole('button', { name: '提交平台审核' }));
   await waitFor(() => expect(api.submitPlatformCandidate).toHaveBeenCalledWith({
