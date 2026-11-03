@@ -25,6 +25,7 @@ from ..studio_access import studio_owner_dir
 from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
 from .mentions import TOKEN, compile_mentions
 from .prompt_contract import compile_h3, guidance_snapshot
+from .shot_review import import_candidates, timeline_key, validate_items
 from ...utils.model_catalog import load_generated_model_catalog
 from ...utils.uniart_catalog import fetch_uniart_catalog
 
@@ -1451,3 +1452,28 @@ class RecreationService:
             record["status"] = "confirmed"
             self._save(db, record)
         return record
+
+    def save_shot_review(self, project_id, analysis_id, key, review_revision, items=None, candidate=None):
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if record.get("analysis_id") != analysis_id or not record.get("analysis") or not record.get("timeline"):
+                raise HTTPException(409, "Confirm the current timeline before reviewing shots")
+            current_key = timeline_key(record)
+            if key != current_key:
+                raise HTTPException(409, "Shot boundaries changed; refresh the review")
+            previous = record.get("shot_review") or {}
+            current_revision = previous.get("review_revision", 0) if previous.get("timeline_key") == current_key else 0
+            if review_revision != current_revision:
+                raise HTTPException(409, "Review changed; refresh before saving")
+            if (items is None) == (candidate is None):
+                raise HTTPException(422, "Provide either review items or candidate analysis")
+            if candidate is not None and current_revision:
+                raise HTTPException(409, "Candidate import would overwrite an existing review")
+            selected = import_candidates(candidate, record) if candidate is not None else items
+            validate_items(selected, record)
+            record["shot_review"] = {"schema_version": "shot-review.v1", "analysis_id": analysis_id,
+                                     "source_fingerprint": record["source_fingerprint"],
+                                     "timeline_key": current_key, "review_revision": current_revision + 1,
+                                     "items": selected, "updated_at": time.time()}
+            self._save(db, record)
+            return record

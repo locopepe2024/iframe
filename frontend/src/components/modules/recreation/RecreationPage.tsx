@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Film, FolderOpen, Loader2, Plus, RefreshCw, Trash2, Upload, X, Library } from "lucide-react";
+import { Check, Film, FolderOpen, Library, Loader2, Pause, Play, Plus, RefreshCw, SkipBack, SkipForward, Trash2, Upload, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import axios from "axios";
 import { API_URL } from "@/lib/api";
 import { CutEvidence, importCuts, recreationApi, RecreationMedia, RecreationProject, RecreationProjectVersion, seconds } from "@/lib/recreation";
 import ShotReferences from "./ShotReferences";
+import ShotReviewTimeline from "./ShotReviewTimeline";
 
 const workflowSteps = ["split", "parse", "analyze", "replace", "submit", "assemble"] as const;
 type WorkflowStep = typeof workflowSteps[number];
@@ -51,6 +52,7 @@ export default function RecreationPage() {
   const [cuts, setCuts] = useState<number[]>([]);
   const [evidence, setEvidence] = useState<Record<number, CutEvidence>>({});
   const [frameIndex, setFrameIndex] = useState(1);
+  const [playing, setPlaying] = useState(false);
   const [importText, setImportText] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -198,6 +200,22 @@ export default function RecreationPage() {
     return "pending";
   };
   const updateRunProgress = useCallback((next: RunProgress) => setRunProgress(next), []);
+  const seekFrame = (frame: number) => {
+    if (!analysis) return;
+    const selected = Math.max(1, Math.min(analysis.frame_pts.length, frame));
+    setFrameIndex(selected);
+    if (video.current) video.current.currentTime = seconds(analysis, analysis.frame_pts[selected - 1]);
+  };
+  const syncVideoFrame = () => {
+    if (!analysis || !video.current) return;
+    const time = video.current.currentTime;
+    let nearest = 0;
+    for (let i = 1; i < analysis.frame_pts.length; i++) {
+      if (Math.abs(seconds(analysis, analysis.frame_pts[i]) - time) >= Math.abs(seconds(analysis, analysis.frame_pts[nearest]) - time)) break;
+      nearest = i;
+    }
+    setFrameIndex(nearest + 1);
+  };
 
   return <div className="h-full overflow-y-auto p-4 md:p-8 text-foreground">
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
@@ -287,8 +305,8 @@ export default function RecreationPage() {
               <FolderOpen size={16} />{t("openAssets")}
             </button>
           </div>
-          <video ref={video} src={media(project.source_url)} controls preload="metadata"
-            className="mb-5 w-full max-h-[420px] aspect-video bg-black object-contain" />
+          {step !== "analyze" && <video ref={video} src={media(project.source_url)} controls preload="metadata"
+            className="mb-5 w-full max-h-[420px] aspect-video bg-black object-contain" />}
           {step === "split" && <section aria-labelledby="split-title" className="space-y-3">
             <h3 id="split-title" className="font-semibold">{t("steps.split")}</h3>
             {analysis && <p className="text-xs text-text-muted">{analysis.width} × {analysis.height} · {analysis.duration_seconds.toFixed(6)} s · {t("audioTracks", { count: analysis.audio_streams })}</p>}
@@ -356,12 +374,27 @@ export default function RecreationPage() {
                 </li>;
               })}</ol>
             </section>}
-            {step === "analyze" && <section className="border-t border-border py-5 space-y-3">
-              <h3 className="font-semibold">{t("steps.analyze")}</h3>
-              <p className="text-sm text-text-muted">{t("analysisScope")}</p>
-              <details><summary className="cursor-pointer text-sm">{t("contactSheet")}</summary>
-                <img loading="lazy" decoding="async" width={960} height={540} src={media(analysis.contact_sheet_preview_url || analysis.contact_sheet_url)} alt={t("contactSheet")} className="mt-4 w-full" />
-              </details>
+            {step === "analyze" && <section className="border-t border-border py-5">
+              <h3 className="font-semibold mb-4">{t("steps.analyze")}</h3>
+              {project.timeline ? <ShotReviewTimeline project={project} currentFrame={frameIndex} seek={seekFrame} onSaved={record => {
+                setProject(record); setProjects(all => all.map(p => p.id === record.id ? record : p));
+              }} viewer={<div className="min-w-0 space-y-3">
+                  <video ref={video} src={media(project.source_url)} preload="metadata" playsInline onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={syncVideoFrame} onSeeked={syncVideoFrame}
+                    className="w-full aspect-video bg-black object-contain" />
+                  <div className="flex items-center gap-2">
+                    <button type="button" className="glass-button shrink-0 p-2" aria-label={t(playing ? "pause" : "play")} title={t(playing ? "pause" : "play")} onClick={() => {
+                      if (video.current?.paused) void video.current.play().catch(() => setPlaying(false));
+                      else video.current?.pause();
+                    }}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
+                    <button type="button" className="glass-button shrink-0 p-2" aria-label="上一帧" title="上一帧" disabled={frameIndex <= 1} onClick={() => seekFrame(frameIndex - 1)}><SkipBack size={16} /></button>
+                    <input type="range" aria-label="拉片帧" min={1} max={analysis.frame_pts.length} value={frameIndex} className="min-w-0 flex-1" onChange={e => seekFrame(Number(e.target.value))} />
+                    <button type="button" className="glass-button shrink-0 p-2" aria-label="下一帧" title="下一帧" disabled={frameIndex >= analysis.frame_pts.length} onClick={() => seekFrame(frameIndex + 1)}><SkipForward size={16} /></button>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <label className="flex items-center gap-2">{t("frame")}<input type="number" min={1} max={analysis.frame_pts.length} value={frameIndex} className="glass-input w-20" onChange={e => seekFrame(Number(e.target.value))} /></label>
+                    <span className="font-mono tabular-nums">{seconds(analysis, analysis.frame_pts[frameIndex - 1]).toFixed(6)} s</span>
+                  </div>
+                </div>} /> : <p className="text-sm text-text-muted">{t("timelineNeedsConfirmation")}</p>}
             </section>}
             {project.status === "confirmed" && project.timeline && <ShotReferences key={`${project.id}:${project.analysis_id}:${project.timeline.shots.map(s => s.id).join(",")}`} project={project} disabled={busy || !!dirty} stage={step} onProgress={updateRunProgress} onSaved={record => {
               setProject(record); setProjects(all => all.map(p => p.id === record.id ? record : p));

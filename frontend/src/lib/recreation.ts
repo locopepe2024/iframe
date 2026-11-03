@@ -16,7 +16,21 @@ export interface RecreationProject {
   status: "registered" | "queued" | "analyzing" | "review" | "confirmed" | "failed" | "cancelled";
   error: string | null; analysis: SourceAnalysis | null;
   timeline: { cuts: { pts: number; source: string }[]; shots: RecreationShot[] } | null;
+  shot_review?: ShotReview | null;
 }
+
+export type ShotReviewDecision = "pending" | "accept" | "edit" | "reject" | "unknown";
+export interface ShotReviewItem {
+  id: string; kind: "cut_scene" | "camera" | "optics" | "scene" | "object" | "action";
+  shot_id: string; frame_span: [number, number]; evidence_frames: number[];
+  candidate: string; edited_text: string; decision: ShotReviewDecision; actor_id: string;
+  source: Record<string, unknown>;
+}
+export interface ShotReview {
+  schema_version: string; analysis_id: string; source_fingerprint: string;
+  timeline_key: string; review_revision: number; items: ShotReviewItem[]; updated_at: number;
+}
+export interface ShotReviewEnvelope { timeline_key: string; review: ShotReview | null; stale: boolean }
 
 export interface RecreationShot {
   id?: string; start_pts: number; end_pts: number;
@@ -357,4 +371,11 @@ export const recreationApi = {
     }).then(r => r.data),
   evidence: (project: RecreationProject, pts: number): Promise<CutEvidence> =>
     axios.post(`${API_URL}/recreation/projects/${project.id}/evidence`, { analysis_id: project.analysis_id, pts }).then(r => r.data),
+  getShotReview: (projectId: string): Promise<ShotReviewEnvelope> =>
+    axios.get(`${API_URL}/recreation/projects/${projectId}/shot-review`).then(r => r.data),
+  saveShotReview: (project: RecreationProject, timelineKey: string, reviewRevision: number,
+    update: { items: ShotReviewItem[] } | { candidate: Record<string, unknown> }): Promise<RecreationProject> =>
+    axios.put(`${API_URL}/recreation/projects/${project.id}/shot-review`, {
+      analysis_id: project.analysis_id, timeline_key: timelineKey, review_revision: reviewRevision, ...update,
+    }).then(r => r.data),
 };
