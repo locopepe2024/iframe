@@ -16,7 +16,7 @@ type RunProgress = { generation: WorkflowStatus; assembly: WorkflowStatus };
 const emptyRunProgress: RunProgress = { generation: "pending", assembly: "pending" };
 const workspaceStorageKey = "iframe.recreation.workspace.v1";
 
-type SavedWorkspace = { projectId: string; step: WorkflowStep };
+type SavedWorkspace = { projectId: string; step: WorkflowStep; workflowVersion?: number };
 
 function readSavedWorkspace(): SavedWorkspace | null {
   if (typeof window === "undefined") return null;
@@ -26,7 +26,7 @@ function readSavedWorkspace(): SavedWorkspace | null {
     const value = JSON.parse(raw) as Partial<SavedWorkspace>;
     return typeof value.projectId === "string" && value.projectId.length > 0
       && typeof value.step === "string" && workflowSteps.includes(value.step as WorkflowStep)
-      ? { projectId: value.projectId, step: value.step as WorkflowStep }
+      ? { projectId: value.projectId, step: value.step as WorkflowStep, workflowVersion: value.workflowVersion }
       : null;
   } catch {
     return null;
@@ -35,7 +35,7 @@ function readSavedWorkspace(): SavedWorkspace | null {
 
 function saveWorkspace(value: SavedWorkspace) {
   if (typeof window === "undefined") return;
-  try { window.localStorage.setItem(workspaceStorageKey, JSON.stringify(value)); } catch { /* storage is optional */ }
+  try { window.localStorage.setItem(workspaceStorageKey, JSON.stringify({ ...value, workflowVersion: 2 })); } catch { /* storage is optional */ }
 }
 
 function clearSavedWorkspace() {
@@ -85,7 +85,7 @@ export default function RecreationPage() {
     setEvidence(Object.fromEntries([...(record.analysis?.candidates ?? []), ...Object.values(record.analysis?.manual_evidence ?? {})].map(c => [c.pts, c])));
     setFrameIndex(1); setImportText(""); setError("");
     setRunProgress(emptyRunProgress);
-    setStep(record.status === "confirmed" ? "replace" : record.analysis ? "parse" : "split");
+    setStep(record.status === "confirmed" ? "analyze" : record.analysis ? "parse" : "split");
     setProjects(all => [record, ...all.filter(p => p.id !== record.id)]);
   }
 
@@ -109,7 +109,8 @@ export default function RecreationPage() {
         const restored = await recreationApi.get(saved.projectId);
         if (!alive) return;
         open(restored, true);
-        setStep(saved.step);
+        setStep(saved.workflowVersion !== 2 && saved.step === "replace" && restored.status === "confirmed" && !restored.shot_review
+          ? "analyze" : saved.step);
       } catch {
         // A deleted or inaccessible project must not make the rest of the workspace unusable.
         clearSavedWorkspace();
@@ -193,8 +194,8 @@ export default function RecreationPage() {
     if (!project) return "pending";
     if (index === 0) return project ? "deferred" : "pending";
     if (index === 1) return project.status === "failed" ? "failed" : project.status === "confirmed" ? "complete" : analysis || processing ? "active" : "pending";
-    if (index === 2) return project.status === "failed" ? "failed" : analysis ? "complete" : "pending";
-    if (index === 3) return project.status === "confirmed" ? "active" : "pending";
+    if (index === 2) return project.status === "failed" ? "failed" : analysis ? "active" : "pending";
+    if (index === 3) return project.status === "confirmed" && step === "replace" ? "active" : "pending";
     if (index === 4) return runProgress.generation;
     if (index === 5) return runProgress.assembly;
     return "pending";
@@ -328,7 +329,8 @@ export default function RecreationPage() {
               <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
                 <h3 className="font-semibold">{t("timeline")} · {cuts.length + 1} {t("shots")}</h3>
                 <button className="glass-button flex items-center gap-2" disabled={busy}
-                  onClick={() => void act(async () => open(await recreationApi.confirm(project, cuts)))}><Check size={16} />{t("confirm")}</button>
+                  onClick={() => void act(async () => open(await recreationApi.confirm(project,
+                    importText.trim() ? importCuts(importText, analysis) : cuts)))}><Check size={16} />{t("confirm")}</button>
               </div>
               <div className="flex flex-wrap gap-3 items-end mb-4">
                 <label className="text-sm flex-1 min-w-[180px]">{t("frame")}
@@ -351,6 +353,7 @@ export default function RecreationPage() {
                 <button className="glass-button" disabled={busy} onClick={() => void act(async () => {
                   const imported = importCuts(importText, analysis);
                   setCuts(imported);
+                  setImportText("");
                 })}>{t("import")}</button>
               </div>
               {cuts.length === 0 && <p className="text-text-muted text-sm py-3">{t("noCuts")}</p>}
@@ -396,7 +399,7 @@ export default function RecreationPage() {
                   </div>
                 </div>} /> : <p className="text-sm text-text-muted">{t("timelineNeedsConfirmation")}</p>}
             </section>}
-            {project.status === "confirmed" && project.timeline && <ShotReferences key={`${project.id}:${project.analysis_id}:${project.timeline.shots.map(s => s.id).join(",")}`} project={project} disabled={busy || !!dirty} stage={step} onProgress={updateRunProgress} onSaved={record => {
+            {project.status === "confirmed" && project.timeline && ["replace", "submit", "assemble"].includes(step) && <ShotReferences key={`${project.id}:${project.analysis_id}:${project.timeline.shots.map(s => s.id).join(",")}`} project={project} disabled={busy || !!dirty} stage={step} onProgress={updateRunProgress} onSaved={record => {
               setProject(record); setProjects(all => all.map(p => p.id === record.id ? record : p));
             }} />}
           </>}
