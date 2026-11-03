@@ -2,6 +2,7 @@ import axios from 'axios';
 import { API_URL, type AssemblyEditPlan } from './api';
 export interface EditMaterial { id: string; name: string; url: string; origin?: string; sha256: string; duration_ms: number; video: boolean; audio: boolean; folder_id?: string | null; folder_name?: string | null; deletable?: boolean }
 export interface EditFolder { id: string; name: string; parent_id?: string | null; created_at: number }
+export interface EditVoiceClone { id: string; name: string; model: string; created_at: number; family: 'minimax'; origin: 'clone' }
 export interface EditProject { id: string; title: string; revision: number; plan: AssemblyEditPlan | null; sources: Record<string, EditMaterial>; output: { url: string; revision: number } | null }
 // Reject SPA HTML and incompatible API payloads before they enter React state.
 const contractError = () => new Error('剪辑服务返回的数据格式异常，请刷新重试 / Invalid editing API response; reload and retry');
@@ -36,6 +37,13 @@ export const editing = {
   material: async (id: string): Promise<EditMaterial> => (await axios.get(`${base}/materials/${encodeURIComponent(id)}`)).data,
   transcriptionAudio: async (id: string, startMs: number, endMs: number): Promise<Blob> => (await axios.post(`${base}/materials/${encodeURIComponent(id)}/transcription-audio`, { start_ms: startMs, end_ms: endMs }, { responseType: 'blob' })).data,
   synthesizeVoice: async (text: string, voiceId: string, speed = 1, pitch = 1, volume = 50): Promise<EditMaterial> => (await axios.post(`${base}/voiceover`, { text, voice_id: voiceId, speed, pitch, volume })).data,
+  voiceClones: async (): Promise<EditVoiceClone[]> => array<EditVoiceClone>((await axios.get(`${base}/voice-clones`)).data, named),
+  cloneVoice: async (file: File, name: string, consentConfirmed: boolean): Promise<EditVoiceClone> => {
+    const data = new FormData();
+    data.append('file', file); data.append('name', name); data.append('model', 'speech-2.8-hd');
+    data.append('consent_confirmed', String(consentConfirmed));
+    return (await axios.post(`${base}/voice-clones`, data, { timeout: 200000 })).data;
+  },
   upload: async (file: File, folderId?: string | null): Promise<EditMaterial> => { const data = new FormData(); data.append('file', file); return (await axios.post(`${base}/materials`, data, { params: { folder_id: folderId || undefined } })).data; },
   deleteMaterial: async (id: string) => (await axios.delete(`${base}/materials/${encodeURIComponent(id)}`)).data,
   save: async (id: string, revision: number, plan: AssemblyEditPlan): Promise<EditProject> => project((await axios.put(`${base}/projects/${id}/plan`, { revision, plan })).data),
