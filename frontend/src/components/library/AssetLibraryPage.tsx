@@ -402,7 +402,14 @@ function PlatformReferenceReviewQueue() {
           </details>}
           {!!resource.payload && typeof resource.payload === "object" && !!(resource.payload as { media_file?: string }).media_file && <PlatformCandidatePreview resourceId={resource.platform_resource_id} kind={resource.kind} />}
           {!!resource.tags?.length && <div className="flex flex-wrap gap-1 mt-3">{resource.tags.map((tag) => <span key={tag} className="text-xs rounded bg-surface-inset px-2 py-1 text-text-muted">{tag}</span>)}</div>}
-          <dl className="mt-4 space-y-1 text-xs text-text-muted"><div><dt className="inline font-medium">{t("reviewSource")}：</dt> <dd className="inline">{resource.provenance.source || "—"}</dd></div><div><dt className="inline font-medium">{t("reviewLicense")}：</dt> <dd className="inline">{resource.provenance.license}</dd></div><div><dt className="inline font-medium">发布权声明：</dt> <dd className="inline">{resource.provenance.rights_confirmed ? "已确认，待审核" : "未提供"}</dd></div></dl>
+          <dl className="mt-4 space-y-1 text-xs text-text-muted">
+            <div><dt className="inline font-medium">{t("reviewSource")}：</dt> <dd className="inline">{resource.provenance.source || "—"}</dd></div>
+            <div><dt className="inline font-medium">{t("reviewLicense")}：</dt> <dd className="inline">{resource.provenance.license}</dd></div>
+            <div><dt className="inline font-medium">发布权声明：</dt> <dd className="inline">{resource.provenance.rights_confirmed ? "已确认，待审核" : "未提供"}</dd></div>
+            {resource.provenance.notice_text && <div><dt className="inline font-medium">权利依据：</dt> <dd className="inline whitespace-pre-wrap break-words">{resource.provenance.notice_text}</dd></div>}
+            {resource.provenance.source_url && <div><dt className="inline font-medium">来源网址：</dt> <dd className="inline break-all">{resource.provenance.source_url}</dd></div>}
+            {typeof resource.payload?.media_sha256 === "string" && <div><dt className="inline font-medium">图片 SHA-256：</dt> <dd className="inline break-all font-mono">{resource.payload.media_sha256}</dd></div>}
+          </dl>
           <button type="button" disabled={publishing === resource.platform_resource_id} onClick={() => void promote(resource)} className="mt-4 w-full glass-button font-semibold disabled:opacity-50">{publishing === resource.platform_resource_id ? t("reviewPublishing") : t("reviewPublish")}</button>
         </article>)}
         </div>}

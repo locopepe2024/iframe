@@ -7,6 +7,7 @@ const mocked = vi.hoisted(() => ({
   getWorkbenchTemplates: vi.fn(),
   getPlatformReferenceLibrary: vi.fn(), getPlatformReferenceReviewer: vi.fn(),
   getPlatformPublisher: vi.fn(), uploadLibraryImage: vi.fn(), submitUploadedPlatformVisualCandidate: vi.fn(),
+  getPlatformReferenceReviewQueue: vi.fn(), getPlatformPublisherGrants: vi.fn(),
 }));
 vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '', authenticatedFetch: mocked.authenticatedFetch }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
@@ -31,9 +32,26 @@ beforeEach(() => {
   mocked.getWorkbenchTemplates.mockResolvedValue({ schema_version: 1, catalog_revision: 'test', templates: [] });
   mocked.getPlatformReferenceReviewer.mockResolvedValue({ authorized: false });
   mocked.getPlatformPublisher.mockResolvedValue({ authorized: false });
+  mocked.getPlatformReferenceReviewQueue.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [] });
+  mocked.getPlatformPublisherGrants.mockResolvedValue({ profile_ids: [] });
   mocked.uploadLibraryImage.mockResolvedValue({ image_url: 'uploads/pose.png' });
   mocked.submitUploadedPlatformVisualCandidate.mockResolvedValue({ platform_resource_id: 'candidate-1' });
   mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [] });
+});
+
+it('shows upload rights evidence to the reviewer before publication', async () => {
+  mocked.getPlatformReferenceReviewer.mockResolvedValue({ authorized: true });
+  mocked.getPlatformReferenceReviewQueue.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [{
+    platform_resource_id: 'candidate-1', revision: 1, kind: 'image', category_path: 'reference/pose',
+    title: '站姿', status: 'candidate', payload: { media_file: 'image.png', media_sha256: 'image-hash' },
+    provenance: { source: 'owner-upload', license: 'creator_declared_pending_review',
+      content_sha256: 'candidate-hash', rights_confirmed: true, notice_text: '原创并拥有发布权', source_url: 'https://example.org/pose' },
+  }] });
+  render(<AssetLibraryPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'platform' }));
+  expect(await screen.findByText('原创并拥有发布权')).toBeInTheDocument();
+  expect(screen.getByText('https://example.org/pose')).toBeInTheDocument();
+  expect(screen.getByText('image-hash')).toBeInTheDocument();
 });
 
 it('submits an owner upload as a visual candidate for an authorized publisher', async () => {
