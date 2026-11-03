@@ -4,9 +4,73 @@ from unittest.mock import Mock
 import pytest
 
 from src.audio.uniart_tts import UniArtTTSProcessor, UniArtTTSError
+from src.audio.uniart_voice_clone import VoiceCloneStore, create_voice_clone
 from src.utils.uniart_catalog import normalize_uniart_model
 
 VOICE = 'uniart:speech-2.8-hd:male-qn-qingse'
+
+
+def test_clone_uses_uniart_contract_and_owner_scoped_tts(gateway, tmp_path, monkeypatch):
+    import io
+    from src.apps.identity import UserContext
+    from src.apps.studio_access import set_studio_user, reset_studio_user
+    import src.audio.uniart_voice_clone as clone_module
+
+    config, _ = gateway
+    monkeypatch.setattr(clone_module, 'studio_uniart_config', lambda: dict(config))
+    monkeypatch.setattr(clone_module, 'fetch_selected_catalog', lambda config: [
+        {'api_model_id': 'speech-2.8-hd', 'capabilities': ['audio']},
+    ])
+    clone_post = Mock(return_value=Mock(status_code=200))
+    def clone_response(url, **kwargs):
+        if url == 'https://gateway.test/v1/audio/speech':
+            return Mock(status_code=200, content=b'ID3audio')
+        assert url == 'https://gateway.test/v1/minimax/voice-clone'
+        assert kwargs['headers']['Authorization'] == 'Bearer owner-a-key'
+        assert kwargs['data']['model'] == 'speech-2.8-hd'
+        assert kwargs['data']['consent_confirmed'] == 'true'
+        assert kwargs['files']['sample'] == ('sample.wav', b'RIFFxxxxWAVEdata')
+        return Mock(status_code=200, json=lambda: {'voice_id': kwargs['data']['voice_id'], 'file_id': 123})
+    clone_post.side_effect = clone_response
+    monkeypatch.setattr(clone_module.requests, 'post', clone_post)
+    record = create_voice_clone('owner-a', tmp_path, io.BytesIO(b'RIFFxxxxWAVEdata'),
+                                'sample.wav', 'Narrator', 'speech-2.8-hd', True)
+    assert VoiceCloneStore(tmp_path).list('owner-a') == [record]
+    assert VoiceCloneStore(tmp_path).list('owner-b') == []
+    assert not VoiceCloneStore(tmp_path).contains('owner-b', record['id'])
+
+    token = set_studio_user(UserContext('a', 'owner-a', 'A', ''))
+    try:
+        UniArtTTSProcessor().synthesize('Hello', tmp_path / 'clone.mp3',
+                                        voice=record['id'], output_root=tmp_path)
+    finally:
+        reset_studio_user(token)
+    assert clone_post.call_args.kwargs['json']['metadata']['voice_clone'] is True
+    assert clone_post.call_args.kwargs['json']['voice'] == record['id'].split(':')[2]
+
+    token = set_studio_user(UserContext('b', 'owner-b', 'B', ''))
+    try:
+        with pytest.raises(UniArtTTSError) as error:
+            UniArtTTSProcessor().synthesize('Hello', tmp_path / 'foreign.mp3',
+                                            voice=record['id'], output_root=tmp_path)
+        assert error.value.status_code == 404
+    finally:
+        reset_studio_user(token)
+    assert clone_post.call_count == 2
+
+
+def test_clone_rejects_bad_inputs_before_gateway(gateway, tmp_path, monkeypatch):
+    import io
+    import src.audio.uniart_voice_clone as clone_module
+    post = Mock()
+    monkeypatch.setattr(clone_module.requests, 'post', post)
+    for data, filename, consent in ((b'a', 'x.wav', False), (b'', 'x.wav', True),
+                                    (b'a', 'x.txt', True), (b'a' * (20 * 1024 * 1024 + 1), 'x.wav', True),
+                                    (b'not audio', 'x.wav', True)):
+        with pytest.raises(UniArtTTSError):
+            create_voice_clone('owner-a', tmp_path, io.BytesIO(data), filename,
+                               'Test', 'speech-2.8-hd', consent)
+    post.assert_not_called()
 
 @pytest.fixture
 def gateway(monkeypatch):

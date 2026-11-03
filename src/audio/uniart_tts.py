@@ -17,6 +17,7 @@ import requests
 
 from ..apps.studio_access import require_studio_user, studio_media_dir, studio_uniart_config
 from ..utils.provider_catalog import catalog_name, fetch_selected_catalog
+from ..utils.storage_config import media_root
 
 MODELS = ('speech-2.8-hd', 'speech-2.8-turbo')
 # Versioned official metadata; listing and synthesis share the same allowlist.
@@ -55,12 +56,20 @@ class UniArtTTSProcessor:
                 for model in models for voice in VOICES]
 
     def _prepare(self, text, voice, speech_rate, pitch_rate, volume, instructions,
-                 model_override=None, family_override=None):
+                 model_override=None, family_override=None, output_root=None):
         parts = (voice or '').split(':')
         if (len(parts) != 3 or parts[0] != 'uniart' or parts[1] not in MODELS
-                or parts[2] not in VOICE_IDS):
+                or not parts[2]):
             raise UniArtTTSError('此音色不兼容 UniArt，请打开音色库重新选择并保存。')
         model, voice_id = parts[1:]
+        is_clone = voice_id not in VOICE_IDS
+        if is_clone:
+            from .uniart_voice_clone import CLONE_ID, VoiceCloneStore
+            if not CLONE_ID.fullmatch(voice):
+                raise UniArtTTSError('此音色不兼容 UniArt，请打开音色库重新选择并保存。')
+            owner = require_studio_user().owner_profile_id
+            if not VoiceCloneStore(output_root or media_root()).contains(owner, voice):
+                raise UniArtTTSError('此复刻音色不属于当前用户或尚未登记。', 404)
         if model_override not in (None, model) or family_override not in (None, 'minimax'):
             raise UniArtTTSError('旧自定义音色尚未迁移，请重新选择 UniArt 音色。')
         if not isinstance(text, str) or not text.strip() or len(text) > 20000:
@@ -81,6 +90,8 @@ class UniArtTTSProcessor:
             raise UniArtTTSError('当前 UniArt 凭据不可使用此语音模型，请重新选择可用音色。', 409)
         payload = dict(model=model, input=text, voice=voice_id, response_format='mp3',
                        speed=speech_rate, metadata={'voice_setting': settings})
+        if is_clone:
+            payload['metadata']['voice_clone'] = True
         return config, payload
 
     def _write(self, config, payload, output_path):
@@ -111,15 +122,17 @@ class UniArtTTSProcessor:
         return os.fspath(target)
 
     def synthesize(self, text, output_path, voice=None, speech_rate=1.0, pitch_rate=1.0,
-                   volume=50, instructions=None, model_override=None, family_override=None):
+                   volume=50, instructions=None, model_override=None, family_override=None,
+                   output_root=None):
         config, payload = self._prepare(text, voice, speech_rate, pitch_rate, volume,
-                                        instructions, model_override, family_override)
+                                        instructions, model_override, family_override, output_root)
         return self._write(config, payload, output_path)
 
     def preview(self, *, output_root, text, voice, speech_rate=1.0, pitch_rate=1.0,
                 volume=50, instructions=None):
         user = require_studio_user()
-        config, payload = self._prepare(text, voice, speech_rate, pitch_rate, volume, instructions)
+        config, payload = self._prepare(text, voice, speech_rate, pitch_rate, volume, instructions,
+                                        output_root=output_root)
         identity = json.dumps([config['base_url'].rstrip('/'), payload], sort_keys=True, ensure_ascii=False)
         key = hashlib.sha256(identity.encode()).hexdigest()
         directory = Path(studio_media_dir(user.owner_profile_id, 'audio', output_root=output_root)) / 'voice_preview'

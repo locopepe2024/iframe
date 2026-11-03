@@ -1,11 +1,14 @@
 """Owner-scoped independent editing endpoints."""
-from fastapi import APIRouter, Depends, File, UploadFile, Query, HTTPException, Response
+from fastapi import APIRouter, Depends, File, Form, UploadFile, Query, HTTPException, Response
 from pydantic import BaseModel, Field
 from ..identity import UserContext
 from ..studio_access import require_studio_user, sign_studio_media_paths
 from ..comic_gen.models import AssemblyEditPlan
 from ..comic_gen.assembly_subtitles import export_srt
 from .service import EditingService
+from ...audio.uniart_voice_clone import VoiceCloneStore, create_voice_clone
+from ...audio.uniart_tts import UniArtTTSError
+from ...utils.storage_config import media_root
 
 router = APIRouter(prefix='/editing', tags=['editing'])
 
@@ -94,6 +97,20 @@ def transcription_audio(key: str, body: TranscriptionAudioRequest, user: UserCon
 @router.post('/voiceover', status_code=201)
 def voiceover(body: VoiceoverRequest, user: UserContext = Depends(require_studio_user)):
     return public(EditingService(user).synthesize_voice(body.text, body.voice_id, body.speed, body.pitch, body.volume), user)
+
+@router.get('/voice-clones')
+def voice_clones(user: UserContext = Depends(require_studio_user)):
+    return VoiceCloneStore(media_root()).list(user.owner_profile_id)
+
+@router.post('/voice-clones', status_code=201)
+def clone_voice(file: UploadFile = File(...), name: str = Form(...),
+                model: str = Form('speech-2.8-hd'), consent_confirmed: bool = Form(False),
+                user: UserContext = Depends(require_studio_user)):
+    try:
+        return create_voice_clone(user.owner_profile_id, media_root(), file.file,
+                                  file.filename, name, model, consent_confirmed)
+    except UniArtTTSError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
 
 @router.delete('/materials/{key}')
 def delete_material(key: str, user: UserContext = Depends(require_studio_user)):
