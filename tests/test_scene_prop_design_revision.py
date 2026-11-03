@@ -42,6 +42,52 @@ def test_scene_prop_design_draft_and_confirmation_survive_reload(tmp_path, kind,
     assert loaded.asset_design == asset.asset_design
 
 
+@pytest.mark.parametrize("kind,asset_id,spatial", [
+    ("scene", "street", {
+        "schemaVersion": "iframe.scene-spatial.v1", "coordinateSystem": "z_up", "unit": "meter",
+        "layoutId": "qingxi-street", "buildings": [{"id": "shop", "label": "Grain shop",
+            "centerM": [0, 0, 0], "dimensionsM": [4, 5, 3], "frontSide": "positive_y"}],
+        "anchors": [{"id": "door", "buildingId": "shop", "positionM": [0, 2.5, 1]}],
+        "apertures": [],
+    }),
+    ("prop", "sword", {"schemaVersion": "iframe.prop-spatial.v1", "unit": "meter",
+                       "dimensionsM": [0.8, 0.1, 0.05], "gripLocalM": [-0.2, 0, 0]}),
+])
+def test_confirmed_spatial_constraints_survive_reload(tmp_path, kind, asset_id, spatial):
+    pipeline, scene, prop = make_pipeline(tmp_path)
+    pipeline.update_asset_attributes("project", asset_id, kind, {"asset_design": {
+        "visual_notes": "Measured asset", "spatial_constraints": spatial, "confirmed": True,
+    }})
+    reloaded = ComicGenPipeline.__new__(ComicGenPipeline)
+    reloaded.data_file = pipeline.data_file
+    restored = reloaded._load_data()["project"]
+    asset = restored.scenes[0] if kind == "scene" else restored.props[0]
+    assert asset.asset_design["design_revisions"][0]["design"]["spatial_constraints"] == spatial
+
+
+def test_scene_spatial_constraints_reject_missing_building_without_mutation(tmp_path):
+    pipeline, scene, _ = make_pipeline(tmp_path)
+    spatial = {"schemaVersion": "iframe.scene-spatial.v1", "coordinateSystem": "z_up",
+               "unit": "meter", "layoutId": "street", "buildings": [], "apertures": [],
+               "anchors": [{"id": "door", "buildingId": "missing", "positionM": [0, 0, 1]}]}
+    with pytest.raises(ValueError, match="Anchor building is missing"):
+        pipeline.update_asset_attributes("project", "street", "scene", {"asset_design": {
+            "visual_notes": "Measured street", "spatial_constraints": spatial, "confirmed": True,
+        }})
+    assert scene.asset_design == {"design_draft": {}, "design_revisions": []}
+
+
+def test_prop_spatial_constraints_reject_outside_grip_without_mutation(tmp_path):
+    pipeline, _, prop = make_pipeline(tmp_path)
+    spatial = {"schemaVersion": "iframe.prop-spatial.v1", "unit": "meter",
+               "dimensionsM": [0.8, 0.1, 0.05], "gripLocalM": [0.5, 0, 0]}
+    with pytest.raises(ValueError, match="Prop grip must lie within"):
+        pipeline.update_asset_attributes("project", "sword", "prop", {"asset_design": {
+            "visual_notes": "Measured sword", "spatial_constraints": spatial, "confirmed": True,
+        }})
+    assert prop.asset_design == {"design_draft": {}, "design_revisions": []}
+
+
 def test_scene_asset_extraction_baseline_and_shot_only_content_survive_reload(tmp_path):
     pipeline, scene, _ = make_pipeline(tmp_path)
     baseline = {

@@ -1997,6 +1997,7 @@ export const api = {
     },
 
     updateFrame: async (scriptId: string, frameId: string, data: {
+        spatial_constraints?: import('./assetSpatialConstraints').ShotSpatialConstraints;
         image_prompt?: string;
         action_description?: string;
         workbench_prompt_is_optimized?: boolean;

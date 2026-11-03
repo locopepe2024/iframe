@@ -6,6 +6,7 @@ import os
 import time
 import uuid
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from .asset_spatial import ShotSpatialConstraints
 
 from ...utils.model_catalog import get_default_model_settings
 
@@ -971,6 +972,7 @@ class StoryboardFrame(BaseModel):
     director_profile_hash: Optional[str] = None
     generation_lineage: Optional[ArtifactLineage] = None
     scene_id: str = Field(..., description="Reference to the Scene ID")
+    spatial_constraints: Optional[ShotSpatialConstraints] = None
     shot_id: Optional[str] = Field(None, description="Optional confirmed shooting-plan shot ID")
     director_shot_context: Optional[Dict[str, Any]] = Field(
         None,

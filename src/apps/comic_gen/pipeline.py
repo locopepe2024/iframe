@@ -3203,6 +3203,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Character dictionary configuration is too large")
             if not isinstance(design.get("supplemental_prompt", ""), str) or len(design.get("supplemental_prompt", "")) > 8000:
                 raise ValueError("Character design supplemental prompt is invalid")
+            if "spatial_constraints" in design:
+                from .asset_spatial import CharacterSpatialConstraints
+                design = {**design, "spatial_constraints": CharacterSpatialConstraints.model_validate(design["spatial_constraints"]).model_dump(exclude_unset=True)}
             if design.get("schema_version") not in (None, "iframe.character-fields.v1"):
                 raise ValueError("Character design schema version is invalid")
             identity = design.get("identity", {})
@@ -3313,7 +3316,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             design = attributes["asset_design"]
             if not isinstance(design, dict):
                 raise ValueError("Asset design must be an object")
-            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "crowd_design"} if asset_type == "scene" else {"dimensions"}
+            scene_fields = {"style", "ambient_lighting", "local_lighting", "reference_viewpoint", "reference_framing", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "crowd_design", "spatial_constraints"} if asset_type == "scene" else {"dimensions", "spatial_constraints"}
             if set(design) - {"visual_notes", "user_requirements", "unresolved", "confirmed"} - scene_fields:
                 raise ValueError("Asset design contains unknown fields")
             notes = design.get("visual_notes")
@@ -3321,6 +3324,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 raise ValueError("Asset design requires a concrete visual design")
             if not isinstance(design.get("user_requirements", ""), str):
                 raise ValueError("Asset design user requirements must be text")
+            if "spatial_constraints" in design:
+                from .asset_spatial import SceneSpatialConstraints, PropSpatialConstraints
+                schema = SceneSpatialConstraints if asset_type == "scene" else PropSpatialConstraints
+                design = {**design, "spatial_constraints": schema.model_validate(design["spatial_constraints"]).model_dump(exclude_unset=True)}
             unresolved = design.get("unresolved", [])
             if not isinstance(unresolved, list) or any(not isinstance(item, str) for item in unresolved):
                 raise ValueError("Asset design unresolved items must be text")
@@ -3394,7 +3401,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     direction = {"正面来光": "front", "背面来光": "back", "左侧来光": "side", "右侧来光": "side", "顶部来光": "top", "底部来光": "bottom"}.get(layers.lighting.direction)
                 if isinstance(forbidden, list) and direction and direction in forbidden:
                     raise ValueError("Scene light direction conflicts with a forbidden direction")
-            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "crowd_design", "dimensions"}:
+            for field in scene_fields - {"local_lighting", "visual_constraints", "prompt_workspace", "prompt_layers", "asset_baseline", "shot_only_content", "crowd_design", "dimensions", "spatial_constraints"}:
                 value = design.get(field, "")
                 if not isinstance(value, str) or len(value) > 2000:
                     raise ValueError(f"Asset design {field} must be bounded text")
@@ -7434,10 +7441,41 @@ class ComicGenPipeline(StudioOwnerMixin):
             kwargs["crowd_instances"] = [ExtraShotInstance.model_validate(item)
                                          for item in kwargs["crowd_instances"]]
 
+        spatial = kwargs.get("spatial_constraints")
+        if spatial is not None:
+            from .asset_spatial import ShotSpatialConstraints
+            spatial = ShotSpatialConstraints.model_validate(spatial)
+            next_scene_id = kwargs.get("scene_id") or frame.scene_id
+            if spatial.sceneId != next_scene_id:
+                raise ValueError("Shot spatial scene must match the frame scene")
+            scene_asset, _ = self._find_asset_with_source(script, spatial.sceneId, "scene")
+            revisions = (scene_asset.asset_design or {}).get("design_revisions", []) if scene_asset else []
+            scene_design = next((item.get("design", {}) for item in revisions
+                                 if item.get("revision") == spatial.sceneRevision), None)
+            scene_layout = scene_design.get("spatial_constraints") if isinstance(scene_design, dict) else None
+            if not isinstance(scene_layout, dict) or scene_layout.get("layoutId") != spatial.layoutId:
+                raise ValueError("Shot spatial scene must pin a confirmed scene layout revision")
+            next_character_ids = kwargs.get("character_ids")
+            if next_character_ids is None:
+                next_character_ids = frame.character_ids
+            if any(item.assetId not in next_character_ids for item in spatial.characters):
+                raise ValueError("Shot spatial character is not selected in the frame")
+            next_prop_ids = kwargs.get("prop_ids")
+            if next_prop_ids is None:
+                next_prop_ids = frame.prop_ids
+            if any(item.assetId not in next_prop_ids for item in spatial.props):
+                raise ValueError("Shot spatial prop is not selected in the frame")
+            anchor_ids = {item["id"] for item in scene_layout.get("anchors", [])}
+            if any(line.fromAnchorId not in anchor_ids or line.toAnchorId not in anchor_ids
+                   for line in spatial.requiredSightlines):
+                raise ValueError("Shot spatial sightline must reference scene layout anchors")
+
         asset_refs_changed = (
             (kwargs.get("scene_id") is not None and kwargs["scene_id"] != frame.scene_id)
             or (kwargs.get("character_ids") is not None
                 and kwargs["character_ids"] != frame.character_ids)
+            or (kwargs.get("prop_ids") is not None
+                and kwargs["prop_ids"] != frame.prop_ids)
             or (kwargs.get("crowd_instances") is not None
                 and kwargs["crowd_instances"] != frame.crowd_instances)
         )
@@ -7453,6 +7491,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._validate_crowd_instances(script, kwargs["crowd_instances"])
         if frame.consistency_manifest and consistency_fields_changed:
             frame.consistency_manifest = None
+        if spatial is not None:
+            frame.spatial_constraints = spatial
+        elif asset_refs_changed:
+            frame.spatial_constraints = None
         
         from .shot_prompt_settings import sync_prompt_settings
         old_style, old_light = frame.style_prompt_override, frame.lighting_override
