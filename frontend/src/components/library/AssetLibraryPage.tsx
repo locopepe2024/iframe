@@ -283,6 +283,7 @@ function PlatformReferenceReviewQueue() {
   const [platformTag, setPlatformTag] = useState("");
   const [platformDomain, setPlatformDomain] = useState("");
   const [platformEntryType, setPlatformEntryType] = useState("");
+  const [visibleLimit, setVisibleLimit] = useState(60);
   const activeTags = Array.from(new Set((activeCatalog?.resources ?? []).flatMap((resource) => resource.tags ?? []))).sort();
   const visibleActive = (activeCatalog?.resources ?? []).filter((resource) => {
     if (platformTag && !resource.tags?.includes(platformTag)) return false;
@@ -433,12 +434,13 @@ function PlatformReferenceReviewQueue() {
       </div>}
       {!activeCatalog?.resources.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">{t("publishedEmpty")}</div> : !visibleActive.length ? <div className="glass-panel rounded-xl p-8 text-text-secondary">没有匹配的已发布资源</div> :
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {visibleActive.map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
+        {visibleActive.slice(0, visibleLimit).map((resource) => <article key={resource.platform_resource_id} className="glass-panel rounded-xl border border-glass-border p-4">
           <h2 className="font-semibold text-foreground">{resource.title}</h2>
           <div className="text-xs text-text-muted mt-1">{resource.kind} · v{resource.revision}</div>
           {resource.dictionary && <div className="mt-1 text-xs text-text-muted">词典：{resource.dictionary.semantic_domain} · {resource.dictionary.entry_type}</div>}
           {!!resource.dictionary?.members?.length && <p className="mt-1 text-xs text-text-muted">固定成员 {resource.dictionary.members.length} 项</p>}
           {!!resource.payload?.media_file && <PlatformCandidatePreview resourceId={resource.platform_resource_id} kind={resource.kind} />}
+          {typeof resource.payload?.thumbnail_url === "string" && <img src={resource.payload.thumbnail_url} alt={resource.title} loading="lazy" referrerPolicy="no-referrer" className="mt-3 aspect-[4/3] w-full rounded object-contain bg-surface-inset" />}
           {(resource.payload?.structured_prompt?.content || resource.summary) && <details className="mt-3 text-sm text-text-secondary">
             <summary>查看配套 Prompt</summary>
             <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs leading-5">{resource.payload?.structured_prompt?.content || resource.summary}</pre>
@@ -447,6 +449,7 @@ function PlatformReferenceReviewQueue() {
           <div className="mt-4 text-xs text-text-muted">{t("reviewSource")}：{resource.provenance.source || "—"} · {t("reviewLicense")}：{resource.provenance.license}</div>
         </article>)}
       </div>}
+      {visibleActive.length > visibleLimit && <button type="button" onClick={() => setVisibleLimit((count) => count + 60)} className="glass-button mt-4 px-4 py-2 text-sm">显示更多（{visibleLimit}/{visibleActive.length}）</button>}
     </>}
   </div>;
 }

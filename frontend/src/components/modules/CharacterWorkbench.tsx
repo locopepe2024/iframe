@@ -299,7 +299,7 @@ function AssetReferencePicker({
     // Keep the complete owner-scoped candidate set available. The picker is
     // already scroll-bounded; truncating to the first 20 hides valid assets
     // (for example a generated crowd roster) behind earlier shared assets.
-    const filtered = searchReferenceCandidates(candidates, query);
+    const filtered = searchReferenceCandidates(candidates, query).slice(0, 100);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -427,6 +427,7 @@ function AssetReferencePicker({
                         >
                             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-inset">
                                 {candidate.previewRef ? <AssetIndexPreview asset={candidate.previewRef} />
+                                    : candidate.previewUrl ? <img src={candidate.previewUrl} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
                                     : candidate.platformResourceId ? <PlatformReferenceThumbnail resourceId={candidate.platformResourceId} />
                                     : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />}
                             </span>
@@ -671,6 +672,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 variantLabel: resource.category_path?.split("/").at(-1),
                 description: [resource.summary, ...(resource.tags || [])].filter(Boolean).join(" "),
                 platformResourceId: resource.platform_resource_id,
+                previewUrl: typeof resource.payload?.thumbnail_url === "string" ? resource.payload.thumbnail_url : undefined,
                 reference,
             });
         }

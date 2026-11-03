@@ -82,6 +82,23 @@ it('filters published platform character references by exact tag', async () => {
   expect(screen.getByText('表情案例')).toBeInTheDocument();
 });
 
+it('pages imported reference cards and shows source thumbnails', async () => {
+  mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources:
+    Array.from({ length: 61 }, (_, index) => ({
+      platform_resource_id: `iframe.opc.${index}`, revision: 1, kind: 'image', title: `姿势 ${index}`,
+      status: 'active', payload: { thumbnail_url: `https://ai-pose-gallery.pages.dev/${index}.webp` },
+      provenance: { source: 'open-pose-costume', license: 'source_terms_apply', content_sha256: 'a' },
+    })) });
+  render(<AssetLibraryPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'platform' }));
+  expect(await screen.findByText('姿势 0')).toBeInTheDocument();
+  expect(screen.queryByText('姿势 60')).not.toBeInTheDocument();
+  const image = screen.getAllByRole('img')[0];
+  expect(image).toHaveAttribute('src', 'https://ai-pose-gallery.pages.dev/0.webp');
+  fireEvent.click(screen.getByRole('button', { name: /显示更多/ }));
+  expect(screen.getByText('姿势 60')).toBeInTheDocument();
+});
+
 it('filters published dictionary entries without treating legacy media as terms', async () => {
   mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [
     { platform_resource_id: 'legacy', revision: 1, kind: 'prompt_preset', title: '旧提示词', status: 'active', provenance: { license: 'MIT', content_sha256: 'a' } },
