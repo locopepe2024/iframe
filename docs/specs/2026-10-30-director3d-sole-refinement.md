@@ -43,3 +43,28 @@ report selected/total counts. On the media fixture this changes full-weight tilt
 from roughly 12.4–12.8 degrees to 5.2–5.5 degrees and plane residual to about
 4.4 mm. This is a measurement improvement, not contact acceptance or a claim
 that all selected vertices belong to one rigid support patch.
+
+## Rotation correctness and per-frame diagnostics (2026-10-31)
+
+The previous request had a sign error: for `z=ax+by+c`, the upward normal is
+`(-a,-b,1)` and the axis `(-b,a,0)` needs the positive tilt angle to align it with
+world +Z. Verify the request by actually rotating synthetic patch geometry in
+multiple slope directions; an assertion on the requested angle alone is insufficient.
+This fix changes diagnostic requests only, not ankle/foot poses.
+
+Fit in centered, XY-normalized coordinates to avoid cancellation at translated
+world positions. Reject rank-deficient XY patches using a relative determinant
+threshold. Keep the 8 degree limit and 5 cm IK bounds unchanged.
+
+Fit every sampled frame, including ramps and released frames. Preserve legacy
+first-frame fields with explicit `patchPlaneFrame`, add `planeFrames` and the
+maximum tilt of successfully fitted frames. A failed fit produces a per-frame
+rejection and does not erase other contact metrics. A maximum over successful
+fits is not proof that rejected frames pass. Residuals are vertical Z distances,
+not perpendicular distances to the plane. Patch selection uses height relative
+to its lowest vertex; this does not establish an actual ground surface.
+
+Success criteria: reproduce and fix the wrong rotation direction, translated-fit
+instability and degenerate-filter crash; expose later-frame limit violations;
+verify corrected requests with media Blender mathutils on evaluated white-model
+patches. This is not a foot-lock or no-sliding acceptance test.

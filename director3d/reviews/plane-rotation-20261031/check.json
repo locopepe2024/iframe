@@ -1,0 +1,528 @@
+{
+  "schema": "director3d-contact-plane-rotation-check.v1",
+  "status": "diagnostic_only",
+  "geometryCopiesOnly": true,
+  "boneRotationApplied": false,
+  "supportAccepted": false,
+  "blenderVersion": "4.5.9 LTS",
+  "inputSha256": "03e34ccf69a8dc67ca6eb595411e194dc5952e8b16a37d60ed323280abb7d795",
+  "sourceSha256": "0ff075c7ad6855c5c2c37a171592ee8f0d6ab2f58259e2be77a9b63dd8027765",
+  "targetSha256": "95eeb19c8abce2325479804b3dda429ebddfa6e8d07a2688541cc990fb676855",
+  "evaluationFPS": 24.0,
+  "frames": [
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "phase": "released",
+      "frame": 0,
+      "request": {
+        "status": "rejected",
+        "reason": "contact plane tilt exceeds bounded correction",
+        "applied": false
+      },
+      "originalTiltDeg": 14.736666523658792,
+      "selectedCount": 13
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "phase": "released",
+      "frame": 8,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 2.012354457885752,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          0.4842772833287404,
+          0.8749145746024207,
+          0.0
+        ],
+        "angleDeg": 2.012354457885752,
+        "applied": false,
+        "planeResidualM": 0.00629017036200561
+      },
+      "originalTiltDeg": 2.012354457885752,
+      "selectedCount": 83,
+      "normalAlignmentError": 1.3110494865456526e-07,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          0.00023905185054698118,
+          -0.00019144765388434998
+        ],
+        "interceptZM": 0.003390922655238981,
+        "tiltDeg": 0.017547667156135056,
+        "maxAbsResidualM": 0.006278606839605761,
+        "rmsResidualM": 0.002224128183527692
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "phase": "ramp",
+      "frame": 1,
+      "request": {
+        "status": "rejected",
+        "reason": "contact plane tilt exceeds bounded correction",
+        "applied": false
+      },
+      "originalTiltDeg": 12.945672738668309,
+      "selectedCount": 17
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "phase": "ramp",
+      "frame": 7,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 0.7245463685141733,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          -0.0029110769547719246,
+          0.9999957628065048,
+          0.0
+        ],
+        "angleDeg": 0.7245463685141733,
+        "applied": false,
+        "planeResidualM": 0.007400305233869773
+      },
+      "originalTiltDeg": 0.7245463685141733,
+      "selectedCount": 74,
+      "normalAlignmentError": 2.3283092787079045e-09,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          9.285424361334292e-05,
+          -1.616589642333499e-05
+        ],
+        "interceptZM": 0.001105485944706937,
+        "tiltDeg": 0.005400183211100926,
+        "maxAbsResidualM": 0.007400168970024687,
+        "rmsResidualM": 0.0022824225526052655
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "phase": "fullWeight",
+      "frame": 2,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 5.2071168476592975,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          0.999418358747992,
+          0.0341019676480656,
+          0.0
+        ],
+        "angleDeg": 5.2071168476592975,
+        "applied": false,
+        "planeResidualM": 0.004427637832070208
+      },
+      "originalTiltDeg": 5.2071168476592975,
+      "selectedCount": 21,
+      "normalAlignmentError": 5.972196781212689e-08,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          -3.1252020813038696e-05,
+          -0.0015334331913136993
+        ],
+        "interceptZM": 0.003916096869412833,
+        "tiltDeg": 0.08787742591132128,
+        "maxAbsResidualM": 0.004410238708090912,
+        "rmsResidualM": 0.0023101180301546807
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "phase": "fullWeight",
+      "frame": 3,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 1.0538159337058217,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          0.7269645903005794,
+          -0.6866749481735233,
+          0.0
+        ],
+        "angleDeg": 1.0538159337058217,
+        "applied": false,
+        "planeResidualM": 0.0051967597766786385
+      },
+      "originalTiltDeg": 1.0538159337058217,
+      "selectedCount": 44,
+      "normalAlignmentError": 5.036896945159868e-09,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          -0.00015858594705745876,
+          -2.632118323891458e-05
+        ],
+        "interceptZM": 0.005933166852504737,
+        "tiltDeg": 0.009210607418241833,
+        "maxAbsResidualM": 0.005193195187690536,
+        "rmsResidualM": 0.002554707723667281
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "phase": "fullWeight",
+      "frame": 4,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 0.1915961665881879,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          -0.4078017499182562,
+          0.913070497148828,
+          0.0
+        ],
+        "angleDeg": 0.1915961665881879,
+        "applied": false,
+        "planeResidualM": 0.007126087037432699
+      },
+      "originalTiltDeg": 0.1915961665881879,
+      "selectedCount": 69,
+      "normalAlignmentError": 7.488120912817578e-08,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          1.7986610339024384e-05,
+          -1.219913754174983e-06
+        ],
+        "interceptZM": 0.00034842758511746387,
+        "tiltDeg": 0.0010329244309144712,
+        "maxAbsResidualM": 0.0071262392256653114,
+        "rmsResidualM": 0.0021740052953624456
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "phase": "fullWeight",
+      "frame": 5,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 0.17451833796415334,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          -0.7089255922206997,
+          0.7052832797497259,
+          0.0
+        ],
+        "angleDeg": 0.17451833796415334,
+        "applied": false,
+        "planeResidualM": 0.00714607462444172
+      },
+      "originalTiltDeg": 0.17451833796415334,
+      "selectedCount": 69,
+      "normalAlignmentError": 1.1607033772828953e-07,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          1.1594117546436226e-05,
+          5.178939881341169e-07
+        ],
+        "interceptZM": -5.3558266352012506e-05,
+        "tiltDeg": 0.0006649564023749504,
+        "maxAbsResidualM": 0.007146190040646828,
+        "rmsResidualM": 0.002181314448328729
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "l",
+      "phase": "fullWeight",
+      "frame": 6,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 0.17361236418573392,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          -0.8411871160011407,
+          0.5407441501058363,
+          0.0
+        ],
+        "angleDeg": 0.17361236418573392,
+        "applied": false,
+        "planeResidualM": 0.007154399886236948
+      },
+      "originalTiltDeg": 0.17361236418573392,
+      "selectedCount": 69,
+      "normalAlignmentError": 7.524222243258578e-08,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          8.140437387315028e-06,
+          1.57930234808556e-06
+        ],
+        "interceptZM": -0.00023958912151696512,
+        "tiltDeg": 0.00047510922341434706,
+        "maxAbsResidualM": 0.007154490102728247,
+        "rmsResidualM": 0.0021863878669022277
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "phase": "released",
+      "frame": 16,
+      "request": {
+        "status": "rejected",
+        "reason": "contact plane tilt exceeds bounded correction",
+        "applied": false
+      },
+      "originalTiltDeg": 13.846385050530046,
+      "selectedCount": 12
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "phase": "released",
+      "frame": 24,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 2.0116108637684436,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          0.48386322820736744,
+          -0.8751436318620762,
+          0.0
+        ],
+        "angleDeg": 2.0116108637684436,
+        "applied": false,
+        "planeResidualM": 0.006291280849294112
+      },
+      "originalTiltDeg": 2.0116108637684436,
+      "selectedCount": 83,
+      "normalAlignmentError": 1.283232737881552e-07,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          -0.00023895025922607307,
+          -0.00019130284659290027
+        ],
+        "interceptZM": 0.0024759926528177922,
+        "tiltDeg": 0.01753793764948217,
+        "maxAbsResidualM": 0.006279724147842525,
+        "rmsResidualM": 0.0022244089415456485
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "phase": "ramp",
+      "frame": 17,
+      "request": {
+        "status": "rejected",
+        "reason": "contact plane tilt exceeds bounded correction",
+        "applied": false
+      },
+      "originalTiltDeg": 13.568318684803996,
+      "selectedCount": 17
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "phase": "ramp",
+      "frame": 23,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 0.8066598147354396,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          0.09052473909388012,
+          -0.9958942070380693,
+          0.0
+        ],
+        "angleDeg": 0.8066598147354396,
+        "applied": false,
+        "planeResidualM": 0.007347601880257117
+      },
+      "originalTiltDeg": 0.8066598147354396,
+      "selectedCount": 73,
+      "normalAlignmentError": 1.4033841696548414e-08,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          -0.00010528167876537122,
+          -2.221818521548127e-05
+        ],
+        "interceptZM": 0.0006834814403823592,
+        "tiltDeg": 0.006165057704651421,
+        "maxAbsResidualM": 0.007347229686166984,
+        "rmsResidualM": 0.0022809120311193874
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "phase": "fullWeight",
+      "frame": 18,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 5.460712825028849,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          0.9973562149862634,
+          -0.07266760232919921,
+          0.0
+        ],
+        "angleDeg": 5.460712825028849,
+        "applied": false,
+        "planeResidualM": 0.004413183271878071
+      },
+      "originalTiltDeg": 5.460712825028849,
+      "selectedCount": 21,
+      "normalAlignmentError": 8.98629769210131e-08,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          -1.1800946025499561e-05,
+          -0.0015991205707351396
+        ],
+        "interceptZM": 0.0026240986849898253,
+        "tiltDeg": 0.09162527635018333,
+        "maxAbsResidualM": 0.00439456255989536,
+        "rmsResidualM": 0.0023107820554397543
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "phase": "fullWeight",
+      "frame": 19,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 1.4736884409251654,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          0.5415209897312119,
+          0.8406872294025459,
+          0.0
+        ],
+        "angleDeg": 1.4736884409251654,
+        "applied": false,
+        "planeResidualM": 0.005268754078274295
+      },
+      "originalTiltDeg": 1.4736884409251654,
+      "selectedCount": 46,
+      "normalAlignmentError": 1.1728749790363882e-07,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          0.0002636762966123582,
+          -3.2324855327997594e-05
+        ],
+        "interceptZM": 0.006085711451967376,
+        "tiltDeg": 0.015220641065667671,
+        "maxAbsResidualM": 0.005267616839918953,
+        "rmsResidualM": 0.0026036770115024327
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "phase": "fullWeight",
+      "frame": 20,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 0.19655222279190804,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          -0.519301785857992,
+          -0.8545909285761815,
+          0.0
+        ],
+        "angleDeg": 0.19655222279190804,
+        "applied": false,
+        "planeResidualM": 0.007144065318551992
+      },
+      "originalTiltDeg": 0.19655222279190804,
+      "selectedCount": 69,
+      "normalAlignmentError": 1.1655877353522416e-07,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          -1.705275877185603e-05,
+          -5.355606654490011e-07
+        ],
+        "interceptZM": 0.00013765632991783182,
+        "tiltDeg": 0.000977532841677283,
+        "maxAbsResidualM": 0.007144211467548113,
+        "rmsResidualM": 0.0021766943578498147
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "phase": "fullWeight",
+      "frame": 21,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 0.19021169606184157,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          -0.8195022632798448,
+          -0.5730759465194923,
+          0.0
+        ],
+        "angleDeg": 0.19021169606184157,
+        "applied": false,
+        "planeResidualM": 0.007168594183272051
+      },
+      "originalTiltDeg": 0.19021169606184157,
+      "selectedCount": 69,
+      "normalAlignmentError": 7.990196801506764e-08,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          -9.688306391777393e-06,
+          1.5581070412494374e-06
+        ],
+        "interceptZM": -0.00032717194817513906,
+        "tiltDeg": 0.0005622318338271441,
+        "maxAbsResidualM": 0.0071686934119845145,
+        "rmsResidualM": 0.0021865816379862332
+      }
+    },
+    {
+      "action": "Walk_Loop",
+      "side": "r",
+      "phase": "fullWeight",
+      "frame": 22,
+      "request": {
+        "status": "diagnostic_only",
+        "tiltDeg": 0.1984230346715596,
+        "maxTiltDeg": 8.0,
+        "axisWorld": [
+          -0.9249320474418241,
+          -0.38013248692406626,
+          0.0
+        ],
+        "angleDeg": 0.1984230346715596,
+        "applied": false,
+        "planeResidualM": 0.007179920672610269
+      },
+      "originalTiltDeg": 0.1984230346715596,
+      "selectedCount": 69,
+      "normalAlignmentError": 1.58945799929198e-07,
+      "rotatedPatchPlane": {
+        "status": "diagnostic_only",
+        "slopeXY": [
+          -5.532006152080577e-06,
+          2.722699584545085e-06
+        ],
+        "interceptZM": -0.0005534320387923483,
+        "tiltDeg": 0.00035327011454092187,
+        "maxAbsResidualM": 0.007179987144727223,
+        "rmsResidualM": 0.002193486845382757
+      }
+    }
+  ]
+}
