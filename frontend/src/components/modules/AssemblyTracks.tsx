@@ -2,22 +2,23 @@
 import { useState, useRef, useEffect, type PointerEvent, type KeyboardEvent, type ReactNode } from "react";
 import { createRenderRequestId } from '@/lib/renderRequestId';
 import { useLocale } from "next-intl";
-import { api, type AssemblyEditPlan } from "@/lib/api";
+import { api, type AssemblyClip, type AssemblyEditPlan } from "@/lib/api";
 import type { Project } from "@/store/projectStore";
-import { insertAssemblyVideo, reorderAssemblyVideo, snapAssemblyTimelineTime, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
+import { duplicateAssemblyVideo, insertAssemblyVideo, reorderAssemblyVideo, snapAssemblyTimelineTime, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
 import { extractErrorDetail, getAssetUrl, getVideoPosterUrl } from "@/lib/utils";
 import TimelineFilmstrip from './TimelineFilmstrip';
 import TimelineAudioPreview, { usePreviewGain } from './TimelineAudioPreview';
 import TimelineWaveform from './TimelineWaveform';
-import { ChevronLeft, ChevronRight, Undo2, Redo2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Copy, Undo2, Redo2 } from 'lucide-react';
 
-export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, materialPanel, onImport, audioLane, onAudioLaneChange, canUndo, canRedo, onUndo, onRedo }: {
+export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, saved, project, materials, onUploadAudio, onExportSubtitles, onTranscribe, materialPanel, onImport, audioLane, onAudioLaneChange, canUndo, canRedo, onUndo, onRedo }: {
     plan: AssemblyEditPlan; resourceId: string; saved: boolean; project: Pick<Project, "id" | "frames" | "video_tasks" | "bgm_url">;
     materialPanel?: ReactNode;
     onImport?: () => void;
-    materials?: Record<string, { url: string }>;
+    materials?: Record<string, { url: string; audio?: boolean }>;
     onUploadAudio?: (file: File) => Promise<{ media_id: string; url: string; duration_ms: number }>;
     onExportSubtitles?: (lane: string) => Promise<Blob>;
+    onTranscribe?: (clip: AssemblyClip) => void;
     audioLane?: 'bgm' | 'dialogue' | 'sfx';
     onAudioLaneChange?: (lane: 'bgm' | 'dialogue' | 'sfx') => void;
     canUndo?: boolean;
@@ -254,6 +255,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
             {selectedAudioUrl && <label className="w-full text-xs text-text-secondary">{t("试听素材", "Preview source")}
                 <audio controls preload="metadata" src={selectedAudioUrl} aria-label={t("选中音频试听", "Selected audio preview")} className="mt-1 h-9 w-full" />
             </label>}
+            {selectedLane?.kind === 'video' && selectedClip?.source_media_id && materials?.[selectedClip.source_media_id]?.audio && onTranscribe && <button type="button" className={control} onClick={() => onTranscribe(selectedClip)}>{t('原声转字幕', 'Source audio to captions')}</button>}
             {selectedLane?.kind !== "subtitle" && <>
                 <label className="text-xs text-text-secondary">{t("源入点（秒）", "Source in (seconds)")}<input className={`${control} block w-28`} type="number" min={0} step={0.001} value={sourceIn / 1000} onChange={e => setSourceIn(Math.round(Number(e.target.value) * 1000))} /></label>
                 <label className="text-xs text-text-secondary">{t("源出点（秒）", "Source out (seconds)")}<input className={`${control} block w-28`} type="number" min={0.001} step={0.001} value={sourceOut / 1000} onChange={e => setSourceOut(Math.round(Number(e.target.value) * 1000))} /></label>
@@ -286,6 +288,9 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange, save
             <button type="button" className={`${control} border-primary text-primary`} disabled={!canSplit} onClick={() => {
                 if (splitClip && splitLane) applyEdit(() => splitAssemblyClip(plan, splitLane.id, splitClip.id, position, createRenderRequestId()));
             }}>{t("断开", "Split")}</button>
+            <button type="button" className={`${control} px-2`} aria-label={t("复制视频片段", "Duplicate video clip")} title={t("复制所选视频片段", "Duplicate selected video clip")} disabled={selectedLane?.kind !== "video" || !selectedClip} onClick={() => {
+                if (selectedClip && selectedLane?.kind === "video") applyEdit(() => duplicateAssemblyVideo(plan, selectedClip.id, createRenderRequestId()));
+            }}><Copy size={15} /></button>
             {(['left', 'right'] as const).map(side => <button key={side} type="button" className={control} disabled={!canSplit} title={side === 'left' ? t("删除播放头左侧，保留右侧片段", "Remove the left side; keep the right side of this clip") : t("删除播放头右侧，保留左侧片段", "Remove the right side; keep the left side of this clip")} onClick={() => {
                 if (splitClip && splitLane) applyEdit(() => {
                     const next = trimAssemblyClipAtPlayhead(plan, splitLane.id, splitClip.id, position, side);

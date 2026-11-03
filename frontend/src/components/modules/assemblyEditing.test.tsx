@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AssemblyEditPlan } from "@/lib/api";
-import { insertAssemblyVideo, snapAssemblyTimelineTime, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
+import { duplicateAssemblyVideo, insertAssemblyVideo, snapAssemblyTimelineTime, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
 function plan(): AssemblyEditPlan { return { id: "p", scope: "project", revision: 1, target_duration_ms: 6000, provenance: {}, markers: [], lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [
     { id: "a", timeline_start_ms: 0, timeline_end_ms: 4000, source_start_ms: 1000, source_end_ms: 5000, source_refs: ["frame:a"], enabled: true },
     { id: "b", timeline_start_ms: 4000, timeline_end_ms: 6000, source_start_ms: 0, source_end_ms: 2000, source_refs: ["frame:b"], enabled: true },
@@ -69,6 +69,21 @@ it("inserts a split video at a distant boundary without moving captions or sourc
     expect(moved.target_duration_ms).toBe(original.target_duration_ms);
     expect(insertAssemblyVideo(original, "a", "middle", false)).toBe(original);
     expect(insertAssemblyVideo(original, "a", "a", true)).toBe(original);
+});
+
+it("duplicates a trimmed video after itself and keeps independent lanes anchored", () => {
+    const original = plan();
+    original.lanes.push({ id: "sub", kind: "subtitle", allow_overlap: false, clips: [{ id: "caption", text: "Keep time", timeline_start_ms: 4500, timeline_end_ms: 5500, enabled: true, source_refs: [] }] });
+    const result = duplicateAssemblyVideo(original, "a", "copy");
+    const videos = result.lanes[0].clips.slice().sort((a, b) => a.timeline_start_ms - b.timeline_start_ms);
+    expect(videos.map(clip => [clip.id, clip.timeline_start_ms, clip.timeline_end_ms])).toEqual([
+        ["a", 0, 4000], ["copy", 4000, 8000], ["b", 8000, 10000],
+    ]);
+    expect(videos[1]).toMatchObject({ source_start_ms: 1000, source_end_ms: 5000, source_refs: ["frame:a"] });
+    expect(result.target_duration_ms).toBe(10000);
+    expect(result.lanes[1]).toEqual(original.lanes[1]);
+    expect(original.target_duration_ms).toBe(6000);
+    expect(() => duplicateAssemblyVideo(original, "a", "b")).toThrow("already exists");
 });
 
 it("snaps a timeline edit to nearby boundaries and leaves distant edits unchanged", () => {
