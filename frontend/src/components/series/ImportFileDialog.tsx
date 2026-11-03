@@ -19,9 +19,19 @@ interface EpisodePreview {
     estimated_duration?: string;
 }
 
+interface SourceAssignment {
+    start_line: number;
+    end_line: number;
+    scope: "series" | "episode" | "unassigned";
+    episodes: number[];
+    preview: string;
+    source: string;
+}
+
 interface PreviewResult {
     episodes: EpisodePreview[];
     import_id: string;
+    assignments?: SourceAssignment[];
     text_length?: number;
     screenplay_text_length?: number;
     series_context?: { preamble?: string; synopsis?: string; first_scene_char_offset?: number };
@@ -132,6 +142,10 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
     // Step 2 -> Step 3: Confirm creation
     const handleConfirm = async () => {
         if (!previewResult) return;
+        if (previewResult.assignments?.some(item => item.scope === "unassigned")) {
+            setError("仍有未分配的原文段落，请指定归属后再创建剧集");
+            return;
+        }
         setIsCreating(true);
         setError(null);
         try {
@@ -140,6 +154,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                 description: description.trim() || undefined,
                 import_id: previewResult.import_id,
                 episodes: previewResult.episodes,
+                assignments: previewResult.assignments,
             });
             setCreatedResult({
                 series_id: result.series?.id || result.series_id,
@@ -154,6 +169,37 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
         }
     };
 
+    const setAssignment = (index: number, value: string) => {
+        setPreviewResult(current => {
+            if (!current?.assignments) return current;
+            const assignments = current.assignments.map((item, itemIndex) => {
+                if (itemIndex !== index) return item;
+                if (value === "series" || value === "unassigned") {
+                    return { ...item, scope: value as "series" | "unassigned", episodes: [] };
+                }
+                return { ...item, scope: "episode" as const, episodes: [Number(value)] };
+            });
+            return { ...current, assignments };
+        });
+        setError(null);
+    };
+
+    const toggleAssignmentEpisode = (index: number, episodeNumber: number) => {
+        setPreviewResult(current => {
+            if (!current?.assignments) return current;
+            const assignments = current.assignments.map((item, itemIndex) => {
+                if (itemIndex !== index) return item;
+                const episodes = item.scope === "episode" ? item.episodes : [];
+                const next = episodes.includes(episodeNumber)
+                    ? episodes.filter(number => number !== episodeNumber)
+                    : [...episodes, episodeNumber].sort((a, b) => a - b);
+                return { ...item, scope: next.length ? "episode" as const : "unassigned" as const, episodes: next };
+            });
+            return { ...current, assignments };
+        });
+        setError(null);
+    };
+
     // Step 3: View series
     const handleViewSeries = () => {
         if (createdResult) {
@@ -164,6 +210,9 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
     };
 
     const stepLabels = [t("stepUpload"), t("stepPreview"), t("stepDone")];
+    const seriesContextText = previewResult?.assignments
+        ? previewResult.assignments.filter(item => item.scope === "series").map(item => item.source).join("")
+        : previewResult?.series_context?.preamble;
 
     return (
         <AnimatePresence>
@@ -347,14 +396,14 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                         {t("previewHint", { count: previewResult.episodes.length })}
                                     </p>
 
-                                    {previewResult.series_context?.preamble && (
+                                    {seriesContextText && (
                                         <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 space-y-2">
                                             <div className="flex items-center justify-between">
                                                 <h4 className="text-foreground font-medium">{t("seriesContextTitle")}</h4>
                                                 <span className="text-text-secondary text-xs">{t("seriesContextNotEpisode")}</span>
                                             </div>
                                             <p className="text-text-secondary text-sm line-clamp-4 whitespace-pre-wrap">
-                                                {previewResult.series_context.preamble}
+                                                {seriesContextText}
                                             </p>
                                             <p className="text-primary text-xs">{t("seriesContextHint")}</p>
                                         </div>
@@ -386,6 +435,52 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                             </div>
                                         ))}
                                     </div>
+
+                                    {previewResult.assignments && (
+                                        <div className="space-y-2">
+                                            <h4 className="text-sm font-medium text-foreground">原文段落归属</h4>
+                                            <div className="max-h-64 overflow-y-auto border border-glass-border rounded-md divide-y divide-glass-border">
+                                                {previewResult.assignments.map((item, index) => {
+                                                    const value = item.scope === "episode"
+                                                        ? item.episodes.length === 1 ? String(item.episodes[0]) : `multi:${item.episodes.join(",")}`
+                                                        : item.scope;
+                                                    return (
+                                                        <div key={`${item.start_line}-${item.end_line}`} className="flex flex-col sm:flex-row gap-3 p-3 text-sm">
+                                                            <div className="min-w-0 flex-1">
+                                                                <span className="text-text-muted text-xs">第 {item.start_line}–{item.end_line} 行</span>
+                                                                <details className="text-text-secondary">
+                                                                    <summary className="cursor-pointer line-clamp-2 whitespace-pre-wrap">{item.preview || "空行"}</summary>
+                                                                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs">{item.source}</pre>
+                                                                </details>
+                                                            </div>
+                                                            <select
+                                                                aria-label={`第 ${item.start_line} 至 ${item.end_line} 行归属`}
+                                                                value={value}
+                                                                onChange={event => setAssignment(index, event.target.value)}
+                                                                className="glass-input w-full sm:w-36 self-start text-xs"
+                                                            >
+                                                                {value.startsWith("multi:") && <option value={value}>多集 {item.episodes.join("、")}</option>}
+                                                                <option value="series">系列资料</option>
+                                                                <option value="unassigned">未分配</option>
+                                                                {previewResult.episodes.map(ep => <option key={ep.episode_number} value={ep.episode_number}>第 {ep.episode_number} 集</option>)}
+                                                            </select>
+                                                            <details className="self-start text-xs text-text-secondary">
+                                                                <summary className="cursor-pointer">多集</summary>
+                                                                <div className="mt-2 max-h-32 w-28 overflow-y-auto space-y-1">
+                                                                    {previewResult.episodes.map(ep => (
+                                                                        <label key={ep.episode_number} className="flex items-center gap-2">
+                                                                            <input type="checkbox" checked={item.scope === "episode" && item.episodes.includes(ep.episode_number)} onChange={() => toggleAssignmentEpisode(index, ep.episode_number)} />
+                                                                            第 {ep.episode_number} 集
+                                                                        </label>
+                                                                    ))}
+                                                                </div>
+                                                            </details>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Action Buttons */}
                                     <div className="flex gap-3 pt-4">
