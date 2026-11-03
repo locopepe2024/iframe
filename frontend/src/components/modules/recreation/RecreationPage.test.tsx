@@ -8,7 +8,7 @@ import { recreationApi, RecreationAssemblyTask, RecreationGenerationTask, Recrea
 
 vi.mock("@/lib/recreation", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/recreation")>(),
-  recreationApi: { versions: vi.fn(), restoreVersion: vi.fn(), list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), models: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn() },
+  recreationApi: { versions: vi.fn(), restoreVersion: vi.fn(), list: vi.fn(), get: vi.fn(), confirm: vi.fn(), analyze: vi.fn(), upload: vi.fn(), evidence: vi.fn(), media: vi.fn(), searchMedia: vi.fn(), bindShot: vi.fn(), uploadImage: vi.fn(), models: vi.fn(), keyframeTasks: vi.fn(), generationTasks: vi.fn(), assemblyTasks: vi.fn(), getShotReview: vi.fn(), saveShotReview: vi.fn() },
 }));
 
 const project: RecreationProject = {
@@ -30,6 +30,7 @@ beforeEach(() => {
   vi.mocked(recreationApi.keyframeTasks).mockResolvedValue([]);
   vi.mocked(recreationApi.generationTasks).mockResolvedValue([]);
   vi.mocked(recreationApi.assemblyTasks).mockResolvedValue([]);
+  vi.mocked(recreationApi.getShotReview).mockResolvedValue({ timeline_key: "current", review: null, stale: false });
   vi.mocked(recreationApi.confirm).mockResolvedValue({ ...project, status: "confirmed",
     timeline: { cuts: [], shots: [{ id: "confirmed-shot", start_pts: 0, end_pts: 900000 }] } });
 });
@@ -59,7 +60,7 @@ describe("recreation confirmation", () => {
     window.localStorage.setItem("iframe.recreation.workspace.v1", JSON.stringify({ projectId: "source", step: "analyze" }));
     render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
     expect(await screen.findByRole("heading", { name: "Original.mp4" })).toBeInTheDocument();
-    expect(screen.getByText("Available now: frame sampling and contact sheet. ASR transcription and subtitle cleanup are not integrated in this workflow yet.")).toBeInTheDocument();
+    expect(screen.getByText(messages.recreation.timelineNeedsConfirmation)).toBeInTheDocument();
     expect(recreationApi.get).toHaveBeenCalledWith("source");
   });
 
@@ -78,9 +79,8 @@ describe("recreation confirmation", () => {
     const navigation = screen.getByRole("navigation", { name: "Recreation project stages" });
     expect(navigation.querySelectorAll("button")).toHaveLength(6);
     expect(screen.getByRole("button", { name: "Assets" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Analyze" }));
-    expect(screen.getByText("Available now: frame sampling and contact sheet. ASR transcription and subtitle cleanup are not integrated in this workflow yet.")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Contact sheet" })).toHaveAttribute("src", expect.stringContaining("/contact-preview.webp"));
+    fireEvent.click(within(navigation).getByRole("button", { name: "Shot review" }));
+    expect(screen.getByText(messages.recreation.timelineNeedsConfirmation)).toBeInTheDocument();
   });
 
   it("starts source analysis from Parse when no analysis exists", async () => {
@@ -119,7 +119,9 @@ describe("recreation confirmation", () => {
     } satisfies RecreationAssemblyTask]);
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Confirm timeline" }));
+    await waitFor(() => expect(screen.getByRole("navigation", { name: "Recreation project stages" }).querySelector('[aria-current="step"]')).toHaveTextContent("Shot review"));
     const navigation = screen.getByRole("navigation", { name: "Recreation project stages" });
+    fireEvent.click(within(navigation).getByRole("button", { name: "Submit" }));
     await waitFor(() => {
       expect(within(navigation).getByRole("button", { name: "Submit" })).toHaveTextContent("Complete");
       expect(within(navigation).getByRole("button", { name: "Assemble" })).toHaveTextContent("Complete");
@@ -139,6 +141,38 @@ describe("recreation confirmation", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Confirm timeline" })).not.toBeDisabled());
     fireEvent.click(screen.getByRole("button", { name: "Confirm timeline" }));
     await waitFor(() => expect(recreationApi.confirm).toHaveBeenCalledWith(project, [241000, 545000, 624000]));
+  });
+  it("uses typed cut times when confirming without a separate import click", async () => {
+    await open();
+    fireEvent.change(screen.getByRole("textbox", { name: "Cut times in seconds" }), { target: { value: "4.016667" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm timeline" }));
+    await waitFor(() => expect(recreationApi.confirm).toHaveBeenCalledWith(project, [241000]));
+    expect(screen.getByRole("navigation", { name: "Recreation project stages" }).querySelector('[aria-current="step"]')).toHaveTextContent("Shot review");
+  });
+  it("opens a confirmed project in shot review instead of replacement", async () => {
+    const confirmed = { ...project, status: "confirmed" as const,
+      timeline: { cuts: [], shots: [{ id: "confirmed-shot", start_pts: 0, end_pts: 900000 }] } };
+    vi.mocked(recreationApi.get).mockResolvedValue(confirmed);
+    render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+    fireEvent.click(await screen.findByRole("button", { name: /Original.mp4/ }));
+    await waitFor(() => expect(screen.getByRole("navigation", { name: "Recreation project stages" }).querySelector('[aria-current="step"]')).toHaveTextContent("Shot review"));
+    await waitFor(() => expect(recreationApi.getShotReview).toHaveBeenCalledWith("source"));
+  });
+  it("moves a saved replacement view without review into shot review", async () => {
+    const confirmed = { ...project, status: "confirmed" as const,
+      timeline: { cuts: [], shots: [{ id: "confirmed-shot", start_pts: 0, end_pts: 900000 }] } };
+    window.localStorage.setItem("iframe.recreation.workspace.v1", JSON.stringify({ projectId: "source", step: "replace" }));
+    vi.mocked(recreationApi.get).mockResolvedValue(confirmed);
+    render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+    await waitFor(() => expect(screen.getByRole("navigation", { name: "Recreation project stages" }).querySelector('[aria-current="step"]')).toHaveTextContent("Shot review"));
+  });
+  it("keeps an explicitly selected replacement view after reload", async () => {
+    const confirmed = { ...project, status: "confirmed" as const,
+      timeline: { cuts: [], shots: [{ id: "confirmed-shot", start_pts: 0, end_pts: 900000 }] } };
+    window.localStorage.setItem("iframe.recreation.workspace.v1", JSON.stringify({ projectId: "source", step: "replace", workflowVersion: 2 }));
+    vi.mocked(recreationApi.get).mockResolvedValue(confirmed);
+    render(<NextIntlClientProvider locale="en" messages={messages}><RecreationPage /></NextIntlClientProvider>);
+    await waitFor(() => expect(screen.getByRole("navigation", { name: "Recreation project stages" }).querySelector('[aria-current="step"]')).toHaveTextContent("Replace"));
   });
   it("rejects an off-frame import and retains the detected cut", async () => {
     await open();
