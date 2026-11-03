@@ -48,6 +48,7 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
   const [isCreating, setIsCreating] = useState(false);
   const t = useTranslations("workspace");
   const tc = useTranslations("common");
+
   const tp = useTranslations("project");
 
   // a11y — dialog labelling + focus management
@@ -469,6 +470,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
+  const [openSeriesMenuId, setOpenSeriesMenuId] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'editing' | 'director3d' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
@@ -485,10 +487,29 @@ export default function Home() {
   const projects = useProjectStore((state) => state.projects);
   const seriesList = useProjectStore((state) => state.seriesList);
   const deleteProject = useProjectStore((state) => state.deleteProject);
+  const deleteSeries = useProjectStore((state) => state.deleteSeries);
   const setProjects = useProjectStore((state) => state.setProjects);
   const fetchSeriesList = useProjectStore((state) => state.fetchSeriesList);
   const t = useTranslations("workspace");
   const tc = useTranslations("common");
+
+  useEffect(() => {
+    if (!openSeriesMenuId) return;
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Element && !event.target.closest('[data-series-actions]')) {
+        setOpenSeriesMenuId(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenSeriesMenuId(null);
+    };
+    document.addEventListener("pointerdown", closeOnPointerDown);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnPointerDown);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [openSeriesMenuId]);
 
   // The browser-only director must remain usable without the project backend.
   // Defer the normal workspace sync until the user leaves that route.
@@ -741,6 +762,21 @@ export default function Home() {
   const changeViewMode = (mode: "gallery" | "list") => {
     setViewMode(mode);
     try { localStorage.setItem(WS_VIEW_KEY, mode); } catch { /* localStorage unavailable */ }
+  };
+
+  const handleDeleteSeries = async (id: string, title: string) => {
+    setOpenSeriesMenuId(null);
+    if (!window.confirm(t("confirmDeleteSeries", { title }))) return;
+    try {
+      await deleteSeries(id);
+      setSeriesEpisodes((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
   };
 
   // Determine content based on activeTab
@@ -1011,19 +1047,30 @@ export default function Home() {
               {wsSeriesGroups.map(({ s, eps, cover, episodeCount }) => {
                 if (eps.length === 0 && wsFiltering && (wsStatus !== "all" || !s.title.toLowerCase().includes(wsQuery))) return null;
                 return (
-                  <section key={`grp-${s.id}`} aria-label={s.title}>
+                  <section key={`grp-${s.id}`} aria-label={s.title} className="relative" data-series-actions onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget)) setOpenSeriesMenuId(null);
+                  }}>
                     <button type="button" onClick={() => { window.location.hash = `#/series/${s.id}`; }}
                       className={`group w-full overflow-hidden rounded border border-glass-border bg-surface text-left transition-colors hover:border-primary hover:bg-hover-bg ${viewMode === "list" ? "flex items-center gap-4 p-2.5" : ""}`}>
                       <div className={`shrink-0 overflow-hidden bg-surface-inset ${viewMode === "list" ? "h-16 w-24 rounded" : "aspect-[16/9] w-full"}`}>
                         {cover ? <img src={cover} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full w-full place-items-center text-text-muted"><Film size={viewMode === "list" ? 22 : 36} /></div>}
                       </div>
-                      <div className={`min-w-0 ${viewMode === "list" ? "flex-1" : "p-4"}`}>
+                      <div className={`min-w-0 pr-12 ${viewMode === "list" ? "flex-1" : "p-4"}`}>
                         <h2 className="truncate font-display text-base font-semibold text-foreground group-hover:text-primary">{s.title}</h2>
-                        <p className="mt-1 text-xs text-text-secondary">{t("series")} · {t("episodes", { count: episodeCount })}</p>
-                        {s.description && <p className="mt-1 truncate text-xs text-text-muted">{s.description}</p>}
+                        <p className="mt-1 truncate text-xs text-text-secondary">{t("series")} · {t("episodes", { count: episodeCount })}</p>
                       </div>
-                      {viewMode === "list" && <ChevronDown size={16} className="mr-2 -rotate-90 text-text-muted" />}
                     </button>
+                    <button type="button" aria-label={`${s.title} ${tc("open")}/${tc("delete")}`} aria-haspopup="menu"
+                      aria-expanded={openSeriesMenuId === s.id}
+                      onClick={() => setOpenSeriesMenuId(openSeriesMenuId === s.id ? null : s.id)}
+                      className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded bg-surface/90 text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                      title={s.title}>
+                      <MoreVertical size={17} />
+                    </button>
+                    {openSeriesMenuId === s.id && <div role="menu" className="absolute right-3 top-12 z-20 min-w-28 rounded border border-glass-border bg-elevated p-1 shadow-xl">
+                      <button type="button" role="menuitem" onClick={() => { setOpenSeriesMenuId(null); window.location.hash = `#/series/${s.id}`; }} className="block w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-hover-bg">{tc("open")}</button>
+                      <button type="button" role="menuitem" onClick={() => void handleDeleteSeries(s.id, s.title)} className="block w-full rounded px-3 py-2 text-left text-sm text-red-500 hover:bg-hover-bg">{tc("delete")}</button>
+                    </div>}
                   </section>
                 );
               })}
