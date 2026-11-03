@@ -743,6 +743,7 @@
     "splitUnavailable": "The source is registered. Separate audio-track and soft-subtitle extraction are not integrated yet.",
     "analysisNeedsParsing": "Run source analysis in Parse first to create frame samples and cut candidates.",
     "timelineNeedsConfirmation": "Complete parsing and confirm the timeline before shot review.",
+    "editCuts": "Edit cuts",
     "assemblyNeedsGeneration": "Complete and submit a video generation run before assembly.",
     "steps": {
       "split": "Split video",

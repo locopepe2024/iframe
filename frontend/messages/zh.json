@@ -743,6 +743,7 @@
     "splitUnavailable": "原片已登记；独立音轨与软字幕拆分尚未接入。",
     "analysisNeedsParsing": "先在“解析”阶段运行原片分析，生成抽帧和切点候选。",
     "timelineNeedsConfirmation": "先完成解析并确认时间线，再进入拉片审核。",
+    "editCuts": "编辑切点",
     "assemblyNeedsGeneration": "完成并提交视频生成任务后，才能进行合成。",
     "steps": {
       "split": "视频拆分",

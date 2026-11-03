@@ -157,6 +157,9 @@ describe("recreation confirmation", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Original.mp4/ }));
     await waitFor(() => expect(screen.getByRole("navigation", { name: "Recreation project stages" }).querySelector('[aria-current="step"]')).toHaveTextContent("Shot review"));
     await waitFor(() => expect(recreationApi.getShotReview).toHaveBeenCalledWith("source"));
+    fireEvent.click(screen.getByRole("button", { name: "Edit cuts" }));
+    expect(screen.getByRole("textbox", { name: "Cut times in seconds" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm timeline" })).toBeInTheDocument();
   });
   it("moves a saved replacement view without review into shot review", async () => {
     const confirmed = { ...project, status: "confirmed" as const,
