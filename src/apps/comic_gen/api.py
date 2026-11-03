@@ -98,6 +98,8 @@ from ..platform_reference_catalog import (
     CHARACTER_CATEGORIES,
     CHARACTER_TAG_SUGGESTIONS,
     MANIFEST_PATH as PLATFORM_REFERENCE_MANIFEST,
+    platform_resource_by_id,
+    resolve_active_visual_reference,
     list_resources as list_platform_reference_resources,
     list_review_candidates as list_platform_reference_review_candidates,
     list_publisher_grants,
@@ -332,19 +334,24 @@ def submit_platform_candidate(request: PlatformCandidateRequest, user: UserConte
 
 @app.get("/platform-reference-library/{resource_id}/media")
 def get_platform_reference_media(resource_id: str, preview: bool = False, user: UserContext = Depends(require_user_context)):
-    from ..platform_reference_catalog import _read_manifest
-    resource = next((item for item in _read_manifest().get("resources", []) if item["platform_resource_id"] == resource_id), None)
+    resource = platform_resource_by_id(resource_id)
     if resource is None or (resource.get("status") != "active" and not (
         reviewer_is_authorized(user.owner_profile_id) or resource.get("provenance", {}).get("creator_profile_id") == user.owner_profile_id
     )):
         raise HTTPException(status_code=404, detail="平台媒体不存在")
-    filename = resource.get("payload", {}).get("media_file")
-    if not isinstance(filename, str) or Path(filename).name != filename:
-        raise HTTPException(status_code=404, detail="平台媒体不存在")
     media_dir = PLATFORM_REFERENCE_MANIFEST.parent / "media"
-    source = (media_dir / filename).resolve()
-    if not source.is_relative_to(media_dir.resolve()) or not source.is_file():
-        raise HTTPException(status_code=404, detail="平台媒体不存在")
+    if resource.get("payload", {}).get("remote_url"):
+        try:
+            source = resolve_active_visual_reference(resource_id, resource["revision"])
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    else:
+        filename = resource.get("payload", {}).get("media_file")
+        if not isinstance(filename, str) or Path(filename).name != filename:
+            raise HTTPException(status_code=404, detail="平台媒体不存在")
+        source = (media_dir / filename).resolve()
+        if not source.is_relative_to(media_dir.resolve()) or not source.is_file():
+            raise HTTPException(status_code=404, detail="平台媒体不存在")
     if preview:
         try:
             source = Path(create_media_thumbnail(str(source), str(media_dir), 320))

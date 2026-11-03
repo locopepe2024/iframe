@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import hashlib
 import fcntl
+import gzip
 import os
 import re
 import shutil
@@ -17,9 +18,11 @@ import unicodedata
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 CATALOG_ROOT = Path(__file__).resolve().parents[1] / ".." / "config" / "platform_reference_catalog"
@@ -80,6 +83,87 @@ CHARACTER_TAG_SUGGESTIONS = (
     "服装拆解", "装备拆解", "配色卡", "识别标记", "世界观说明", "写实", "插画", "动漫", "三维", "古装", "现代",
 )
 MEDIA_EXTENSIONS = {"image": {".png", ".jpg", ".jpeg", ".webp"}, "video": {".mp4", ".mov", ".webm"}}
+OPEN_POSE_PACK = CATALOG_ROOT / "open_pose_costume.json.gz"
+REMOTE_IMAGE_HOSTS = {
+    "ai-pose-gallery.pages.dev", "ai-pose-depth-gallery.pages.dev",
+    "ai-costume-gallery.pages.dev", "ai-costume-anime-gallery.pages.dev",
+    "ai-portrait-gallery.pages.dev", "raw.githubusercontent.com",
+}
+
+
+@lru_cache(maxsize=1)
+def _open_pose_resources() -> dict[str, dict[str, Any]]:
+    if not OPEN_POSE_PACK.is_file():
+        return {}
+    with gzip.open(OPEN_POSE_PACK, "rt", encoding="utf-8") as stream:
+        pack = json.load(stream)
+    return {item["platform_resource_id"]: item for item in pack["resources"]}
+
+
+def platform_resource_by_id(resource_id: str, path: Path | None = None) -> dict[str, Any] | None:
+    manifest_path = path or MANIFEST_PATH
+    local = next((item for item in _read_manifest(manifest_path)["resources"]
+                  if item["platform_resource_id"] == resource_id), None)
+    if local:
+        return local
+    return _open_pose_resources().get(resource_id) if manifest_path == MANIFEST_PATH else None
+
+
+class _NoImageRedirect(HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, msg, headers, newurl):
+        raise ValueError("Reference image redirect is not allowed")
+
+
+def _remote_image_url(value: str) -> str:
+    parsed = urlsplit(value)
+    if (parsed.scheme != "https" or parsed.hostname not in REMOTE_IMAGE_HOSTS or parsed.port not in (None, 443)
+            or parsed.username or parsed.password or parsed.query or parsed.fragment
+            or parsed.path.lower().rsplit(".", 1)[-1] not in {"png", "jpg", "jpeg", "webp"}):
+        raise ValueError("Reference image origin is not allowed")
+    return value
+
+
+def _materialize_remote_image(resource: dict[str, Any], manifest_path: Path) -> Path:
+    from PIL import Image
+
+    payload = resource["payload"]
+    url = _remote_image_url(payload["remote_url"])
+    suffix = Path(urlsplit(url).path).suffix.lower()
+    cache_dir = manifest_path.parent / "remote_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    name = hashlib.sha256(f"{resource['platform_resource_id']}:{resource['revision']}:{url}".encode()).hexdigest() + suffix
+    destination = cache_dir / name
+    with _MUTATION_LOCK, _file_lock(destination):
+        if destination.is_file():
+            expected_hash = payload.get("media_sha256")
+            if not expected_hash or hashlib.sha256(destination.read_bytes()).hexdigest() == expected_hash:
+                return destination
+            destination.unlink()
+        temporary = cache_dir / f".{uuid.uuid4().hex}.tmp"
+        try:
+            opener = build_opener(_NoImageRedirect)
+            with opener.open(Request(url, headers={"User-Agent": "iFrame-Reference/1.0"}), timeout=30) as response, temporary.open("wb") as output:
+                size = 0
+                digest = hashlib.sha256()
+                for chunk in iter(lambda: response.read(1024 * 1024), b""):
+                    size += len(chunk)
+                    if size > 20 * 1024 * 1024:
+                        raise ValueError("Reference image exceeds 20 MiB")
+                    digest.update(chunk)
+                    output.write(chunk)
+            if not size or (payload.get("media_sha256") and digest.hexdigest() != payload["media_sha256"]):
+                raise ValueError("Reference image content hash is invalid")
+            with Image.open(temporary) as image:
+                expected = "jpeg" if suffix in {".jpg", ".jpeg"} else suffix.removeprefix(".")
+                if (image.format or "").lower() != expected or not 0 < image.width * image.height <= 50_000_000:
+                    raise ValueError("Reference image format or dimensions are invalid")
+                image.verify()
+            os.replace(temporary, destination)
+        except (OSError, Image.DecompressionBombError) as exc:
+            raise ValueError("Reference image could not be fetched or decoded") from exc
+        finally:
+            temporary.unlink(missing_ok=True)
+    return destination
 
 
 def normalize_character_tags(values: list[str]) -> list[str]:
@@ -521,7 +605,9 @@ def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None
     manifest = _read_manifest(path)
     needle = query.strip().casefold()
     resources = []
-    for resource in manifest.get("resources", []):
+    source_resources = dict(_open_pose_resources()) if path == MANIFEST_PATH else {}
+    source_resources.update((item["platform_resource_id"], item) for item in manifest.get("resources", []))
+    for resource in source_resources.values():
         if resource.get("status") != "active":
             continue
         if _is_skill_card(resource):
@@ -559,13 +645,14 @@ def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None
 def resolve_active_visual_reference(resource_id: str, revision: int, path: Path | None = None) -> Path:
     """Resolve one published platform image without exposing storage paths to clients."""
     manifest_path = path or MANIFEST_PATH
-    resource = next((item for item in _read_manifest(manifest_path)["resources"]
-                     if item["platform_resource_id"] == resource_id), None)
+    resource = platform_resource_by_id(resource_id, manifest_path)
     if (resource is None or resource["status"] != "active"
             or resource["revision"] != revision or resource["kind"] != "image"
             or not str(resource.get("category_path", "")).startswith("reference/")):
         raise ValueError("platform reference is unavailable or its revision changed")
     payload = resource.get("payload")
+    if resource is _open_pose_resources().get(resource_id) and isinstance(payload, dict) and payload.get("remote_url"):
+        return _materialize_remote_image(resource, manifest_path)
     filename = payload.get("media_file") if isinstance(payload, dict) else None
     if not isinstance(filename, str) or Path(filename).name != filename:
         raise ValueError("platform reference image is missing")
