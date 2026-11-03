@@ -2341,27 +2341,41 @@ async def import_file_preview(
     suggested_episodes: int = 3,
     user: UserContext = Depends(require_studio_user),
 ):
-    """Upload text once and start or resume a durable episode-split job."""
+    """Extract uploaded script text and start or resume an episode-split job."""
     if suggested_episodes < 1 or suggested_episodes > 100:
         raise HTTPException(status_code=400, detail="建议集数应在 1-100 之间")
     try:
-        content_bytes = await file.read()
-        if len(content_bytes) > 2 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="TXT 文件超过 2 MB。请拆分文件后分别导入；分集分析上下文上限为约 80,000 字符。")
-        if content_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF")):
-            raise HTTPException(status_code=400, detail="请上传 TXT、Markdown 或 Fountain 文本文件，不能上传图片或视频")
-        try:
-            text = content_bytes.decode("utf-8-sig")
-        except UnicodeDecodeError:
+        filename = file.filename or "import.txt"
+        is_docx = Path(filename).suffix.lower() == ".docx"
+        limit = 10 * 1024 * 1024 if is_docx else 2 * 1024 * 1024
+        content_bytes = await file.read(limit + 1)
+        if len(content_bytes) > limit:
+            detail = "DOCX 文件超过 10 MB，请拆分文件后分别导入" if is_docx else "TXT 文件超过 2 MB。请拆分文件后分别导入；分集分析上下文上限为约 80,000 字符。"
+            raise HTTPException(status_code=413, detail=detail)
+        if is_docx:
+            import tempfile
+            from ...utils.reference_files import read_reference_document
+
+            with tempfile.TemporaryDirectory(prefix="iframe-series-import-") as directory:
+                source = Path(directory) / "source.docx"
+                source.write_bytes(content_bytes)
+                text = await asyncio.get_event_loop().run_in_executor(
+                    None, read_reference_document, str(source)
+                )
+        else:
+            if content_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF")):
+                raise HTTPException(status_code=400, detail="请上传 TXT、Markdown、DOCX 或 Fountain 文本文件，不能上传图片或视频")
             try:
-                text = content_bytes.decode("utf-16")
+                text = content_bytes.decode("utf-8-sig")
             except UnicodeDecodeError:
-                text = content_bytes.decode("gb18030", errors="replace")
+                try:
+                    text = content_bytes.decode("utf-16")
+                except UnicodeDecodeError:
+                    text = content_bytes.decode("gb18030", errors="replace")
         if not text.strip():
             raise HTTPException(status_code=400, detail="文件内容为空")
 
         llm = pipeline.script_processor.llm
-        filename = file.filename or "import.txt"
         fingerprint = hashlib.sha256(json.dumps([
             "source-newlines-v2",
             hashlib.sha256(text.encode("utf-8")).hexdigest(),
