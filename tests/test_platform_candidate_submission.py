@@ -71,6 +71,35 @@ def test_candidate_rejects_unowned_media_and_unknown_category(monkeypatch, tmp_p
         catalog.submit_generation_candidate(**{**values, "category_path": "scene/unknown"})
 
 
+def test_shared_visual_categories_publish_as_platform_images(monkeypatch, tmp_path):
+    monkeypatch.setattr(catalog, "publisher_is_authorized", lambda owner: owner == OWNER)
+    monkeypatch.setattr(catalog, "reviewer_is_authorized", lambda owner: owner == OWNER)
+    owner = tmp_path / "owner"
+    owner.mkdir()
+    media = owner / "pose.png"
+    media.write_bytes(b"pose-reference")
+    manifest = tmp_path / "manifest.json"
+    for category in ("reference/pose", "reference/costume", "reference/character"):
+        resource = catalog.submit_generation_candidate(
+            creator_profile_id=OWNER, generation_id=category, output_id="output",
+            kind="image", category_path=category, title=category,
+            description="Shared image reference", prompt_used="source prompt", model_id="model",
+            parameters={}, media_source=media, media_owner_root=owner,
+            rights_confirmed=True, path=manifest,
+        )
+        assert catalog.list_resources(category=category, path=manifest)["resources"] == []
+        catalog.promote_resource(resource["platform_resource_id"], OWNER,
+                                 resource["provenance"]["content_sha256"], manifest)
+        assert catalog.list_resources(category=category, path=manifest)["resources"][0]["platform_resource_id"] == resource["platform_resource_id"]
+    with pytest.raises(ValueError, match="images"):
+        catalog.submit_generation_candidate(
+            creator_profile_id=OWNER, generation_id="video", output_id=None,
+            kind="prompt_preset", category_path="reference/pose", title="pose",
+            description="pose", prompt_used="pose", model_id="model", parameters={},
+            media_source=None, media_owner_root=owner, rights_confirmed=True, path=manifest,
+        )
+
+
 def test_prompt_only_candidate_keeps_actual_prompt_separate(monkeypatch, tmp_path):
     monkeypatch.setattr(catalog, "publisher_is_authorized", lambda owner: owner == OWNER)
     owner = tmp_path / "owner"

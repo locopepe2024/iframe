@@ -284,17 +284,17 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
 
           {targetScope === "platform" && <div className="grid gap-3">
             <label className="text-xs text-text-secondary">平台类别
-              <select aria-label="平台类别" value={platformCategory} onChange={(event) => { setPlatformCategory(event.target.value); setDictionaryEntryType(""); setDictionaryMembers([]); }}
+              <select aria-label="平台类别" value={platformCategory} onChange={(event) => { setPlatformCategory(event.target.value); if (event.target.value.startsWith("reference/")) setPlatformKind("image"); setDictionaryEntryType(""); setDictionaryMembers([]); }}
                 className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
-                {platformCategories.map((item) => <option key={item.id} value={item.id}>{item.label} · {item.id}</option>)}
+                {platformCategories.map((item) => <option key={item.id} value={item.id} disabled={item.id.startsWith("reference/") && initialMediaType !== "image"}>{item.label} · {item.id}</option>)}
               </select>
             </label>
             <div>
-              <label htmlFor="platform-character-tags" className="text-xs text-text-secondary">角色标签</label>
-              <input id="platform-character-tags" value={platformTagsText} onChange={(event) => setPlatformTagsText(event.target.value)}
+              <label htmlFor="platform-reference-tags" className="text-xs text-text-secondary">检索标签</label>
+              <input id="platform-reference-tags" value={platformTagsText} onChange={(event) => setPlatformTagsText(event.target.value)}
                 placeholder="如：角色设定稿，转面三视图，配色卡" className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground" />
               <p className="mt-1 text-xs text-text-muted">逗号分隔，最多 12 个；仅用于检索，不会加入生成提示词。</p>
-              {!!platformSuggestedTags.length && <div className="mt-2 flex flex-wrap gap-1.5" aria-label="建议角色标签">
+              {!!platformSuggestedTags.length && <div className="mt-2 flex flex-wrap gap-1.5" aria-label="建议检索标签">
                 {platformSuggestedTags.map((tag) => {
                   const selected = platformTagsText.split(/[,，]/).some((value) => value.trim() === tag);
                   return <button key={tag} type="button" aria-pressed={selected} onClick={() => {
@@ -308,10 +308,10 @@ export default function NewLibraryAssetDialog({ onClose, onCreated, initialImage
               <select aria-label="发布内容" value={platformKind} onChange={(event) => { setPlatformKind(event.target.value as typeof platformKind); setDictionaryEntryType(""); setDictionaryMembers([]); }}
                 className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
                 <option value={initialMediaType}>{initialMediaType === "video" ? "视频与提示词" : "图片与提示词"}</option>
-                <option value="prompt_preset">仅提示词</option>
+                <option value="prompt_preset" disabled={platformCategory.startsWith("reference/")}>仅提示词</option>
               </select>
             </label>
-            {platformCategory !== "character/reference" && <label className="text-xs text-text-secondary">词典归类
+            {platformCategory !== "character/reference" && !platformCategory.startsWith("reference/") && <label className="text-xs text-text-secondary">词典归类
               <select aria-label="词典归类" value={dictionaryEntryType} onChange={(event) => { setDictionaryEntryType(event.target.value as typeof dictionaryEntryType); setDictionaryMembers([]); }}
                 className="mt-2 w-full rounded-lg border border-glass-border bg-surface-inset px-3 py-2 text-sm text-foreground">
                 <option value="">普通参考素材</option>

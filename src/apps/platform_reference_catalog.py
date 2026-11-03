@@ -43,6 +43,9 @@ def _file_lock(path: Path):
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 CHARACTER_CATEGORIES = {
+    "reference/pose": "姿势参考",
+    "reference/costume": "服饰参考",
+    "reference/character": "人物参考",
     "character/identity/face": "面容",
     "character/identity/skin": "皮肤",
     "character/identity/build": "身材体态",
@@ -156,6 +159,8 @@ def submit_generation_candidate(
         raise PermissionError("Platform candidate submission is not authorized")
     if kind not in {"image", "video", "prompt_preset"} or category_path not in CHARACTER_CATEGORIES:
         raise ValueError("Platform candidate kind or category is invalid")
+    if category_path.startswith("reference/") and kind != "image":
+        raise ValueError("Shared visual references must be images")
     dictionary = validate_dictionary_label(kind, category_path, dictionary_entry_type)
     if dictionary_entry_type != "pattern" and dictionary_members:
         raise ValueError("Dictionary members require a pattern")
@@ -371,6 +376,8 @@ def _validate_resource(resource: Any) -> None:
     category = resource.get("category_path")
     if category is not None and (not isinstance(category, str) or not category.strip()):
         raise ValueError("platform reference category is invalid")
+    if isinstance(category, str) and category.startswith("reference/") and resource.get("kind") != "image":
+        raise ValueError("shared visual references must be images")
     if "tags" in resource and (not isinstance(resource["tags"], list) or any(not isinstance(tag, str) for tag in resource["tags"])):
         raise ValueError("platform reference tags are invalid")
     if "dictionary" in resource:
