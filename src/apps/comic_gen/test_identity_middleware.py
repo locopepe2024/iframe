@@ -44,8 +44,15 @@ def test_studio_owner_middleware_forwards_api_key_identity(monkeypatch, tmp_path
                 "/projects/",
                 headers={API_KEY_IDENTITY_HEADER: identity},
             )
+            no_slash = client.get(
+                "/projects",
+                headers={API_KEY_IDENTITY_HEADER: identity},
+                follow_redirects=False,
+            )
         assert response.status_code == 200
-        assert received == [(None, None, identity)]
+        assert no_slash.status_code == 200
+        assert no_slash.json() == response.json()
+        assert received == [(None, None, identity), (None, None, identity)]
     finally:
         api.app.dependency_overrides.pop(require_studio_user, None)
 
