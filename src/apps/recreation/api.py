@@ -9,6 +9,7 @@ from .service import (
     DEFAULT_RECREATION_VIDEO_MODEL,
     RecreationService,
 )
+from .shot_review import timeline_key
 
 router = APIRouter(prefix="/recreation", tags=["recreation"])
 
@@ -69,6 +70,14 @@ class RestoreVersionRequest(AnalyzeRequest):
 class EvidenceRequest(BaseModel):
     analysis_id: str
     pts: StrictInt
+
+
+class ShotReviewRequest(BaseModel):
+    analysis_id: str
+    timeline_key: str
+    review_revision: int = Field(ge=0)
+    items: list[dict] | None = None
+    candidate: dict | None = None
 
 
 def public(record, user):
@@ -160,6 +169,20 @@ def evidence(project_id: str, request: EvidenceRequest, user: UserContext = Depe
         return public(RecreationService(user).evidence(project_id, request.analysis_id, request.pts), user)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/projects/{project_id}/shot-review")
+def get_shot_review(project_id: str, user: UserContext = Depends(require_studio_user)):
+    record = RecreationService(user).get(project_id)
+    return {"timeline_key": timeline_key(record), "review": record.get("shot_review"),
+            "stale": bool(record.get("shot_review") and record["shot_review"]["timeline_key"] != timeline_key(record))}
+
+
+@router.put("/projects/{project_id}/shot-review")
+def save_shot_review(project_id: str, request: ShotReviewRequest, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).save_shot_review(
+        project_id, request.analysis_id, request.timeline_key, request.review_revision,
+        request.items, request.candidate), user)
 
 
 class ShotReferencesRequest(AnalyzeRequest):

@@ -789,6 +789,8 @@
     "shots": "shots",
     "confirm": "Confirm timeline",
     "frame": "Source frame",
+    "play": "Play",
+    "pause": "Pause",
     "addCut": "Add cut",
     "timestamps": "Cut times in seconds",
     "import": "Import cuts",

@@ -789,6 +789,8 @@
     "shots": "镜",
     "confirm": "确认时间线",
     "frame": "原片帧",
+    "play": "播放",
+    "pause": "暂停",
     "addCut": "添加切点",
     "timestamps": "切点时间（秒）",
     "import": "导入切点",
