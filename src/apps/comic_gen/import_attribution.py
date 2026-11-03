@@ -12,7 +12,8 @@ _EPISODE_LIKE_LINE = re.compile(
 )
 _GROUP_HEADING = re.compile(r"^[^（）()\n]{1,100}[（(]第\s*(\d{1,3})\s*[—–-]\s*(\d{1,3})\s*集[）)]")
 _DETAIL_LINE = re.compile(r"^第\s*(\d{1,3})\s*集[·：:]")
-_SHARED_GROUP_CONTEXT = re.compile(r"^(?:原著锚点|角色锚点|人物设定|场景设定|月读牢笼)\s*[：:]")
+_SHARED_GROUP_CONTEXT = re.compile(r"^(?:原著锚点|角色锚点|人物设定|场景设定)\s*[：:]")
+_GROUP_OPENING = re.compile(r"^月读牢笼\s*[：:]")
 _OVERVIEW_SECTION = re.compile(r"^[一二三四五六七八九十]+[、.]\s*\d+\s*集分集标题速览")
 _OVERVIEW_LINE = re.compile(r"^第\s*(\d{1,3})\s*集(?=[ \t\u3000：:、.．·\-—－])")
 _SECTION_HEADING = re.compile(r"^[一二三四五六七八九十]+[、.]")
@@ -81,6 +82,8 @@ def structured_assignments(text: str, episode_count: int) -> list[dict[str, Any]
                 owners[index] = ("episode", (number,))
             elif index == start_line or _SHARED_GROUP_CONTEXT.match(line):
                 owners[index] = ("episode", group_numbers)
+            elif _GROUP_OPENING.match(line):
+                owners[index] = ("episode", (first,))
         if detailed != set(group_numbers):
             return None
 

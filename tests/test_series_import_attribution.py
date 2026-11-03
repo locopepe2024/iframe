@@ -30,6 +30,7 @@ STRUCTURED_SOURCE = (
     "五、角色详细设定\n"
     "甲（第1—2集）｜旧城\n"
     "角色锚点：甲保留一枚徽章。\n"
+    "月读牢笼：甲初次见面就把主角按在赌桌上。\n"
     "第1集·进入：甲在旧城遇到主角。\n"
     "第2集·离开：甲把徽章交给主角。\n"
     "关系节点：甲在离开时改变想法。\n"
@@ -57,6 +58,8 @@ def test_structured_series_routes_shared_and_episode_source_without_model_assign
     assert "制作备注" in series
     assert "关系节点" in series and "信物：徽章" in series
     assert "角色锚点：甲" in episodes[0] and "角色锚点：甲" in episodes[1]
+    assert "初次见面就把主角按在赌桌上" in episodes[0]
+    assert "初次见面就把主角按在赌桌上" not in episodes[1]
     assert "关系节点" not in episodes[0] and "信物：徽章" not in episodes[0]
     assert "第1集·进入" in episodes[0] and "第1集·进入" not in episodes[1]
     assert "第2集·离开" in episodes[1] and "第2集·离开" not in episodes[0]
