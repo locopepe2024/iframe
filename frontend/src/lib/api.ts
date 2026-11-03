@@ -3029,7 +3029,7 @@ export const api = {
     importFilePreview: async (file: File, suggestedEpisodes: number = 3): Promise<SeriesImportPreview> => {
         return runImportPreview<SeriesImportPreview>(API_URL, file, suggestedEpisodes);
     },
-    importFileConfirm: async (data: { title: string; description?: string; import_id?: string; text?: string; episodes: any[] }) => {
+    importFileConfirm: async (data: { title: string; description?: string; import_id?: string; text?: string; episodes: any[]; assignments?: import("./seriesImportAnalysis").SeriesImportPreview["assignments"] }) => {
         const response = await axios.post(`${API_URL}/series/import/confirm`, data);
         return response.data;
     },

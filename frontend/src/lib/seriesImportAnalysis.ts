@@ -20,6 +20,14 @@ export interface SeriesImportPreview {
         end_marker?: string;
     }>;
     import_id: string;
+    assignments?: Array<{
+        start_line: number;
+        end_line: number;
+        scope: "series" | "episode" | "unassigned";
+        episodes: number[];
+        preview: string;
+        source: string;
+    }>;
     screenplay_text_length?: number;
     series_context?: {
         kind?: string;
