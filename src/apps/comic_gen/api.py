@@ -1415,6 +1415,7 @@ async def extract_preview(script_id: str, request: ReparseProjectRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/projects", response_model=List[dict], include_in_schema=False)
 @app.get("/projects/", response_model=List[dict])
 def list_projects(user: UserContext = Depends(require_studio_user)):
     """Lists all projects from backend storage."""
