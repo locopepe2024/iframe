@@ -344,7 +344,8 @@ class EditingService:
         try:
             try:
                 UniArtTTSProcessor().synthesize(text, path, voice=voice_id,
-                                                speech_rate=speed, pitch_rate=pitch, volume=volume)
+                                                speech_rate=speed, pitch_rate=pitch, volume=volume,
+                                                output_root=self.output_root)
             except UniArtTTSError as exc:
                 raise HTTPException(exc.status_code, str(exc)) from exc
             with path.open('rb') as stream:
