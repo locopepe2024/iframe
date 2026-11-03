@@ -79,6 +79,7 @@ from .models import (
 )
 from .asset_revisions import commit_asset_revision
 from .llm import DirectorShootingChunkError, ScriptProcessor, numbered_episode_headings
+from .import_attribution import analyze_attribution, episode_count_hint, materialize, needs_attribution
 from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -12622,6 +12623,43 @@ class ComicGenPipeline(StudioOwnerMixin):
         _, screenplay_text = self._split_import_series_context(text)
         return self.script_processor.split_into_episodes(screenplay_text, suggested_episodes)
 
+    def preview_series_import(self, text: str, suggested_episodes: int) -> Dict[str, Any]:
+        if self._requires_import_attribution(text):
+            try:
+                numbered_count = len(numbered_episode_headings(text))
+            except ValueError:
+                numbered_count = 0
+            analyzed = analyze_attribution(
+                self.script_processor.llm, text, numbered_count or episode_count_hint(text) or suggested_episodes
+            )
+            assignments = analyzed["assignments"]
+            preamble = "".join(
+                text[item["start_offset"]:item["end_offset"]]
+                for item in assignments if item["scope"] == "series"
+            )
+            episodes = [dict(item, source_layout="attributed") for item in analyzed["episodes"]]
+            return {
+                "episodes": episodes,
+                "assignments": assignments,
+                "series_context": {"schema_version": 1, "kind": "series_submission_context",
+                                   "preamble": preamble, "source_layout": "attributed"},
+                "screenplay_text_length": sum(
+                    item["end_offset"] - item["start_offset"]
+                    for item in assignments if item["scope"] == "episode"
+                ),
+            }
+        context, screenplay = self._split_import_series_context(text)
+        return {"episodes": self.script_processor.split_into_episodes(screenplay, suggested_episodes),
+                "series_context": context, "screenplay_text_length": len(screenplay)}
+
+    @staticmethod
+    def _requires_import_attribution(text: str) -> bool:
+        try:
+            recognized_count = len(numbered_episode_headings(text))
+        except ValueError:
+            recognized_count = 0
+        return needs_attribution(text, recognized_count)
+
     @staticmethod
     def _split_import_series_context(text: str) -> Tuple[Dict[str, Any], str]:
         """Separate whole-work submission material from screenplay scenes.
@@ -12697,13 +12735,25 @@ class ComicGenPipeline(StudioOwnerMixin):
         description: str = "",
         owner_user_id: Optional[str] = None,
         owner_profile_id: Optional[str] = None,
+        assignments: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict:
         """Create a Series with Episodes from import data.
         episodes_data: list of dicts with episode_number, title, start_marker, end_marker."""
-        series_context, screenplay_text = self._split_import_series_context(text)
-        # Split text into episode chunks based on markers. Markers are applied
-        # only to screenplay text, never to the submission preamble.
-        episode_texts = self._split_text_by_markers(screenplay_text, episodes_data)
+        if assignments is not None:
+            if [ep.get("episode_number") for ep in episodes_data] != list(range(1, len(episodes_data) + 1)):
+                raise ValueError("分集编号无效；请重新预览导入")
+            series_text, episode_texts, checked = materialize(text, assignments, len(episodes_data))
+            series_context = {"schema_version": 1, "kind": "series_submission_context",
+                              "source_layout": "attributed", "preamble": series_text,
+                              "source_attribution": [
+                                  {key: value for key, value in item.items() if key != "source"}
+                                  for item in checked
+                              ]}
+        else:
+            if self._requires_import_attribution(text):
+                raise ValueError("缺少原文归属结果；请重新预览导入")
+            series_context, screenplay_text = self._split_import_series_context(text)
+            episode_texts = self._split_text_by_markers(screenplay_text, episodes_data)
         series = self.create_series(
             title,
             description,

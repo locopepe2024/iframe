@@ -44,7 +44,7 @@ def test_import_preview_extracts_docx_before_episode_split(tmp_path, monkeypatch
     pipeline = SimpleNamespace(
         script_processor=SimpleNamespace(llm=SimpleNamespace(
             provider="openai", _get_default_model=lambda: "test")),
-        import_file_and_split=calls,
+        preview_series_import=lambda text, count: {"episodes": calls(text, count), "series_context": {}, "screenplay_text_length": len(text)},
     )
     owner = UserContext("user", "owner", "", "")
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -82,7 +82,7 @@ def test_import_preview_is_durable_deduplicated_and_owner_scoped(tmp_path, monke
         script_processor=SimpleNamespace(
             llm=SimpleNamespace(provider="openai", _get_default_model=lambda: "test")
         ),
-        import_file_and_split=calls,
+        preview_series_import=lambda text, count: {"episodes": calls(text, count), "series_context": {}, "screenplay_text_length": len(text)},
         _import_cache={},
     )
     owner = UserContext("user", "owner", "", "")
@@ -123,7 +123,7 @@ def test_import_preview_accepts_sixty_episodes(tmp_path, monkeypatch):
         script_processor=SimpleNamespace(
             llm=SimpleNamespace(provider="openai", _get_default_model=lambda: "test")
         ),
-        import_file_and_split=calls,
+        preview_series_import=lambda text, count: {"episodes": calls(text, count), "series_context": {}, "screenplay_text_length": len(text)},
     )
     with ThreadPoolExecutor(max_workers=1) as executor:
         jobs = ExtractionJobs(tmp_path / "jobs.db", executor=executor)
