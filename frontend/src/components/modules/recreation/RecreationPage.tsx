@@ -378,7 +378,10 @@ export default function RecreationPage() {
               })}</ol>
             </section>}
             {step === "analyze" && <section className="border-t border-border py-5">
-              <h3 className="font-semibold mb-4">{t("steps.analyze")}</h3>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h3 className="font-semibold">{t("steps.analyze")}</h3>
+                {project.timeline && <button type="button" className="glass-button min-h-10" onClick={() => setStep("parse")}>{t("editCuts")}</button>}
+              </div>
               {project.timeline ? <ShotReviewTimeline project={project} currentFrame={frameIndex} seek={seekFrame} onSaved={record => {
                 setProject(record); setProjects(all => all.map(p => p.id === record.id ? record : p));
               }} viewer={<div className="min-w-0 space-y-3">
