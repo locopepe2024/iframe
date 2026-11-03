@@ -264,6 +264,16 @@ function PlatformReferenceReviewQueue() {
   const [catalog, setCatalog] = useState<import("@/lib/api").PlatformReferenceCatalog | null>(null);
   const [activeCatalog, setActiveCatalog] = useState<import("@/lib/api").PlatformReferenceCatalog | null>(null);
   const [canReview, setCanReview] = useState(false);
+  const [canPublish, setCanPublish] = useState(false);
+  const [visualFile, setVisualFile] = useState<File | null>(null);
+  const [visualCategory, setVisualCategory] = useState<"reference/pose" | "reference/costume" | "reference/character">("reference/pose");
+  const [visualTitle, setVisualTitle] = useState("");
+  const [visualDescription, setVisualDescription] = useState("");
+  const [visualTags, setVisualTags] = useState("");
+  const [visualRightsNote, setVisualRightsNote] = useState("");
+  const [visualSourceUrl, setVisualSourceUrl] = useState("");
+  const [visualRightsConfirmed, setVisualRightsConfirmed] = useState(false);
+  const [visualSubmitting, setVisualSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState<string | null>(null);
   const [publisherGrants, setPublisherGrants] = useState<string[]>([]);
@@ -285,6 +295,8 @@ function PlatformReferenceReviewQueue() {
     setLoading(true);
     try {
       setActiveCatalog(await api.getPlatformReferenceLibrary());
+      const publisher = await api.getPlatformPublisher();
+      setCanPublish(!!publisher.authorized);
       const reviewer = await api.getPlatformReferenceReviewer();
       setCanReview(!!reviewer.authorized);
       setCatalog(reviewer.authorized ? await api.getPlatformReferenceReviewQueue() : null);
@@ -312,6 +324,27 @@ function PlatformReferenceReviewQueue() {
     } catch { toast.error("平台发布者授权失败，请核对账户身份"); }
     finally { setGrantBusy(false); }
   };
+  const submitVisual = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (!visualFile || !visualTitle.trim() || !visualRightsNote.trim() || !visualRightsConfirmed) return;
+    setVisualSubmitting(true);
+    try {
+      const { image_url } = await api.uploadLibraryImage(visualFile);
+      await api.submitUploadedPlatformVisualCandidate({
+        source_image_url: image_url, category_path: visualCategory, title: visualTitle.trim(),
+        description: visualDescription.trim(), tags: visualTags.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean),
+        rights_confirmed: true, rights_note: visualRightsNote.trim(), source_url: visualSourceUrl.trim(),
+      });
+      setVisualFile(null);
+      setVisualTitle(""); setVisualDescription(""); setVisualTags("");
+      setVisualRightsNote(""); setVisualSourceUrl(""); setVisualRightsConfirmed(false);
+      form.reset();
+      toast.success("参考图已提交审核");
+      if (canReview) await load();
+    } catch { toast.error("参考图提交失败，请检查图片和授权信息"); }
+    finally { setVisualSubmitting(false); }
+  };
   return <div className="flex-1 min-h-0 overflow-y-auto px-4 py-6 md:px-7">
     <div className="mb-5">
       <div className="font-mono text-[0.625rem] uppercase tracking-[0.2em] text-text-muted">PLATFORM REFERENCE LIBRARY</div>
@@ -319,6 +352,22 @@ function PlatformReferenceReviewQueue() {
       <p className="text-sm text-text-secondary mt-1">{t("reviewDescription")}</p>
     </div>
     {loading ? <div className="py-12 text-text-secondary">{t("reviewLoading")}</div> : <>
+      {canPublish && <form onSubmit={(event) => void submitVisual(event)} className="mb-7 border-b border-glass-border pb-6" aria-label="提交共享参考图">
+        <h2 className="text-sm font-semibold text-foreground">提交共享参考图</h2>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <input aria-label="参考图片" type="file" accept="image/png,image/jpeg,image/webp" required onChange={(event) => setVisualFile(event.target.files?.[0] ?? null)} className="glass-input w-full px-3 py-2 text-sm" />
+          <select aria-label="参考类别" value={visualCategory} onChange={(event) => setVisualCategory(event.target.value as typeof visualCategory)} className="glass-input px-3 py-2 text-sm">
+            <option value="reference/pose">姿势参考</option><option value="reference/costume">服饰参考</option><option value="reference/character">人物参考</option>
+          </select>
+          <input aria-label="参考标题" value={visualTitle} onChange={(event) => setVisualTitle(event.target.value)} maxLength={200} required placeholder="标题" className="glass-input px-3 py-2 text-sm" />
+          <input aria-label="参考标签" value={visualTags} onChange={(event) => setVisualTags(event.target.value)} placeholder="标签，使用逗号分隔" className="glass-input px-3 py-2 text-sm" />
+          <textarea aria-label="参考描述" value={visualDescription} onChange={(event) => setVisualDescription(event.target.value)} maxLength={20000} placeholder="描述" className="glass-input px-3 py-2 text-sm md:col-span-2" />
+          <input aria-label="来源网址" type="url" value={visualSourceUrl} onChange={(event) => setVisualSourceUrl(event.target.value)} maxLength={2048} placeholder="来源网址（可选）" className="glass-input px-3 py-2 text-sm" />
+          <input aria-label="发布权说明" value={visualRightsNote} onChange={(event) => setVisualRightsNote(event.target.value)} maxLength={2000} required placeholder="发布权来源或授权说明" className="glass-input px-3 py-2 text-sm" />
+        </div>
+        <label className="mt-3 flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={visualRightsConfirmed} onChange={(event) => setVisualRightsConfirmed(event.target.checked)} required />我确认拥有此图片的平台发布权</label>
+        <button type="submit" disabled={visualSubmitting || !visualFile || !visualTitle.trim() || !visualRightsNote.trim() || !visualRightsConfirmed} className="glass-button mt-3 px-4 py-2 text-sm disabled:opacity-50">{visualSubmitting ? "提交中…" : "提交审核"}</button>
+      </form>}
       {canReview && <>
         <section className="mb-7 rounded-xl border border-glass-border bg-surface-inset p-4" aria-label="平台候选发布者">
           <h2 className="text-sm font-semibold text-foreground">平台候选发布者</h2>

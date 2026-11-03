@@ -6,10 +6,11 @@ const mocked = vi.hoisted(() => ({
   updateLibraryAsset: vi.fn(), updateSeriesAssetAttributes: vi.fn(), updateAssetAttributes: vi.fn(),
   getWorkbenchTemplates: vi.fn(),
   getPlatformReferenceLibrary: vi.fn(), getPlatformReferenceReviewer: vi.fn(),
+  getPlatformPublisher: vi.fn(), uploadLibraryImage: vi.fn(), submitUploadedPlatformVisualCandidate: vi.fn(),
 }));
 vi.mock('@/lib/api', () => ({ api: mocked, API_URL: '', authenticatedFetch: mocked.authenticatedFetch }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: { name?: string }) => values?.name ? `${key} ${values.name}` : key }));
-vi.mock('@/store/toastStore', () => ({ toast: { error: mocked.error } }));
+vi.mock('@/store/toastStore', () => ({ toast: { error: mocked.error, success: vi.fn() } }));
 vi.mock('./RecreationMediaLibrary', () => ({ default: () => <div>recreation media browser</div> }));
 vi.mock('./AssetInspector', () => ({ default: ({ onCoverUpdated, onRename }: { onCoverUpdated: (result: any) => void; onRename: (name: string) => Promise<void> }) => (<>
   <button type="button" onClick={() => onCoverUpdated({
@@ -29,7 +30,25 @@ beforeEach(() => {
   mocked.getAssetLibraryIndex.mockResolvedValue({ schema_version: 1, project_id: 'library', assets: [{ asset_type: 'character', asset_id: 'character-1', name: 'Test character', source_scope: 'global', source_container_id: null, selected_variant_id: null, cover_variant_id: null, variants: [] }] });
   mocked.getWorkbenchTemplates.mockResolvedValue({ schema_version: 1, catalog_revision: 'test', templates: [] });
   mocked.getPlatformReferenceReviewer.mockResolvedValue({ authorized: false });
+  mocked.getPlatformPublisher.mockResolvedValue({ authorized: false });
+  mocked.uploadLibraryImage.mockResolvedValue({ image_url: 'uploads/pose.png' });
+  mocked.submitUploadedPlatformVisualCandidate.mockResolvedValue({ platform_resource_id: 'candidate-1' });
   mocked.getPlatformReferenceLibrary.mockResolvedValue({ scope: 'platform_shared', schema_version: 1, catalog_revision: 'test', resources: [] });
+});
+
+it('submits an owner upload as a visual candidate for an authorized publisher', async () => {
+  mocked.getPlatformPublisher.mockResolvedValue({ authorized: true });
+  render(<AssetLibraryPage />);
+  fireEvent.click(screen.getByRole('button', { name: 'platform' }));
+  const form = await screen.findByRole('form', { name: '提交共享参考图' });
+  fireEvent.change(screen.getByLabelText('参考图片'), { target: { files: [new File(['image'], 'pose.png', { type: 'image/png' })] } });
+  fireEvent.change(screen.getByLabelText('参考标题'), { target: { value: '站姿' } });
+  fireEvent.change(screen.getByLabelText('发布权说明'), { target: { value: '原创图片' } });
+  fireEvent.click(screen.getByLabelText('我确认拥有此图片的平台发布权'));
+  fireEvent.submit(form);
+  await waitFor(() => expect(mocked.submitUploadedPlatformVisualCandidate).toHaveBeenCalledWith(expect.objectContaining({
+    source_image_url: 'uploads/pose.png', category_path: 'reference/pose', title: '站姿', rights_note: '原创图片', rights_confirmed: true,
+  })));
 });
 
 it('filters published platform character references by exact tag', async () => {

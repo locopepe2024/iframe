@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 
 CATALOG_ROOT = Path(__file__).resolve().parents[1] / ".." / "config" / "platform_reference_catalog"
@@ -261,6 +262,89 @@ def submit_generation_candidate(
         temporary_manifest = path.with_suffix(".tmp")
         temporary_manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         os.replace(temporary_manifest, path)
+        return resource
+
+
+def submit_uploaded_visual_candidate(
+    *, creator_profile_id: str, category_path: str, title: str, description: str,
+    tags: list[str], media_source: Path, media_owner_root: Path,
+    rights_confirmed: bool, rights_note: str, source_url: str = "",
+    path: Path | None = None,
+) -> dict[str, Any]:
+    """Stage one owner-uploaded visual reference for the existing platform review queue."""
+    if not publisher_is_authorized(creator_profile_id):
+        raise PermissionError("Platform candidate submission is not authorized")
+    if category_path not in {"reference/pose", "reference/costume", "reference/character"}:
+        raise ValueError("Visual reference category is invalid")
+    title, description, rights_note, source_url = (
+        value.strip() for value in (title, description, rights_note, source_url)
+    )
+    if not rights_confirmed or not rights_note or len(rights_note) > 2000:
+        raise ValueError("Publishing rights and their source must be confirmed")
+    if not title or len(title) > 200 or len(description) > 20000:
+        raise ValueError("Visual reference title or description is invalid")
+    if source_url:
+        parsed = urlsplit(source_url)
+        if len(source_url) > 2048 or parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+            raise ValueError("Visual reference source URL is invalid")
+    tags = normalize_character_tags(tags)
+    source = media_source.resolve(strict=True)
+    owner_root = media_owner_root.resolve(strict=True)
+    if not source.is_file() or not source.is_relative_to(owner_root):
+        raise ValueError("Visual reference image is outside the owner's uploads")
+    suffix = source.suffix.lower()
+    if suffix not in MEDIA_EXTENSIONS["image"] or not 0 < source.stat().st_size <= 20 * 1024 * 1024:
+        raise ValueError("Visual reference image type or size is invalid")
+    from PIL import Image
+    try:
+        with Image.open(source) as image:
+            expected_format = "jpeg" if suffix in {".jpg", ".jpeg"} else suffix.removeprefix(".")
+            if (image.format or "").lower() != expected_format or not 0 < image.width * image.height <= 50_000_000:
+                raise ValueError("Visual reference image format or dimensions are invalid")
+            image.verify()
+    except (OSError, Image.DecompressionBombError) as exc:
+        raise ValueError("Visual reference image cannot be decoded") from exc
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    manifest_path = path or MANIFEST_PATH
+    fingerprint = hashlib.sha256(json.dumps(
+        [creator_profile_id, category_path, title, description, tags, digest, rights_note, source_url],
+        ensure_ascii=False, sort_keys=True,
+    ).encode("utf-8")).hexdigest()
+    with _MUTATION_LOCK, _file_lock(manifest_path):
+        manifest = _read_manifest(manifest_path)
+        existing = next((item for item in manifest["resources"]
+                         if item.get("provenance", {}).get("content_sha256") == fingerprint), None)
+        if existing:
+            return existing
+        media_file = f"{digest}{suffix}"
+        media_dir = manifest_path.parent / "media"
+        media_dir.mkdir(parents=True, exist_ok=True)
+        destination = media_dir / media_file
+        if not destination.exists():
+            temporary = media_dir / f".{uuid.uuid4().hex}.tmp"
+            try:
+                shutil.copyfile(source, temporary)
+                if hashlib.sha256(temporary.read_bytes()).hexdigest() != digest:
+                    raise ValueError("Visual reference image changed during copy")
+                os.replace(temporary, destination)
+            finally:
+                temporary.unlink(missing_ok=True)
+        resource = {
+            "platform_resource_id": f"iframe.reference.{uuid.uuid4().hex}",
+            "revision": 1, "kind": "image", "category_path": category_path,
+            "tags": tags, "title": title, "summary": description,
+            "status": "candidate", "payload": {"media_file": media_file, "media_sha256": digest},
+            "provenance": {
+                "source": "owner-upload", "creator_profile_id": creator_profile_id,
+                "source_url": source_url or None, "notice_text": rights_note,
+                "license": "creator_declared_pending_review", "content_sha256": fingerprint,
+                "rights_confirmed": True, "submitted_at": datetime.now(timezone.utc).isoformat(),
+            },
+        }
+        manifest["resources"].append(resource)
+        temporary_manifest = manifest_path.with_suffix(".tmp")
+        temporary_manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.replace(temporary_manifest, manifest_path)
         return resource
 
 

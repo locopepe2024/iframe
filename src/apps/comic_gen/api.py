@@ -106,6 +106,7 @@ from ..platform_reference_catalog import (
     reviewer_is_authorized,
     set_publisher_grant,
     submit_generation_candidate,
+    submit_uploaded_visual_candidate,
 )
 from ..workbench_templates import list_workbench_templates
 from fastapi.responses import FileResponse, JSONResponse, Response
@@ -251,6 +252,48 @@ class PlatformCandidateRequest(BaseModel):
     rights_confirmed: bool
     dictionary_entry_type: Optional[Literal["term", "pattern", "case"]] = None
     dictionary_members: Optional[list[dict[str, Any]]] = None
+
+
+class PlatformUploadedVisualCandidateRequest(BaseModel):
+    source_image_url: str = Field(min_length=1)
+    category_path: Literal["reference/pose", "reference/costume", "reference/character"]
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=20000)
+    tags: list[str] = Field(default_factory=list, max_length=12)
+    rights_confirmed: bool
+    rights_note: str = Field(min_length=1, max_length=2000)
+    source_url: str = Field(default="", max_length=2048)
+
+
+@app.post("/platform-reference-library/upload-candidates")
+def submit_uploaded_platform_visual_candidate(
+    request: PlatformUploadedVisualCandidateRequest,
+    user: UserContext = Depends(require_user_context),
+):
+    if not publisher_is_authorized(user.owner_profile_id):
+        raise HTTPException(status_code=403, detail="平台候选提交权限不足")
+    try:
+        if request.source_image_url.startswith(("http://", "https://")):
+            raise ValueError("Only owner-uploaded images may be submitted")
+        stored = resolve_studio_reference(
+            request.source_image_url, user.owner_profile_id, output_root=pipeline.output_root,
+        )
+        resource = submit_uploaded_visual_candidate(
+            creator_profile_id=user.owner_profile_id,
+            category_path=request.category_path, title=request.title,
+            description=request.description, tags=request.tags,
+            media_source=Path(pipeline.output_root) / stored,
+            media_owner_root=Path(studio_media_dir(
+                user.owner_profile_id, "uploads", output_root=pipeline.output_root,
+            )),
+            rights_confirmed=request.rights_confirmed,
+            rights_note=request.rights_note, source_url=request.source_url,
+        )
+        return private_no_store_signed_response(resource)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/platform-reference-library/candidates")

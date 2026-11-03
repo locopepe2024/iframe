@@ -841,6 +841,20 @@ export const api = {
         return res.data;
     },
 
+    submitUploadedPlatformVisualCandidate: async (request: {
+        source_image_url: string;
+        category_path: "reference/pose" | "reference/costume" | "reference/character";
+        title: string;
+        description: string;
+        tags: string[];
+        rights_confirmed: boolean;
+        rights_note: string;
+        source_url: string;
+    }): Promise<PlatformReferenceResource> => {
+        const res = await axios.post<PlatformReferenceResource>(`${API_URL}/platform-reference-library/upload-candidates`, request);
+        return res.data;
+    },
+
     getPlatformReferenceReviewQueue: async (query = "", kind?: string): Promise<PlatformReferenceCatalog> => {
         const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library/review-queue`, {
             params: { query: query || undefined, kind: kind || undefined },

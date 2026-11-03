@@ -3,13 +3,105 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from PIL import Image
 
 import src.apps.platform_reference_catalog as catalog
 from src.apps.comic_gen import api as comic_api
 from src.apps.identity import UserContext
+from src.apps.studio_access import studio_media_dir
 
 
 OWNER = "apikey-" + "a" * 64
+
+
+def _uploaded_png(path):
+    image = Image.new("RGB", (8, 8), "white")
+    image.save(path, format="PNG")
+
+
+def test_uploaded_visual_candidate_requires_review_and_owner_media(monkeypatch, tmp_path):
+    monkeypatch.setattr(catalog, "publisher_is_authorized", lambda owner: owner == OWNER)
+    monkeypatch.setattr(catalog, "reviewer_is_authorized", lambda owner: owner == OWNER)
+    owner = tmp_path / "owner" / "uploads"
+    owner.mkdir(parents=True)
+    media = owner / "pose.png"
+    _uploaded_png(media)
+    manifest = tmp_path / "catalog" / "manifest.json"
+    values = dict(creator_profile_id=OWNER, category_path="reference/pose", title="站姿",
+                  description="全身站立", tags=["姿态参考"], media_source=media,
+                  media_owner_root=owner, rights_confirmed=True, rights_note="原创图片",
+                  source_url="https://example.org/source", path=manifest)
+    resource = catalog.submit_uploaded_visual_candidate(**values)
+    assert resource["status"] == "candidate"
+    assert resource["provenance"]["source"] == "owner-upload"
+    assert catalog.list_resources(path=manifest)["resources"] == []
+    assert catalog.list_review_candidates(path=manifest)["resources"] == [resource]
+    assert catalog.submit_uploaded_visual_candidate(**values)["platform_resource_id"] == resource["platform_resource_id"]
+    catalog.promote_resource(resource["platform_resource_id"], OWNER,
+                             resource["provenance"]["content_sha256"], manifest)
+    assert catalog.list_resources(category="reference/pose", path=manifest)["resources"][0]["platform_resource_id"] == resource["platform_resource_id"]
+
+    outside = tmp_path / "other.png"
+    _uploaded_png(outside)
+    failures = [
+        ({"media_source": outside}, ValueError),
+        ({"category_path": "character/reference"}, ValueError),
+        ({"rights_confirmed": False}, ValueError),
+        ({"rights_note": " "}, ValueError),
+        ({"source_url": "file:///private/image.png"}, ValueError),
+    ]
+    for change, error in failures:
+        with pytest.raises(error):
+            catalog.submit_uploaded_visual_candidate(**{**values, **change})
+    media.write_bytes(b"not a png")
+    with pytest.raises(ValueError, match="decoded"):
+        catalog.submit_uploaded_visual_candidate(**values)
+    with pytest.raises(PermissionError):
+        catalog.submit_uploaded_visual_candidate(**{**values, "creator_profile_id": "other"})
+
+
+def test_uploaded_visual_api_rejects_foreign_media(monkeypatch, tmp_path):
+    user = UserContext(user_id="u", owner_profile_id=OWNER, display_name="u", access_token="token")
+    request = comic_api.PlatformUploadedVisualCandidateRequest(
+        source_image_url="https://example.org/image.png", category_path="reference/pose",
+        title="站姿", rights_confirmed=True, rights_note="原创图片",
+    )
+    monkeypatch.setattr(comic_api, "publisher_is_authorized", lambda profile: False)
+    with pytest.raises(HTTPException) as denied:
+        comic_api.submit_uploaded_platform_visual_candidate(request, user)
+    assert denied.value.status_code == 403
+    monkeypatch.setattr(comic_api, "publisher_is_authorized", lambda profile: True)
+    with pytest.raises(HTTPException) as external:
+        comic_api.submit_uploaded_platform_visual_candidate(request, user)
+    assert external.value.status_code == 422
+    monkeypatch.setattr(comic_api, "resolve_studio_reference", lambda *_args, **_kwargs: "users/foreign/studio/uploads/image.png")
+    monkeypatch.setattr(comic_api.pipeline, "output_root", str(tmp_path))
+    monkeypatch.setattr(comic_api, "submit_uploaded_visual_candidate", lambda **_kwargs: (_ for _ in ()).throw(ValueError("outside")))
+    request.source_image_url = "uploads/image.png"
+    with pytest.raises(HTTPException) as foreign:
+        comic_api.submit_uploaded_platform_visual_candidate(request, user)
+    assert foreign.value.status_code == 422
+
+
+def test_uploaded_visual_api_accepts_owner_upload(monkeypatch, tmp_path):
+    user = UserContext(user_id="u", owner_profile_id=OWNER, display_name="u", access_token="token")
+    root = str(tmp_path / "output")
+    uploads = tmp_path / studio_media_dir(OWNER, "uploads", output_root=root).removeprefix(str(tmp_path) + "/")
+    uploads.mkdir(parents=True)
+    media = uploads / "pose.png"
+    _uploaded_png(media)
+    manifest = tmp_path / "catalog" / "manifest.json"
+    monkeypatch.setattr(comic_api.pipeline, "output_root", root)
+    monkeypatch.setattr(catalog, "MANIFEST_PATH", manifest)
+    monkeypatch.setattr(comic_api, "publisher_is_authorized", lambda profile: profile == OWNER)
+    monkeypatch.setattr(catalog, "publisher_is_authorized", lambda profile: profile == OWNER)
+    request = comic_api.PlatformUploadedVisualCandidateRequest(
+        source_image_url=str(media.relative_to(root)), category_path="reference/pose",
+        title="站姿", rights_confirmed=True, rights_note="原创图片",
+    )
+    response = comic_api.submit_uploaded_platform_visual_candidate(request, user)
+    assert response.body
+    assert any(item["title"] == "站姿" for item in catalog.list_review_candidates(path=manifest)["resources"])
 
 
 def test_publisher_grants_are_server_side_and_reversible(tmp_path):
