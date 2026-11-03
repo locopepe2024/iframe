@@ -87,6 +87,27 @@ def test_markdown_and_chinese_numbered_headings():
     assert text[episodes[0]["start_offset"]:episodes[0]["end_offset"]].endswith("正文一\n")
 
 
+def test_outline_episodes_ignore_later_production_notes():
+    text = (
+        "人物小传：纲手（第1—2集）\n"
+        "第1集·调教：" + "详细角色设定。" * 20 + "\n"
+        "分集标题速览\n"
+        "第1集　月读之下；赌局牢笼开启。\n"
+        "第2集　筹码不能流血；获得第一道线。\n"
+        "制作备注\n"
+        "第2集最后30秒以手部特写为核心。"
+    )
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    context, screenplay = pipeline._split_import_series_context(text)
+    preview = split_numbered_episodes(screenplay, 2)
+
+    assert "详细角色设定" in context["preamble"]
+    assert [episode["episode_number"] for episode in preview] == [1, 2]
+    assert preview[0]["summary"] == "月读之下；赌局牢笼开启。"
+    assert "第2集最后30秒" in screenplay[preview[1]["start_offset"]:preview[1]["end_offset"]]
+    assert "".join(pipeline._split_text_by_markers(screenplay, preview)) == screenplay
+
+
 def test_crlf_numbered_sixty_episode_import_keeps_exact_source():
     text, _ = _sixty_episode_text()
     source = text.replace("\n", "\r\n")

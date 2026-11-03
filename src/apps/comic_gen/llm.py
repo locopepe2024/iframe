@@ -49,6 +49,7 @@ def _strip_markdown_json(content: str) -> str:
 
 _EPISODE_HEADING = re.compile(
     r"(?m)^[ \t]*(?:#{1,6}[ \t]+)?第[ \t]*([0-9]{1,3}|[一二三四五六七八九十百零两]+)[ \t]*集"
+    r"(?=[ \t\u3000：:、.．·\-—－]|\r?$)"
     r"(?:[ \t]*[：:、.．-]?[ \t]*([^\r\n]{0,80}))?[ \t]*\r?$"
 )
 
@@ -89,12 +90,13 @@ def split_numbered_episodes(text: str, suggested_episodes: int) -> list[dict[str
         start = 0 if index == 0 else heading.start()
         end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
         body = text[heading.end():end].strip()
-        if not body:
+        inline = (heading.group(2) or "").strip(" \t\u3000：:、.．·-—－")
+        if not body and not inline:
             raise ValueError(f"第 {index + 1} 集没有正文")
         episodes.append({
             "episode_number": index + 1,
             "title": heading.group(0).lstrip(" \t#").strip(),
-            "summary": body[:50],
+            "summary": (body or inline)[:50],
             "start_offset": start,
             "end_offset": end,
         })
