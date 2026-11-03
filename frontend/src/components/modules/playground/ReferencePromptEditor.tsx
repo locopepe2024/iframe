@@ -20,6 +20,7 @@ export type ReferenceCandidate = {
   reference?: AssetLibraryReference;
   previewUrl?: string;
   previewRef?: AssetPreviewRef;
+  platformResourceId?: string;
   mediaUrl?: string;
   sourceLabel?: string;
   variantLabel?: string;

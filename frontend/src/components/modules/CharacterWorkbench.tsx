@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react"
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, Sparkles, Search } from "lucide-react";
-import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
+import { agentRequest, api, API_URL, authenticatedFetch, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel, type PlatformReferenceResource } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -257,6 +257,23 @@ function referenceScopeLabel(scope?: AssetReferenceIndexEntry["source_scope"]): 
     }
 }
 
+function PlatformReferenceThumbnail({ resourceId }: { resourceId: string }) {
+    const [url, setUrl] = useState("");
+    useEffect(() => {
+        const controller = new AbortController();
+        let objectUrl = "";
+        void authenticatedFetch(`${API_URL}/platform-reference-library/${encodeURIComponent(resourceId)}/media?preview=true`, { signal: controller.signal })
+            .then(async (response) => {
+                if (!response.ok) throw new Error("preview unavailable");
+                objectUrl = URL.createObjectURL(await response.blob());
+                setUrl(objectUrl);
+            }).catch(() => setUrl(""));
+        return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
+    }, [resourceId]);
+    return url ? <img src={url} alt="" className="h-full w-full object-cover" />
+        : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />;
+}
+
 function AssetReferencePicker({
     candidates,
     selected,
@@ -409,7 +426,9 @@ function AssetReferencePicker({
                             className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${isSelected ? "bg-primary/10" : "hover:bg-hover-bg"}`}
                         >
                             <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-inset">
-                                {candidate.previewRef ? <AssetIndexPreview asset={candidate.previewRef} /> : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />}
+                                {candidate.previewRef ? <AssetIndexPreview asset={candidate.previewRef} />
+                                    : candidate.platformResourceId ? <PlatformReferenceThumbnail resourceId={candidate.platformResourceId} />
+                                    : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />}
                             </span>
                             <span className="min-w-0 flex-1">
                                 <span className="block truncate text-xs text-foreground">{candidate.label}</span>
@@ -508,7 +527,9 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     // per variant without creating another character asset.
     const variantNameFallback = (index: number) => `view ${index + 1}`;
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
+    const [platformReferences, setPlatformReferences] = useState<PlatformReferenceResource[]>([]);
     const assetIndexRequest = useRef(0);
+    const platformRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
         [currentProject?.characters, currentProject?.scenes, currentProject?.props].map((items) =>
             Array.isArray(items) ? items.map((item: any) => [
@@ -572,12 +593,35 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 setAssetIndex(entries);
                 const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
                     `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));
-                setDesignReferenceAssets((current) => current.filter((reference) => available.has(referenceKey(reference))));
+                setDesignReferenceAssets((current) => current.filter((reference) => reference.asset_type === "platform_reference" || available.has(referenceKey(reference))));
                 setPromptPickerReferences((current) => Object.fromEntries(Object.entries(current).map(([panel, refs]) =>
-                    [panel, refs.filter((ref) => available.has(referenceKey(ref)))])) as typeof current);
+                    [panel, refs.filter((ref) => ref.asset_type === "platform_reference" || available.has(referenceKey(ref)))])) as typeof current);
             })
             .catch(() => { if (requestId === assetIndexRequest.current) setAssetIndex([]); });
     }, [currentProject?.id]);
+
+    const refreshPlatformReferences = useCallback(() => {
+        const requestId = ++platformRequest.current;
+        void api.getPlatformReferenceLibrary("", "image")
+            .then((catalog) => {
+                if (requestId !== platformRequest.current) return;
+                const resources = catalog.resources.filter((resource) =>
+                    resource.status === "active" && resource.category_path?.startsWith("reference/") && !!resource.payload?.media_file);
+                setPlatformReferences(resources);
+                const available = new Set(resources.map((resource) =>
+                    `platform_reference:${resource.platform_resource_id}:${resource.revision}`));
+                setDesignReferenceAssets((current) => current.filter((reference) =>
+                    reference.asset_type !== "platform_reference" || available.has(referenceKey(reference))));
+                setPromptPickerReferences((current) => Object.fromEntries(Object.entries(current).map(([panel, refs]) =>
+                    [panel, refs.filter((reference) => reference.asset_type !== "platform_reference" || available.has(referenceKey(reference)))])) as typeof current);
+            })
+            .catch(() => { if (requestId === platformRequest.current) setPlatformReferences([]); });
+    }, []);
+
+    const refreshReferences = useCallback(() => {
+        refreshAssetIndex();
+        refreshPlatformReferences();
+    }, [refreshAssetIndex, refreshPlatformReferences]);
 
     useEffect(() => {
         setAssetIndex([]);
@@ -616,8 +660,22 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 });
             });
         }
+        for (const resource of platformReferences) {
+            const reference: AssetLibraryReference = {
+                asset_type: "platform_reference", asset_id: resource.platform_resource_id,
+                variant_id: String(resource.revision), source_scope: "platform", revision: resource.revision,
+            };
+            candidates.push({
+                label: resource.title,
+                sourceLabel: "平台参考库",
+                variantLabel: resource.category_path?.split("/").at(-1),
+                description: [resource.summary, ...(resource.tags || [])].filter(Boolean).join(" "),
+                platformResourceId: resource.platform_resource_id,
+                reference,
+            });
+        }
         return candidates;
-    }, [assetIndex]);
+    }, [assetIndex, platformReferences]);
 
     // Mode state for Asset Activation v2 (Static/Motion)
     const [fullBodyMode, setFullBodyMode] = useState<'static' | 'motion'>('static');
@@ -1304,7 +1362,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         }}
         referenceCandidates={referenceCandidates}
         referenceSelections={designReferenceAssets}
-        onRefreshReferences={refreshAssetIndex}
+        onRefreshReferences={refreshReferences}
         onReferenceSelectionsChange={(references) => {
             setDesignReferenceAssets(references);
             if (!references.some(item => item.applied_fields?.includes("face_geometry"))) {
@@ -1532,7 +1590,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         platformPromptSource={platformPromptSources.full_body}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, full_body: source }))}
                         referenceCandidates={referenceCandidates}
-                        onRefreshReferences={refreshAssetIndex}
+                        onRefreshReferences={refreshReferences}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
                         showReferencePicker
                         designReferences={designReferenceAssets}
@@ -1599,7 +1657,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         platformPromptSource={platformPromptSources.three_view}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, three_view: source }))}
                         referenceCandidates={referenceCandidates}
-                        onRefreshReferences={refreshAssetIndex}
+                        onRefreshReferences={refreshReferences}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
                         showReferencePicker
                         designReferences={designReferenceAssets}
@@ -1647,7 +1705,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         platformPromptSource={platformPromptSources.headshot}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, headshot: source }))}
                         referenceCandidates={referenceCandidates}
-                        onRefreshReferences={refreshAssetIndex}
+                        onRefreshReferences={refreshReferences}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
                         showReferencePicker
                         designReferences={designReferenceAssets}

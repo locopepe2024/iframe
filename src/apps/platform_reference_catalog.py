@@ -472,6 +472,27 @@ def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None
     }
 
 
+def resolve_active_visual_reference(resource_id: str, revision: int, path: Path | None = None) -> Path:
+    """Resolve one published platform image without exposing storage paths to clients."""
+    manifest_path = path or MANIFEST_PATH
+    resource = next((item for item in _read_manifest(manifest_path)["resources"]
+                     if item["platform_resource_id"] == resource_id), None)
+    if (resource is None or resource["status"] != "active"
+            or resource["revision"] != revision or resource["kind"] != "image"
+            or not str(resource.get("category_path", "")).startswith("reference/")):
+        raise ValueError("platform reference is unavailable or its revision changed")
+    payload = resource.get("payload")
+    filename = payload.get("media_file") if isinstance(payload, dict) else None
+    if not isinstance(filename, str) or Path(filename).name != filename:
+        raise ValueError("platform reference image is missing")
+    media_root = (manifest_path.parent / "media").resolve()
+    media = (media_root / filename).resolve()
+    if (not media.is_relative_to(media_root) or not media.is_file()
+            or media.suffix.lower() not in MEDIA_EXTENSIONS["image"]):
+        raise ValueError("platform reference image is missing")
+    return media
+
+
 def list_review_candidates(*, kind: Optional[str] = None, category: Optional[str] = None, tag: Optional[str] = None, query: str = "", path: Path = MANIFEST_PATH) -> dict[str, Any]:
     """Return unpublished candidates for the deployment reviewer queue.
 

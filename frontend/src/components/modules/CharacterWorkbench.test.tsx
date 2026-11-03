@@ -65,7 +65,8 @@ vi.mock("../common/VideoVariantSelector", () => ({
     VideoVariantSelector: () => null,
 }));
 vi.mock("@/components/shared/AssetIndexPreview", () => ({ AssetIndexPreview: () => <span data-testid="asset-preview" /> }));
-vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks, agentRequest: apiMocks.agentRequest }));
+vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks, agentRequest: apiMocks.agentRequest,
+    authenticatedFetch: vi.fn().mockResolvedValue({ ok: false }) }));
 vi.mock("@/store/projectStore", () => ({
     useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
 }));
@@ -473,6 +474,37 @@ it("loads the project reference index for the character workbench", async () => 
         [{ asset_type: "prop", asset_id: "watch-1", variant_id: "watch-front" }],
         "reference",
         "reviewed",
+    ));
+});
+
+it("submits a published platform image by resource ID and revision", async () => {
+    apiMocks.getAssetReferenceIndex.mockReset();
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ project_id: "project-1", assets: [] });
+    apiMocks.getPlatformReferenceLibrary.mockReset();
+    apiMocks.getPlatformReferenceLibrary.mockResolvedValue({
+        scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [],
+    });
+    apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({
+        scope: "platform_shared", schema_version: 1, catalog_revision: "test",
+        resources: [{ platform_resource_id: "platform.pose.seated", revision: 3,
+            kind: "image", category_path: "reference/pose", title: "坐姿参考",
+            status: "active", payload: { media_file: "pose.png" },
+            provenance: { license: "test", content_sha256: "digest" } }],
+    });
+    const onGenerate = vi.fn();
+    render(<CharacterWorkbench asset={{ id: "character-1", name: "Hero", description: "A hero" }}
+        onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
+    openImagePrompt();
+    fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
+    fireEvent.click(await screen.findByRole("option", { name: /坐姿参考/ }));
+    fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
+    const confirm = await screen.findByRole("button", { name: "确认并生成" });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(
+        "full_body", expect.any(String), false, expect.any(String), 1,
+        [{ asset_type: "platform_reference", asset_id: "platform.pose.seated", variant_id: "3",
+            source_scope: "platform", revision: 3 }], "reference", "reviewed",
     ));
 });
 

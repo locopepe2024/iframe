@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
+import src.apps.platform_reference_catalog as platform_catalog
 from src.apps.comic_gen.assets import AssetGenerator
 from src.apps.comic_gen.models import (
     Character,
@@ -33,6 +34,59 @@ def test_image_variant_keeps_reference_application_fields():
     }
     variant = ImageVariant(id="result", url="result.png", reference_inputs=[reference])
     assert variant.model_dump()["reference_inputs"] == [reference]
+
+
+def test_published_platform_image_resolves_by_revision(monkeypatch, tmp_path):
+    import json
+
+    manifest = tmp_path / "catalog" / "manifest.json"
+    media_dir = manifest.parent / "media"
+    media_dir.mkdir(parents=True)
+    image = media_dir / "pose.png"
+    image.write_bytes(b"pose")
+    resource = {
+        "platform_resource_id": "platform.pose.one", "revision": 2,
+        "kind": "image", "category_path": "reference/pose", "title": "坐姿",
+        "status": "active", "payload": {"media_file": "pose.png"},
+        "provenance": {"license": "test", "content_sha256": "digest"},
+    }
+    manifest.write_text(json.dumps({"schema_version": 1, "catalog_revision": "test",
+                                    "resources": [resource]}), encoding="utf-8")
+    monkeypatch.setattr(platform_catalog, "MANIFEST_PATH", manifest)
+    pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    reference = {"asset_type": "platform_reference", "asset_id": "platform.pose.one",
+                 "variant_id": "2", "source_scope": "platform"}
+    assert pipeline._resolve_asset_library_reference(None, reference)[0] == str(image)
+    with pytest.raises(InvalidAssetReference, match="revision changed"):
+        pipeline._resolve_asset_library_reference(None, {**reference, "variant_id": "1"})
+    resource["status"] = "retired"
+    manifest.write_text(json.dumps({"schema_version": 1, "catalog_revision": "test",
+                                    "resources": [resource]}), encoding="utf-8")
+    with pytest.raises(InvalidAssetReference, match="unavailable"):
+        pipeline._resolve_asset_library_reference(None, reference)
+
+
+def test_platform_reference_is_frozen_in_asset_review(monkeypatch, tmp_path):
+    import json
+
+    manifest = tmp_path / "catalog" / "manifest.json"
+    media_dir = manifest.parent / "media"
+    media_dir.mkdir(parents=True)
+    (media_dir / "pose.png").write_bytes(b"pose")
+    manifest.write_text(json.dumps({"schema_version": 1, "catalog_revision": "test", "resources": [{
+        "platform_resource_id": "platform.pose.one", "revision": 2, "kind": "image",
+        "category_path": "reference/pose", "title": "坐姿", "status": "active",
+        "payload": {"media_file": "pose.png"},
+        "provenance": {"license": "test", "content_sha256": "digest"},
+    }]}), encoding="utf-8")
+    monkeypatch.setattr(platform_catalog, "MANIFEST_PATH", manifest)
+    pipeline, target = _pipeline_with_assets(tmp_path)
+    reference = {"asset_type": "platform_reference", "asset_id": "platform.pose.one", "variant_id": "2"}
+    review = pipeline.preview_asset_image_submission(
+        "project", target.id, "scene", prompt="A seated person", model_name="wan2.6-image",
+        image_generation_mode="reference", references=[reference],
+    )
+    assert review["reference_inputs"] == [reference]
 
 
 def _pipeline_with_assets(tmp_path: Path):
