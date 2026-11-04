@@ -35,7 +35,9 @@ def test_character_spatial_constraints_are_revision_owned_and_validated():
     pipeline._find_asset_with_source = lambda *_: (character, script)
     pipeline._save_after_asset_mutation = lambda *_: None
     spatial = {"schemaVersion": "iframe.character-spatial.v1", "unit": "meter",
-               "heightM": 1.8, "bodyWidthM": 0.48, "reachM": 0.75}
+               "heightM": 1.8, "bodyWidthM": 0.48, "reachM": 0.75, "armSpanM": 1.82,
+               "legToTorsoRatio": 1.4, "shoulderToHeadWidthRatio": 2.2,
+               "headToHeightRatio": 0.13}
     design = {"identity": {"visual_notes": "Brown eyes"}, "spatial_constraints": spatial,
               "confirmed": True}
     pipeline.update_asset_attributes("project", "character", "character", {"character_design": design})
@@ -44,6 +46,13 @@ def test_character_spatial_constraints_are_revision_owned_and_validated():
         pipeline.update_asset_attributes("project", "character", "character", {"character_design": {
             **design, "spatial_constraints": {**spatial, "heightM": -1},
         }})
+    assert len(character.character_design["design_revisions"]) == 1
+    for field, invalid in (("armSpanM", 0), ("legToTorsoRatio", 0), ("shoulderToHeadWidthRatio", 11),
+                           ("headToHeightRatio", 1)):
+        with pytest.raises(ValueError, match=field):
+            pipeline.update_asset_attributes("project", "character", "character", {"character_design": {
+                **design, "spatial_constraints": {**spatial, field: invalid},
+            }})
     assert len(character.character_design["design_revisions"]) == 1
 
 

@@ -35,7 +35,7 @@ Keep fixed place identity, landmark names and relative directions, entrances/win
 
 ## Character asset
 
-Keep stable face, hair, distinctive marks, wardrobe variant, build and relative or metric height, tied to the approved character design and reference images. Current height, body width and reach fields remain useful when measured. Pose, expression, action, screen position and apparent scale are shot choices. A saved face preset or metric white model is an input constraint, not a face-lock guarantee. Deliberate age, costume or body changes use explicit variants/revisions while prior shot pins remain intact.
+Keep stable face, hair, distinctive marks, wardrobe variant, build and relative or metric height, tied to the approved character design and reference images. Current height, body width and single-arm reach fields remain useful when measured. Optional arm span is distinct from reach. For stylized bodies, optional leg length / torso length, shoulder width / head width, and head height / total height ratios belong to the same character design revision. Leg length is measured from hip to floor, torso length from hip to shoulder line, and head height from crown to chin. Unknown measurements remain absent; ratios are dimensionless and must not be inferred from an image without an explicit review. Pose, expression, action, screen position and apparent scale are shot choices. A saved face preset or metric white model is an input constraint, not a face-lock guarantee. Deliberate age, costume or body changes use explicit variants/revisions while prior shot pins remain intact.
 
 ## Prop asset
 

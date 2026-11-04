@@ -26,6 +26,10 @@ export interface CharacterSpatialConstraints {
   heightM: number;
   bodyWidthM: number;
   reachM: number;
+  armSpanM?: number;
+  legToTorsoRatio?: number;
+  shoulderToHeadWidthRatio?: number;
+  headToHeightRatio?: number;
 }
 
 export interface PropSpatialConstraints {

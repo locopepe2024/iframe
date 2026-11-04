@@ -76,6 +76,10 @@ class CharacterSpatialConstraints(BaseModel):
     heightM: float = Field(gt=0, le=5)
     bodyWidthM: float = Field(gt=0, le=5)
     reachM: float = Field(gt=0, le=5)
+    armSpanM: float | None = Field(default=None, gt=0, le=5, allow_inf_nan=False)
+    legToTorsoRatio: float | None = Field(default=None, gt=0, le=10, allow_inf_nan=False)
+    shoulderToHeadWidthRatio: float | None = Field(default=None, gt=0, le=10, allow_inf_nan=False)
+    headToHeightRatio: float | None = Field(default=None, gt=0, lt=1, allow_inf_nan=False)
 
 
 class PropSpatialConstraints(BaseModel):
