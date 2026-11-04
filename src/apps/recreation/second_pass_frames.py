@@ -4,6 +4,7 @@ from fractions import Fraction
 from io import BytesIO
 import json
 from pathlib import Path
+import re
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -12,6 +13,20 @@ from fastapi import HTTPException
 from .analysis import INPUT_OPTIONS, fingerprint, run
 from .candidate_completion import candidate_digest
 from .shot_review import timeline_key
+
+
+FRAME_RANGE = re.compile(r"(?<!\d)(\d{1,4})\s*(?:[-–—~～]|至|到)\s*(\d{1,4})\s*帧?")
+SINGLE_FRAME = re.compile(r"第\s*(\d{1,4})\s*帧")
+
+
+def mentioned_frames(text, available):
+    selected = set()
+    for match in FRAME_RANGE.finditer(text):
+        first, last = map(int, match.groups())
+        if first <= last and last - first <= 12:
+            selected.update(range(first, last + 1))
+    selected.update(int(match.group(1)) for match in SINGLE_FRAME.finditer(text))
+    return selected & available
 
 
 def frame_windows(record):
@@ -24,12 +39,18 @@ def frame_windows(record):
     for item in items:
         if item["source"].get("provenance") == "human":
             continue
-        shot_frames = shots[item["shot_id"]]
+        shot_frames = set(shots[item["shot_id"]])
         first, last = item["frame_span"]
         evidence = item["evidence_frames"]
         anchors = {first, last, (first + last) // 2}
         if evidence:
             anchors.update((evidence[0], evidence[len(evidence) // 2], evidence[-1]))
+        explicit = mentioned_frames(item["candidate"], shot_frames)
+        anchors.update(explicit)
+        if item["kind"] == "uncertainty" and last - first >= 20 and not explicit:
+            anchors.update(row["frame_span"][0] for row in items
+                           if row["kind"] == "action" and row["shot_id"] == item["shot_id"]
+                           and first <= row["frame_span"][0] <= last)
         selected = {n for anchor in anchors for n in (anchor - 1, anchor, anchor + 1)
                     if n in shot_frames}
         windows.append({"item_id": item["id"], "shot_id": item["shot_id"],

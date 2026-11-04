@@ -10,7 +10,35 @@ from src.apps.recreation.shot_review import timeline_key
 from src.apps.recreation.candidate_completion import candidate_digest, model_candidate_ids, valid_completion
 from scripts.director3d.export_reviewed_shot_handoff import build_handoff
 from scripts.recreation.second_pass_infer import infer_pack
+from src.apps.recreation.second_pass_frames import frame_windows
 from tests.test_recreation import completed, service, video
+
+
+def test_long_uncertainties_include_named_frames_and_action_boundaries():
+    shot = "shot-1"
+    items = [
+        {"id": "action-1", "kind": "action", "shot_id": shot, "frame_span": [1, 3],
+         "evidence_frames": [1], "candidate": "standing", "decision": "pending",
+         "source": {"provenance": "model_candidate"}},
+        {"id": "action-2", "kind": "action", "shot_id": shot, "frame_span": [12, 43],
+         "evidence_frames": [12], "candidate": "踮立并捂脸", "decision": "pending",
+         "source": {"provenance": "model_candidate"}},
+        {"id": "action-3", "kind": "action", "shot_id": shot, "frame_span": [44, 48],
+         "evidence_frames": [44], "candidate": "转身", "decision": "pending",
+         "source": {"provenance": "model_candidate"}},
+        {"id": "intent", "kind": "uncertainty", "shot_id": shot, "frame_span": [1, 65],
+         "evidence_frames": [], "candidate": "踮立/捂脸是疼痛还是惊吓不明", "decision": "pending",
+         "source": {"provenance": "model_candidate"}},
+        {"id": "blur", "kind": "uncertainty", "shot_id": shot, "frame_span": [1, 65],
+         "evidence_frames": [], "candidate": "运动模糊帧（4-5、44-48）中脚底接触类型不可辨",
+         "decision": "pending", "source": {"provenance": "model_candidate"}},
+    ]
+    record = {"analysis": {"frame_pts": list(range(65))},
+              "timeline": {"shots": [{"id": shot, "start_pts": 0, "end_pts": 65}]},
+              "shot_review": {"items": items}}
+    windows = {row["item_id"]: row["reference_frames"] for row in frame_windows(record)}
+    assert {12, 43, 44, 45}.issubset(windows["intent"])
+    assert set(range(3, 7)) | set(range(43, 50)) <= set(windows["blur"])
 
 
 def reviewed(service, video):
