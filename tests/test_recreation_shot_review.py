@@ -4,6 +4,7 @@ from fastapi import HTTPException
 import pytest
 
 from src.apps.recreation.shot_review import timeline_key
+from src.apps.recreation.candidate_completion import candidate_digest, valid_completion
 from scripts.director3d.export_reviewed_shot_handoff import build_handoff
 from tests.test_recreation import completed, service, video
 
@@ -40,6 +41,39 @@ def test_import_surfaces_unknown_analysis_without_overwriting_review(service, vi
     assert {row["source"].get("field") for row in rows if row["kind"] == "uncertainty"} >= {
         "contact", "left_right_basis", "uncertainty", "unknown", "unresolved"}
     assert all(row["decision"] == "pending" for row in rows[2:])
+
+
+def test_model_uncertainties_need_source_bound_completion_before_macro_freeze(service, video):
+    project = reviewed(service, video)
+    candidate = {"events": [{"id": "new", "actor_id": "man", "frame_span": [2, 3],
+                             "evidence_frames": [2], "action": "turn", "contact": "unknown"}]}
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                       candidate=candidate)
+    items = cover_macro_shots(project, deepcopy(project["shot_review"]["items"]))
+    for item in items:
+        item["decision"] = "unknown"
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 2, items=items)
+    with pytest.raises(HTTPException, match="Complete model uncertainties"):
+        service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 3)
+    uncertainty = next(item for item in items if item["kind"] == "uncertainty")
+    package = {"schema_version": "shot-candidate-completion.v1", "run_id": "temporal-1",
+               "source_fingerprint": project["source_fingerprint"], "analysis_id": project["analysis_id"],
+               "timeline_key": timeline_key(project), "candidate_digest": candidate_digest(project),
+               "items": [{"item_id": uncertainty["id"], "status": "predicted",
+                          "prediction": "Contact is most likely brief", "reason": "Frames 1 and 4 bound the motion",
+                          "method": "temporal_llm", "evidence_frames": [1, 2, 4]}]}
+    invalid = deepcopy(package)
+    invalid["items"][0]["evidence_frames"] = [1, len(project["analysis"]["frame_pts"])]
+    with pytest.raises(HTTPException, match="same confirmed shot"):
+        service.import_candidate_completion(project["id"], project["analysis_id"], timeline_key(project), invalid)
+    project = service.import_candidate_completion(project["id"], project["analysis_id"], timeline_key(project), package)
+    assert valid_completion(project)
+    project = service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 3)
+    assert project["macro_review"]["macro_revision"] == 3
+    changed = deepcopy(project["shot_review"]["items"])
+    next(item for item in changed if item["kind"] == "uncertainty")["candidate"] = "different model claim"
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 3, items=changed)
+    assert not valid_completion(project)
 
 
 def test_handoff_requires_separate_support_and_contact_review(service, video):
@@ -273,3 +307,15 @@ def test_scene_candidate_is_scoped_to_each_confirmed_shot(service, video):
         (project["timeline"]["shots"][0]["id"], [1, 5]),
         (project["timeline"]["shots"][1]["id"], [6, len(project["analysis"]["frame_pts"])]),
     ]
+
+
+def test_partial_analysis_does_not_spread_global_claims_to_later_shots(service, video):
+    project = completed(service, video)
+    cut = project["analysis"]["frame_pts"][5]
+    project = service.confirm(project["id"], project["revision"], project["analysis_id"], [cut])
+    candidate = {"scene": {"visible_elements": ["garden"]}, "unresolved": ["camera uncertain"],
+                 "events": [{"id": "opening", "actor_id": "A1", "frame_span": [1, 5],
+                             "evidence_frames": [1, 5], "action": "turn"}]}
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 0,
+                                       candidate=candidate)
+    assert {item["shot_id"] for item in project["shot_review"]["items"]} == {project["timeline"]["shots"][0]["id"]}

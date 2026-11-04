@@ -26,6 +26,7 @@ from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
 from .mentions import TOKEN, compile_mentions
 from .prompt_contract import compile_h3, guidance_snapshot
 from .shot_review import import_candidates, timeline_key, validate_items
+from .candidate_completion import import_completion
 from .staged_review import approve_detail, freeze_macro, import_detail, source_binding, validate_detail_items
 from ...utils.model_catalog import load_generated_model_catalog
 from ...utils.uniart_catalog import fetch_uniart_catalog
@@ -1489,6 +1490,17 @@ class RecreationService:
             if analysis_id != record.get("analysis_id") or key != timeline_key(record):
                 raise HTTPException(409, "Macro review source changed")
             record["macro_review"] = freeze_macro(record, review_revision)
+            self._save(db, record)
+            return record
+
+    def import_candidate_completion(self, project_id, analysis_id, key, package):
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if analysis_id != record.get("analysis_id") or key != timeline_key(record):
+                raise HTTPException(409, "Candidate completion source changed")
+            if not record.get("shot_review"):
+                raise HTTPException(409, "Import macro candidates before completing uncertainties")
+            record["candidate_completion"] = import_completion(record, package)
             self._save(db, record)
             return record
 
