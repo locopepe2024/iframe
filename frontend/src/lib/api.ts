@@ -3278,7 +3278,7 @@ export const playgroundApi = {
 
 export interface ChatSession { id: string; title: string; model: string; updated_at: number }
 export interface KnowledgeCitation { unit_id: string; revision_id: string; source_id: string; collection_id: string; scope: string; kind: string; locator: string; title: string; source_uri: string; rights_status: string; has_media: boolean; excerpt: string; annotation: string }
-export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; asset_names?: string[]; input_media?: string[]; knowledge_citations?: KnowledgeCitation[]; research_run_id?: string; research_answer_id?: string; research_failure_stage?: string; created_at?: number; model?: string; pending?: boolean }
+export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; asset_names?: string[]; input_media?: string[]; knowledge_citations?: KnowledgeCitation[]; research_run_id?: string; research_answer_id?: string; research_failure_stage?: string; created_at?: number; model?: string; pending?: boolean; delivery_error?: string }
 export interface ResearchRun { id: string; status: 'discovering' | 'awaiting_selection' | 'capturing' | 'ready' | 'partial' | 'failed'; error_code?: string; candidates: { url: string; title: string; publisher: string; seen_at: string; published_at: string | null; access_status: string }[]; jobs: { id: string; source_url: string; state: string; error_code?: string }[] }
 export interface ChatModel { id: string; api_model_id: string; display_name: string; agent_capability?: string }
 export async function agentTranscribe(file: File): Promise<{ text: string; model: string }> {
@@ -3301,7 +3301,12 @@ export async function agentRequest<T>(path: string, method = 'GET', body?: unkno
     throw new Error(detail);
   }
   const data = await response.json();
-  if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Chat 请求失败');
+  if (!response.ok) {
+    const detail = typeof data.detail === 'string' ? data.detail
+      : Array.isArray(data.detail) ? data.detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join('；')
+      : '';
+    throw new Error(detail || `Chat 请求失败（HTTP ${response.status}）`);
+  }
   return data as T;
 }
 export async function knowledgeRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {

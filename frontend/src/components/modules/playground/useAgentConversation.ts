@@ -30,6 +30,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   active.current = sessionId;
   const sending = useRef(false);
   const lastSubmittedAt = useRef(0);
+  const failedMessages = useRef(new Map<string, ChatMessage[]>());
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     setCompanionSkills(readCompanionSkills(window.localStorage));
@@ -57,16 +58,24 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   }, []);
   useEffect(() => {
     if (!sessionId) { setMessages([]); setRemoteBusy(false); return; }
+    const currentSessionId = sessionId;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
     let first = true;
-    setLoading(true); setError(''); setMessages([]); setRemoteBusy(false);
+    setLoading(true); setError(''); setMessages(failedMessages.current.get(currentSessionId) || []); setRemoteBusy(false);
     async function refresh() {
       const startedAt = Date.now();
       try {
-        const conversation = await agentRequest<{ session: ChatSession | null; messages: ChatMessage[]; busy_until: number }>(`/playground/${sessionId}`);
+        const conversation = await agentRequest<{ session: ChatSession | null; messages: ChatMessage[]; busy_until: number }>(`/playground/${currentSessionId}`);
         if (cancelled) return;
-        if (!sending.current && startedAt >= lastSubmittedAt.current) setMessages(conversation.messages);
+        if (!sending.current && startedAt >= lastSubmittedAt.current) {
+          const failed = (failedMessages.current.get(currentSessionId) || []).filter(local => !conversation.messages.some(remote =>
+            remote.role === 'user' && remote.content === local.content
+            && JSON.stringify(remote.input_media || []) === JSON.stringify(local.input_media || [])
+            && Math.abs((remote.created_at || 0) - (local.created_at || 0)) < 120));
+          failedMessages.current.set(currentSessionId, failed);
+          setMessages([...conversation.messages, ...failed]);
+        }
         setRemoteBusy(conversation.busy_until > Date.now() / 1000);
         if (first && conversation.session) setModel(conversation.session.model);
         if (!conversation.busy_until) setError(current => current === '当前会话正在回复' ? '' : current);
@@ -98,6 +107,11 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
   }, [model]);
   async function removeMessage(id: string) {
     if (!sessionId) return;
+    if (id.startsWith('local-')) {
+      failedMessages.current.set(sessionId, (failedMessages.current.get(sessionId) || []).filter(message => message.id !== id));
+      setMessages(messages => messages.filter(message => message.id !== id));
+      return;
+    }
     try {
       await agentRequest(`/sessions/playground-${sessionId}/messages/${id}`, 'DELETE');
       if (active.current === sessionId) setMessages(m => m.filter(x => x.id !== id));
@@ -141,17 +155,15 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
         setMessages(m => [...m.filter(x => x.id !== pendingId && x.id !== result.user_message.id && x.id !== result.assistant_message.id), result.user_message, result.assistant_message]);
       }
     } catch (e) {
+      const message = e instanceof Error ? e.message : '发送失败';
+      const failed: ChatMessage = { id: pendingId, role: 'user', content: snapshot.prompt,
+        input_media: inputMedia, asset_names: assetNames, created_at: Date.now() / 1000,
+        model, pending: false, delivery_error: message };
+      failedMessages.current.set(sessionId, [...(failedMessages.current.get(sessionId) || []), failed]);
       if (active.current === sessionId) {
-        setMessages(m => m.filter(x => x.id !== pendingId));
-        const message = e instanceof Error ? e.message : '发送失败';
+        setMessages(m => [...m.filter(x => x.id !== pendingId), failed]);
         setError(message);
         if (message === '当前会话正在回复') setRemoteBusy(true);
-        // The composer is intentionally cleared at submission time. A slow or
-        // busy Qwen/UniArt request must not put the submitted text back into
-        // the live input after the user has already cleared it (or started a
-        // new draft). The submitted content remains in the session/message
-        // request for retry or inspection instead of being restored into the
-        // editable composer.
       }
     }
     finally { sending.current = false; setBusy(false); }
