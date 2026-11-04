@@ -1,7 +1,7 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import { Check, Download, FileInput, Plus, Save } from "lucide-react";
+import { AlertCircle, Check, Download, FileInput, Plus, Save } from "lucide-react";
 import { useLocale } from "next-intl";
 import { API_URL } from "@/lib/api";
 import { recreationApi, RecreationProject, RecreationShot, seconds, ShotReview, ShotReviewDecision, ShotReviewItem } from "@/lib/recreation";
@@ -118,6 +118,10 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
   }
 
   const groups = project.timeline?.shots.map((shot, index) => ({ shot, index, items: review?.items.filter(item => item.shot_id === shot.id) ?? [] })) ?? [];
+  const missingShots = groups.filter(group => group.items.length === 0);
+  const pendingItems = review?.items.filter(item => item.decision === "pending") ?? [];
+  const unknownItems = review?.items.filter(item => item.decision === "unknown") ?? [];
+  const macroReady = Boolean(review && review.items.length > 0 && missingShots.length === 0 && pendingItems.length === 0);
   const framePts = project.analysis?.frame_pts[currentFrame - 1];
   const activeGroup = groups.find(({ shot }) => framePts !== undefined && framePts >= shot.start_pts && framePts < shot.end_pts) ?? groups[0];
   const visibleGroups = activeGroup ? [activeGroup] : [];
@@ -136,12 +140,24 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
       <div className="flex flex-wrap gap-2">
         <label className="glass-button inline-flex min-h-10 cursor-pointer items-center gap-2"><FileInput size={16} />{t.import}<input type="file" accept="application/json,.json" className="sr-only" disabled={busy || stale} onChange={e => void importFile(e.target.files?.[0])} /></label>
         <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2" disabled={!review || stale || busy} onClick={() => review && void save({ items: review.items })}><Save size={16} />{t.save}</button>
-        <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2" disabled={!review || stale || busy || review.items.some(item => item.decision === "pending") || JSON.stringify(review) !== JSON.stringify(project.shot_review)} onClick={() => void freezeMacro()}><Check size={16} />{locale === "zh" ? "冻结一审" : "Freeze macro"}</button>
+        <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2" disabled={!macroReady || stale || busy || JSON.stringify(review) !== JSON.stringify(project.shot_review)} onClick={() => void freezeMacro()}><Check size={16} />{locale === "zh" ? "冻结一审" : "Freeze macro"}</button>
         <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2" disabled={!review} onClick={exportReview}><Download size={16} />{t.export}</button>
       </div>
     </div>
     {stale && <p role="alert" className="text-amber-300 text-sm">{t.stale}</p>}
     {message && <p role="status" className="text-sm text-text-muted break-words">{message}</p>}
+    <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "人工审核清单" : "Human review queue"}>
+      <div className="flex items-center gap-2 text-sm font-medium"><AlertCircle size={16} aria-hidden="true" />{locale === "zh" ? "人工审核清单" : "Human review queue"}</div>
+      <p className="mt-1 text-xs text-text-muted">{locale === "zh"
+        ? `${missingShots.length} 个镜头缺少标注 · ${pendingItems.length} 项待判定 · ${unknownItems.length} 项保留未知`
+        : `${missingShots.length} shots without annotations · ${pendingItems.length} pending decisions · ${unknownItems.length} unresolved decisions`}</p>
+      {missingShots.length + pendingItems.length + unknownItems.length > 0 ? <div className="mt-2 flex flex-wrap gap-2">
+        {missingShots.map(({ shot, index }) => <button key={shot.id} type="button" className="glass-button min-h-9 px-3 text-left text-xs" onClick={() => seek(firstFrame(shot))}>{locale === "zh" ? `镜头 ${index + 1}：缺少标注` : `Shot ${index + 1}: no annotations`}</button>)}
+        {[...pendingItems, ...unknownItems].map(item => <button key={item.id} type="button" className="glass-button min-h-9 px-3 text-left text-xs" onClick={() => { setSelectedId(item.id); seek(item.frame_span[0]); }}>
+          {item.frame_span[0]}–{item.frame_span[1]} · {t[item.kind]} · {item.decision === "pending" ? t.pending : t.unknown}
+        </button>)}
+      </div> : <p className="mt-2 text-xs text-text-muted">{locale === "zh" ? "现有审核项均已判定，且每个镜头有标注。" : "Existing items are decided and every shot has an annotation."}</p>}
+    </div>
     <p className="text-xs text-text-muted">{t.current} <span className="font-mono text-foreground">{currentFrame} · {project.analysis && seconds(project.analysis, project.analysis.frame_pts[currentFrame - 1]).toFixed(6)} s</span></p>
     {!review && <p className="text-sm text-text-muted">{t.empty}</p>}
     <div className="grid items-start gap-5 xl:grid-cols-[minmax(170px,210px)_minmax(0,1fr)_minmax(340px,0.85fr)]">
@@ -154,7 +170,7 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
             onClick={() => seek(firstFrame(shot))}>
             <span className="block font-semibold">{t.shot} {index + 1}</span>
             <span className="block font-mono tabular-nums">{project.analysis && seconds(project.analysis, shot.start_pts).toFixed(3)}–{project.analysis && seconds(project.analysis, shot.end_pts).toFixed(3)}s</span>
-            <span className="block truncate">{items.length} {t.candidate} · {items.filter(item => item.decision === "pending").length} {t.pending}</span>
+            <span className="block truncate">{items.length === 0 ? (locale === "zh" ? "缺少标注" : "No annotations") : `${items.length} ${t.candidate} · ${items.filter(item => item.decision === "pending").length} ${t.pending}`}</span>
           </button></li>;
         })}</ol>
       </aside>
