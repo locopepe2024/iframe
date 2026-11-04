@@ -55,6 +55,19 @@ it('keeps edit-and-continue as draft restoration without submitting', () => {
   expect(usePlaygroundStore.getState().queue).toEqual([]);
 });
 
+it('shows failed local submissions with both references and restores them for editing', () => {
+  usePlaygroundStore.setState({ history: [], inputMedia: [], mediaNames: {}, prompt: '' });
+  render(<SessionTimeline messages={[{
+    id: 'local-1', role: 'user', content: '结合 @face.png 和 @scene.png',
+    input_media: ['/face.png', '/scene.png'], asset_names: ['face.png', 'scene.png'],
+    delivery_error: 'Chat 请求失败', created_at: 1,
+  }]} />);
+  expect(screen.getByRole('alert')).toHaveTextContent('未发送：Chat 请求失败');
+  fireEvent.click(screen.getByRole('button', { name: '编辑继续' }));
+  expect(usePlaygroundStore.getState().prompt).toBe('结合 @face.png 和 @scene.png');
+  expect(usePlaygroundStore.getState().inputMedia).toEqual(['/face.png', '/scene.png']);
+});
+
 it('reports a missing session instead of silently ignoring retry', () => {
   usePlaygroundStore.setState({ history: [{ ...failedGeneration, session_id: undefined }], activeSessionId: null, queue: [] });
   render(<SessionTimeline messages={[]} />);

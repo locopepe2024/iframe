@@ -213,6 +213,42 @@ it('keeps the composer empty when sending fails after submission', async () => {
 
     expect(usePlaygroundStore.getState().prompt).toBe('');
     expect(hook.result.current.error).toBe('上游失败');
+    expect(hook.result.current.messages).toEqual([expect.objectContaining({ content: '需要重试的内容', delivery_error: '上游失败', pending: false })]);
+    hook.unmount();
+});
+
+it('keeps two referenced images and the prompt in the local timeline after a failed Chat request', async () => {
+    const response = deferred<unknown>();
+    mockConversation(response.promise);
+    usePlaygroundStore.setState({
+        prompt: '用 @face.png 和 @scene.png 设计镜头',
+        inputMedia: ['/face.png', '/scene.png'],
+        mediaNames: { '/face.png': 'face.png', '/scene.png': 'scene.png' },
+    });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    let sending!: Promise<void>;
+    act(() => { sending = hook.result.current.send(); });
+    await act(async () => { response.reject(new Error('Chat 请求失败')); await sending; });
+    expect(hook.result.current.messages).toEqual([expect.objectContaining({
+        content: '用 @face.png 和 @scene.png 设计镜头',
+        input_media: ['/face.png', '/scene.png'], asset_names: ['face.png', 'scene.png'],
+        delivery_error: 'Chat 请求失败',
+    })]);
+    hook.unmount();
+});
+
+it('does not send video generation parameters to an ordinary Chat model', async () => {
+    mockConversation(Promise.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }));
+    usePlaygroundStore.setState({ prompt: '参考 @face.png 和 @scene.png', inputMedia: ['/face.png', '/scene.png'],
+        mediaNames: { '/face.png': 'face.png', '/scene.png': 'scene.png' }, parameters: { duration: 30, ratio: '9:16' } });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    await act(async () => { await hook.result.current.send(); });
+    const request = vi.mocked(agentRequest).mock.calls.find(([path, method]) => path === '/sessions/chat-session/messages' && method === 'POST')?.[2] as Record<string, unknown>;
+    expect(request).toMatchObject({ input_media: ['/face.png', '/scene.png'] });
+    expect(request).not.toHaveProperty('duration');
+    expect(request).not.toHaveProperty('ratio');
     hook.unmount();
 });
 

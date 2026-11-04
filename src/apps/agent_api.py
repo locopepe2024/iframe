@@ -144,7 +144,7 @@ class MessageCreate(BaseModel):
     content: str = Field(min_length=1)
     asset_names: list[str] = Field(default_factory=list)
     context: str = Field(default="")
-    duration: int = Field(default=5, ge=4, le=15)
+    duration: int = 5
     ratio: str = Field(default="16:9", min_length=3, max_length=16)
     companion_skills: list[str] = Field(default_factory=list, max_length=4)
     knowledge_search: bool = False
@@ -1549,6 +1549,8 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
             raise HTTPException(422, "H3 提示词优化模型不支持陪护技能，请切换普通 Chat 模型")
         if body.knowledge_search and session["model"] == "minimax-h3-ir":
             raise HTTPException(422, "H3 提示词优化模型不支持知识库检索，请切换普通 Chat 模型")
+        if session["model"] == "minimax-h3-ir" and not 4 <= body.duration <= 15:
+            raise HTTPException(422, "H3 Context-IR 时长须为 4–15 秒")
         if row["busy"] > time.time():
             raise HTTPException(409, "当前会话正在回复")
         request_timeout = h3_ir_timeout_seconds() if session["model"] == "minimax-h3-ir" else chat_timeout_seconds()
@@ -1556,7 +1558,9 @@ def send(sid: str, body: MessageCreate, ctx: UserContext = Depends(require_user_
         db.execute("UPDATE sessions SET busy=? WHERE owner=? AND id=?", (lease, owner, sid))
     catalog_token = _request_catalog.set({})
     try:
-        user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context, input_media=body.input_media, duration=body.duration, ratio=body.ratio, created_at=time.time(), model=session["model"])
+        user = dict(id=str(uuid.uuid4()), role="user", content=body.content, asset_names=body.asset_names, context=body.context, input_media=body.input_media, created_at=time.time(), model=session["model"])
+        if session["model"] == "minimax-h3-ir":
+            user.update(duration=body.duration, ratio=body.ratio)
         if body.live_research:
             stage = "model_access"
             failure_stage = None

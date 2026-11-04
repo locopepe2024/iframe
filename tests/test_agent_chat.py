@@ -213,6 +213,15 @@ def test_knowledge_search_failure_and_unsupported_modes_do_not_save_turn(setup, 
     assert agent.messages(h3_sid, setup)['messages'] == []
 
 
+def test_h3_context_ir_validates_its_own_duration(setup, monkeypatch):
+    monkeypatch.setattr(agent, 'catalog', lambda ctx: [{'api_model_id': 'minimax-h3-ir', 'capabilities': ['chat']}])
+    sid = agent.create(agent.SessionCreate(model='minimax-h3-ir'), setup)['session']['id']
+    with pytest.raises(HTTPException, match='H3 Context-IR 时长须为 4–15 秒') as error:
+        agent.send(sid, agent.MessageCreate(content='优化镜头', duration=30), setup)
+    assert error.value.status_code == 422
+    assert agent.messages(sid, setup)['messages'] == []
+
+
 def test_live_research_starts_durable_run_without_claiming_citations(setup, monkeypatch):
     monkeypatch.setenv('IFRAME_KNOWLEDGE_DISCOVERY_PROVIDER', 'gdelt')
     monkeypatch.setenv('IFRAME_KNOWLEDGE_CAPTURE_HOSTS', 'example.org')
@@ -866,12 +875,13 @@ def test_chat_mixed_materials_and_names_survive_followup(setup, tmp_path, monkey
     monkeypatch.setattr(agent, 'complete', call)
     sid = agent.create(agent.SessionCreate(model='qwen'), setup)['session']['id']
     agent.send(sid, agent.MessageCreate(content='Use @face.png with @walk.mp4', input_media=files,
-        asset_names=['face.png', 'dress.jpg', 'walk.mp4', 'sound.wav', 'script.txt']), setup)
+        asset_names=['face.png', 'dress.jpg', 'walk.mp4', 'sound.wav', 'script.txt'], duration=30), setup)
     parts = call.call_args.args[2][-1]['content']
     assert parts[0]['text'].startswith('Use @1 with @3')
     assert [parts[i]['type'] for i in [2, 4, 6, 8, 10]] == ['image_url', 'image_url', 'video_url', 'input_audio', 'text']
     assert parts[2]['image_url']['url'] == 'https://cdn.example/face.png'
     assert parts[6]['video_url'] == 'https://cdn.example/walk.mp4'
+    assert 'duration' not in agent.messages(sid, setup)['messages'][0]
     assert '参考素材 @4：sound.wav' in parts[7]['text']
     agent.send(sid, agent.MessageCreate(content='Continue'), setup)
     assert call.call_args.args[2][1]['content'] == 'Use @face.png with @walk.mp4'
