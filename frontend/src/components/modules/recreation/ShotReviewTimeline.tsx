@@ -153,6 +153,8 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
   const completionById = new Map(completion?.items.map(row => [row.item_id, row]) ?? []);
   const secondPassReady = modelItems.length === 0 || (completionValid && completionById.size === modelItems.length);
   const pendingItems = review?.items.filter(item => item.decision === "pending") ?? [];
+  const orderedPendingItems = [...pendingItems].sort((a, b) =>
+    a.frame_span[0] - b.frame_span[0] || a.frame_span[1] - b.frame_span[1] || a.id.localeCompare(b.id));
   const missingSecondPass = modelItems.filter(item => item.decision === "pending" && !completionById.has(item.id));
   const changedItems = modelItems.filter(item => item.decision === "pending" && completionById.get(item.id)?.status === "predicted" &&
     completionById.get(item.id)?.prediction.trim() !== item.candidate.trim());
@@ -197,6 +199,15 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     </div>
     {stale && <p role="alert" className="text-amber-300 text-sm">{t.stale}</p>}
     {message && <p role="status" className="text-sm text-text-muted break-words">{message}</p>}
+    {orderedPendingItems.length > 0 && <section className="border-t border-border pt-3" aria-label={locale === "zh" ? "全部待判定项" : "All pending decisions"}>
+      <h4 className="text-sm font-semibold">{locale === "zh" ? `待判定 ${orderedPendingItems.length} 项` : `${orderedPendingItems.length} pending decisions`}</h4>
+      <ol className={`mt-2 border-y border-border divide-y divide-border ${orderedPendingItems.length > 10 ? "max-h-96 overflow-y-auto" : ""}`}>
+        {orderedPendingItems.map(item => <li key={item.id}><button type="button" className="w-full px-2 py-2 text-left text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" aria-current={selectedId === item.id ? "true" : undefined} onClick={() => selectItem(item)}>
+          <span className="block font-medium text-foreground">{item.frame_span[0]}–{item.frame_span[1]} · {t[item.kind]} · <span className="font-mono break-all">{item.id}</span></span>
+          <span className="mt-0.5 block break-words text-text-muted">{item.candidate || (locale === "zh" ? "人工标注待判定" : "Manual annotation pending")}</span>
+        </button></li>)}
+      </ol>
+    </section>}
     <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "待确认再预测" : "Candidate completion"}>
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-medium">{locale === "zh" ? "第二轮分析" : "Second analysis"}</h4><p className="text-xs text-text-muted">{locale === "zh" ? `${completionById.size}/${modelItems.length} 项模型候选已有第二轮 · ${secondPassReady ? "可对照确认" : "需覆盖全部候选"}` : `${completionById.size}/${modelItems.length} model candidates have a second pass · ${secondPassReady ? "Ready to compare" : "Full coverage required"}`}</p></div>
         <div className="flex flex-wrap gap-2"><button type="button" className="glass-button min-h-9 inline-flex items-center gap-2" disabled={!review || stale || busy} onClick={() => void exportCompletionRequest()}><Download size={16} />{locale === "zh" ? "导出参考帧包" : "Export frame pack"}</button>

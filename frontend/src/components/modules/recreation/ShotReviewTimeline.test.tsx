@@ -55,11 +55,16 @@ function setup(complete: boolean) {
 it("compares both analyses and saves the chosen second-pass text", async () => {
   setup(true);
   expect(await screen.findByText(/2\/2 model candidates have a second pass/)).toBeInTheDocument();
-  expect(screen.getByText(/left leg unknown/)).toBeInTheDocument();
+  expect(screen.getByText("2 pending decisions")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /camera:second/ }));
+  expect(screen.getByText("#camera:second")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /action:first/ }));
+  expect(screen.getAllByText(/left leg unknown/)).toHaveLength(2);
   expect(screen.getByText(/left leg kicks/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Confirm second analysis" }));
   await waitFor(() => expect(recreationApi.saveShotReview).toHaveBeenCalledWith(project, "timeline", 3,
     { items: [expect.objectContaining({ id: "action:first", decision: "edit", edited_text: "left leg kicks" }), review.items[1]] }));
+  expect(await screen.findByText("1 pending decisions")).toBeInTheDocument();
 });
 
 it("keeps confirmation closed when the second pass covers only uncertainties", async () => {
