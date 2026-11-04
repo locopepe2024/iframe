@@ -80,6 +80,26 @@ class ShotReviewRequest(BaseModel):
     candidate: dict | None = None
 
 
+class MacroFreezeRequest(BaseModel):
+    analysis_id: str
+    timeline_key: str
+    review_revision: int = Field(ge=1)
+
+
+class DetailImportRequest(BaseModel):
+    analysis_id: str
+    timeline_key: str
+    candidate: dict
+
+
+class DetailReviewRequest(BaseModel):
+    analysis_id: str
+    timeline_key: str
+    review_revision: int = Field(ge=1)
+    items: list[dict]
+    approve: bool = False
+
+
 def public(record, user):
     with_previews = _with_preview_urls(record, user.owner_profile_id)
     return sign_studio_media_paths(with_previews, user.owner_profile_id)
@@ -183,6 +203,25 @@ def save_shot_review(project_id: str, request: ShotReviewRequest, user: UserCont
     return public(RecreationService(user).save_shot_review(
         project_id, request.analysis_id, request.timeline_key, request.review_revision,
         request.items, request.candidate), user)
+
+
+@router.post("/projects/{project_id}/macro-review/freeze")
+def freeze_macro_review(project_id: str, request: MacroFreezeRequest, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).freeze_macro_review(
+        project_id, request.analysis_id, request.timeline_key, request.review_revision), user)
+
+
+@router.post("/projects/{project_id}/detail-review/import")
+def import_detail_review(project_id: str, request: DetailImportRequest, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).import_detail_review(
+        project_id, request.analysis_id, request.timeline_key, request.candidate), user)
+
+
+@router.put("/projects/{project_id}/detail-review")
+def save_detail_review(project_id: str, request: DetailReviewRequest, user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).save_detail_review(
+        project_id, request.analysis_id, request.timeline_key, request.review_revision,
+        request.items, request.approve), user)
 
 
 class ShotReferencesRequest(AnalyzeRequest):

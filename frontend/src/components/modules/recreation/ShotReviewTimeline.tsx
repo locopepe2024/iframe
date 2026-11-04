@@ -1,14 +1,13 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import { Download, FileInput, Plus, Save } from "lucide-react";
+import { Check, Download, FileInput, Plus, Save } from "lucide-react";
 import { useLocale } from "next-intl";
 import { API_URL } from "@/lib/api";
 import { recreationApi, RecreationProject, RecreationShot, seconds, ShotReview, ShotReviewDecision, ShotReviewItem } from "@/lib/recreation";
+import DetailReviewPanel from "./DetailReviewPanel";
 
 const decisions: ShotReviewDecision[] = ["pending", "accept", "edit", "reject", "unknown"];
-const supportSides = ["left", "right", "both", "airborne", "unknown"] as const;
-const contactTypes = ["full_sole", "forefoot", "toe", "rolling", "airborne", "unknown"] as const;
 const label = {
   zh: { title: "拉片审核时间线", import: "导入解析 JSON", save: "保存审核", export: "导出审核", empty: "可逐镜头新增人工标注，或导入解析结果。", add: "新增人工标注", stale: "切点已改变，旧审核仅可查看。请重新导入当前镜头的解析结果。", pending: "待审核", accept: "确认", edit: "修订", reject: "驳回", unknown: "未知", cut_scene: "切点 / 场景", camera: "机位 / 运镜", optics: "镜头 / 景别", scene: "场景", object: "物体线索", action: "动作", uncertainty: "未决项", candidate: "模型候选", correction: "人工标注 / 修订", evidence: "证据帧", source: "模型原文", shot: "镜头", first: "起始帧", last: "结束帧", evidenceInput: "证据帧号（逗号分隔）", loaded: "审核已保存", invalid: "无法读取解析 JSON", conflict: "保存冲突，请刷新项目后重试", current: "当前帧", setFirst: "设为起始", setLast: "设为结束", addEvidence: "加入证据", locate: "定位", support: "支撑脚", contact: "脚底接触类型", needsReview: "待审核", left: "左脚", right: "右脚", both: "双脚", airborne: "腾空", full_sole: "全脚掌", forefoot: "前脚掌", toe: "脚尖", rolling: "滚动", unknownValue: "无法判断" },
   en: { title: "Shot review timeline", import: "Import analysis JSON", save: "Save review", export: "Export review", empty: "Add a manual annotation to a shot, or import analysis.", add: "Add manual annotation", stale: "Cuts changed. This review is read-only; import analysis for the current shots.", pending: "Pending", accept: "Accept", edit: "Edit", reject: "Reject", unknown: "Unknown", cut_scene: "Cut / scene", camera: "Camera movement", optics: "Lens / scale", scene: "Scene", object: "Object clue", action: "Action", uncertainty: "Unresolved", candidate: "Model candidate", correction: "Human annotation / correction", evidence: "Evidence frames", source: "Model source", shot: "Shot", first: "First frame", last: "Last frame", evidenceInput: "Evidence frames (comma separated)", loaded: "Review saved", invalid: "Could not read analysis JSON", conflict: "Save conflict; refresh the project", current: "Current frame", setFirst: "Set start", setLast: "Set end", addEvidence: "Add evidence", locate: "Locate", support: "Support foot", contact: "Sole contact type", needsReview: "Needs review", left: "Left", right: "Right", both: "Both", airborne: "Airborne", full_sole: "Full sole", forefoot: "Forefoot", toe: "Toe", rolling: "Rolling", unknownValue: "Cannot determine" },
@@ -36,14 +35,6 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
 
   const update = (id: string, field: "decision" | "edited_text" | "kind", value: string) => {
     setReview(current => current && { ...current, items: current.items.map(item => item.id === id ? { ...item, [field]: value } : item) });
-    setMessage("");
-  };
-  const updateActionField = (id: string, field: "reviewed_support_side" | "reviewed_contact_type", value: string) => {
-    setReview(current => current && { ...current, items: current.items.map(item => {
-      if (item.id !== id) return item;
-      if (!value) { const next = { ...item }; delete next[field]; return next; }
-      return { ...item, [field]: value };
-    }) });
     setMessage("");
   };
 
@@ -109,6 +100,16 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     } catch (error) { setMessage(error instanceof Error ? error.message : t.invalid); }
   }
 
+  async function freezeMacro() {
+    if (!review) return;
+    setBusy(true); setMessage("");
+    try {
+      const record = await recreationApi.freezeMacroReview(project, key, review.review_revision);
+      onSaved(record); setMessage(locale === "zh" ? "一审已冻结" : "Macro review frozen");
+    } catch (error) { setMessage(error instanceof Error ? error.message : t.conflict); }
+    finally { setBusy(false); }
+  }
+
   function exportReview() {
     if (!review) return;
     const url = URL.createObjectURL(new Blob([JSON.stringify({ ...review, stale }, null, 2)], { type: "application/json" }));
@@ -131,10 +132,11 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
   const media = (path: string) => path.startsWith("/") ? `${API_URL}${path}` : path;
   return <section aria-label={t.title} className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h3 className="font-semibold">{t.title}</h3>{review && <span className="text-xs text-text-muted">v{review.review_revision} · {review.items.filter(item => item.decision !== "pending").length}/{review.items.length}{review.items.some(item => item.kind === "action" && ["accept", "edit"].includes(item.decision) && (!item.reviewed_support_side || !item.reviewed_contact_type)) && <span className="ml-2 text-amber-300">{t.contact} {t.needsReview}</span>}</span>}</div>
+      <div><h3 className="font-semibold">{t.title}</h3>{review && <span className="text-xs text-text-muted">{locale === "zh" ? "一审" : "Macro"} v{review.review_revision} · {review.items.filter(item => item.decision !== "pending").length}/{review.items.length}{project.macro_review?.macro_revision === review.review_revision && <span className="ml-2">{locale === "zh" ? "已冻结" : "Frozen"}</span>}</span>}</div>
       <div className="flex flex-wrap gap-2">
         <label className="glass-button inline-flex min-h-10 cursor-pointer items-center gap-2"><FileInput size={16} />{t.import}<input type="file" accept="application/json,.json" className="sr-only" disabled={busy || stale} onChange={e => void importFile(e.target.files?.[0])} /></label>
         <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2" disabled={!review || stale || busy} onClick={() => review && void save({ items: review.items })}><Save size={16} />{t.save}</button>
+        <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2" disabled={!review || stale || busy || review.items.some(item => item.decision === "pending") || JSON.stringify(review) !== JSON.stringify(project.shot_review)} onClick={() => void freezeMacro()}><Check size={16} />{locale === "zh" ? "冻结一审" : "Freeze macro"}</button>
         <button type="button" className="glass-button inline-flex min-h-10 items-center gap-2" disabled={!review} onClick={exportReview}><Download size={16} />{t.export}</button>
       </div>
     </div>
@@ -171,13 +173,13 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
           <label>{t.evidenceInput}<input type="text" className="glass-input block mt-1 min-w-[180px] text-foreground" value={item.evidence_frames.join(", ")} disabled={stale} onChange={e => updateFrames(item.id, "evidence", e.target.value)} /></label>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">{(["first", "last", "evidence"] as const).map(field => <button key={field} type="button" className="glass-button min-h-8 px-2" disabled={stale || busy} onClick={() => useCurrentFrame(item, field)}>{field === "first" ? t.setFirst : field === "last" ? t.setLast : t.addEvidence}</button>)}</div>
-        {item.kind === "action" && <div className="flex flex-wrap gap-3 text-xs text-text-muted"><label>{t.support}<select aria-label={t.support} className="glass-input block mt-1 min-h-10 text-foreground" value={item.reviewed_support_side ?? ""} disabled={stale} onChange={e => updateActionField(item.id, "reviewed_support_side", e.target.value)}><option value="">{t.needsReview}</option>{supportSides.map(value => <option key={value} value={value}>{value === "unknown" ? t.unknownValue : t[value]}</option>)}</select></label><label>{t.contact}<select aria-label={t.contact} className="glass-input block mt-1 min-h-10 text-foreground" value={item.reviewed_contact_type ?? ""} disabled={stale} onChange={e => updateActionField(item.id, "reviewed_contact_type", e.target.value)}><option value="">{t.needsReview}</option>{contactTypes.map(value => <option key={value} value={value}>{value === "unknown" ? t.unknownValue : t[value]}</option>)}</select></label></div>}
         <div className="flex flex-wrap items-end gap-3"><label className="text-xs text-text-muted">{t.correction}<textarea className="glass-input block mt-1 w-full min-w-[220px] min-h-16 text-sm text-foreground" value={item.edited_text} disabled={stale} onChange={e => update(item.id, "edited_text", e.target.value)} /></label>
           <label className="text-xs text-text-muted">{t.title}<select className="glass-input block mt-1 min-h-10 text-sm text-foreground" value={item.decision} disabled={stale} onChange={e => update(item.id, "decision", e.target.value)}>{decisions.map(value => <option key={value} value={value}>{t[value]}</option>)}</select></label></div>
         {item.source.provenance !== "human" && <details className="text-xs text-text-muted"><summary className="cursor-pointer">{t.source}</summary><pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(item.source, null, 2)}</pre></details>}
       </article>)}</div>
     </div>)}</div>
     </div>
+    <DetailReviewPanel project={project} timelineKey={key} onSaved={onSaved} seek={seek} />
     <nav aria-label={t.title} className="border-t border-border pt-3">
       <div className="mb-2 flex items-center justify-between text-xs text-text-muted"><span>{t.shot} · {groups.length}</span><span>{t.current} {currentFrame}/{project.analysis?.frame_pts.length ?? 0}</span></div>
       {project.analysis?.samples?.length ? <div className="mb-1 flex gap-1 overflow-x-auto pb-1" aria-label={locale === "zh" ? "时间线联系表" : "Timeline contact sheet"}>

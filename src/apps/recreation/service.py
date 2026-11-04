@@ -26,6 +26,7 @@ from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
 from .mentions import TOKEN, compile_mentions
 from .prompt_contract import compile_h3, guidance_snapshot
 from .shot_review import import_candidates, timeline_key, validate_items
+from .staged_review import approve_detail, freeze_macro, import_detail, source_binding, validate_detail_items
 from ...utils.model_catalog import load_generated_model_catalog
 from ...utils.uniart_catalog import fetch_uniart_catalog
 
@@ -1479,5 +1480,53 @@ class RecreationService:
                                      "source_fingerprint": record["source_fingerprint"],
                                      "timeline_key": current_key, "review_revision": current_revision + 1,
                                      "items": selected, "updated_at": time.time()}
+            self._save(db, record)
+            return record
+
+    def freeze_macro_review(self, project_id, analysis_id, key, review_revision):
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if analysis_id != record.get("analysis_id") or key != timeline_key(record):
+                raise HTTPException(409, "Macro review source changed")
+            record["macro_review"] = freeze_macro(record, review_revision)
+            self._save(db, record)
+            return record
+
+    def import_detail_review(self, project_id, analysis_id, key, candidate):
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if analysis_id != record.get("analysis_id") or key != timeline_key(record):
+                raise HTTPException(409, "Detail review source changed")
+            if (record.get("detail_review") or {}).get("status") == "approved":
+                raise HTTPException(409, "Approved detail review cannot be replaced")
+            record["detail_review"] = import_detail(record, record.get("macro_review"), candidate)
+            self._save(db, record)
+            return record
+
+    def save_detail_review(self, project_id, analysis_id, key, review_revision, items, approve=False):
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if analysis_id != record.get("analysis_id") or key != timeline_key(record):
+                raise HTTPException(409, "Detail review source changed")
+            detail = record.get("detail_review")
+            if not detail or detail.get("review_revision") != review_revision or detail.get("status") == "approved":
+                raise HTTPException(409, "Detail review revision changed or is already approved")
+            if any(detail.get(field) != value for field, value in source_binding(record).items()):
+                raise HTTPException(409, "Detail review is stale")
+            if detail.get("macro_digest") != (record.get("macro_review") or {}).get("digest"):
+                raise HTTPException(409, "Frozen macro review changed")
+            validate_detail_items(record, items)
+            original = {item["id"]: item for item in detail["items"]}
+            if set(original) != {item["id"] for item in items} or any(
+                any(item[field] != original[item["id"]][field]
+                    for field in ("kind", "shot_id", "candidate", "actor_id", "source"))
+                for item in items
+            ):
+                raise HTTPException(409, "Model candidates cannot be changed during review")
+            detail = {**detail, "items": items, "review_revision": review_revision + 1}
+            if approve:
+                approve_detail(record, detail)
+                detail["status"] = "approved"
+            record["detail_review"] = detail
             self._save(db, record)
             return record

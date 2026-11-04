@@ -49,16 +49,149 @@ def test_handoff_requires_separate_support_and_contact_review(service, video):
         item["decision"] = "accept"
         item["source"]["contact"] = "forefoot"
     project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1, items=items)
-    with pytest.raises(ValueError, match="support/contact review is missing"):
+    with pytest.raises(ValueError, match="frozen macro review is missing"):
         build_handoff(project, 0, 2)
     for item in items:
         item["reviewed_support_side"] = "right"
         item["reviewed_contact_type"] = "unknown"
     project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 2, items=items)
-    handoff = build_handoff(project, 0, 3)
-    assert handoff["events"][0]["support_side"] == "right"
-    assert handoff["events"][0]["contact_type"] == "unknown"
+    with pytest.raises(ValueError, match="frozen macro review is missing"):
+        build_handoff(project, 0, 3)
+
+
+def detail_candidate(project):
+    items = []
+    for shot in project["timeline"]["shots"]:
+        frames = [n for n, pts in enumerate(project["analysis"]["frame_pts"], 1)
+                  if shot["start_pts"] <= pts < shot["end_pts"]]
+        for kind in ("body", "camera", "foot"):
+            sides = ("screen_left", "screen_right") if kind == "foot" else (None,)
+            for side in sides:
+                source = {"provenance": "model_candidate"}
+                if side:
+                    source.update(screen_foot=side, anatomical_foot="unknown",
+                                  support_state="unknown", sole_contact="unknown",
+                                  contact_target="unknown", uncertainty="occluded")
+                items.append({"id": f"{shot['id']}:{kind}:{side}", "kind": kind,
+                              "shot_id": shot["id"], "frame_span": [frames[0], frames[-1]],
+                              "evidence_frames": [frames[0]], "candidate": "uncertain",
+                              "edited_text": "", "decision": "pending", "actor_id": "A1", "source": source})
+    return {"run_id": "detail-pass-1", "macro_digest": project["macro_review"]["digest"],
+            "source_fingerprint": project["source_fingerprint"], "items": items}
+
+
+def cover_macro_shots(project, items):
+    covered = {item["shot_id"] for item in items}
+    for shot in project["timeline"]["shots"]:
+        if shot["id"] not in covered:
+            frames = [n for n, pts in enumerate(project["analysis"]["frame_pts"], 1)
+                      if shot["start_pts"] <= pts < shot["end_pts"]]
+            items.append({"id": f"manual:{shot['id']}", "kind": "action", "shot_id": shot["id"],
+                          "frame_span": [frames[0], frames[-1]], "evidence_frames": [frames[0]],
+                          "candidate": "", "edited_text": "Phase uncertain", "decision": "unknown",
+                          "actor_id": "A1", "source": {"provenance": "human"}})
+    return items
+
+
+def test_two_stage_review_gates_handoff_and_keeps_unknown_explicit(service, video):
+    project = reviewed(service, video)
+    with pytest.raises(HTTPException, match="pending decisions"):
+        service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 1)
+    items = deepcopy(project["shot_review"]["items"])
+    for item in items:
+        item.update(decision="unknown", reviewed_support_side="unknown", reviewed_contact_type="unknown")
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                       items=cover_macro_shots(project, items))
+    project = service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 2)
+    candidate = detail_candidate(project)
+    candidate["macro_digest"] = "stale"
+    with pytest.raises(HTTPException, match="frozen macro"):
+        service.import_detail_review(project["id"], project["analysis_id"], timeline_key(project), candidate)
+    candidate = detail_candidate(project)
+    candidate["items"].pop()
+    with pytest.raises(HTTPException, match="coverage is incomplete"):
+        service.import_detail_review(project["id"], project["analysis_id"], timeline_key(project), candidate)
+    project = service.import_detail_review(project["id"], project["analysis_id"], timeline_key(project), detail_candidate(project))
+    with pytest.raises(HTTPException, match="pending decisions"):
+        service.save_detail_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                   project["detail_review"]["items"], approve=True)
+    detail = deepcopy(project["detail_review"]["items"])
+    for item in detail:
+        item["decision"] = "unknown"
+    project = service.save_detail_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                         detail, approve=True)
+    handoff = build_handoff(project, 0, 2)
+    assert handoff["detail_run_id"] == "detail-pass-1"
+    assert handoff["detail_review_revision"] == 2
     assert handoff["constraints"]["hard_ik_intervals"] == []
+
+
+def test_detail_preserves_one_to_three_frame_foot_transition(service, video):
+    project = reviewed(service, video)
+    items = deepcopy(project["shot_review"]["items"])
+    for item in items:
+        item["decision"] = "unknown"
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                       items=cover_macro_shots(project, items))
+    project = service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 2)
+    candidate = detail_candidate(project)
+    first_shot = project["timeline"]["shots"][0]["id"]
+    left = next(item for item in candidate["items"] if item["shot_id"] == first_shot and
+                item["kind"] == "foot" and item["source"]["screen_foot"] == "screen_left")
+    left["frame_span"] = [1, 1]
+    left["source"].update(support_state="supporting", sole_contact="full_sole", contact_target="ground")
+    second = deepcopy(left)
+    second["id"] += ":heel-rise"
+    second["frame_span"] = [2, 3]
+    second["evidence_frames"] = [2, 3]
+    second["source"].update(sole_contact="forefoot")
+    candidate["items"].append(second)
+    with pytest.raises(HTTPException, match="coverage is incomplete"):
+        service.import_detail_review(project["id"], project["analysis_id"], timeline_key(project), candidate)
+
+
+def test_detail_edit_replaces_model_values_in_handoff(service, video):
+    project = reviewed(service, video)
+    macro_items = cover_macro_shots(project, deepcopy(project["shot_review"]["items"]))
+    for item in macro_items:
+        item["decision"] = "unknown"
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                       items=macro_items)
+    project = service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 2)
+    project = service.import_detail_review(project["id"], project["analysis_id"], timeline_key(project),
+                                           detail_candidate(project))
+    items = deepcopy(project["detail_review"]["items"])
+    foot = next(item for item in items if item["kind"] == "foot" and item["source"]["screen_foot"] == "screen_left")
+    foot["decision"] = "edit"
+    foot["edited_text"] = "Left screen foot supports on full sole"
+    foot["reviewed_values"] = {
+        "screen_foot": "screen_left", "anatomical_foot": "unknown",
+        "support_state": "supporting", "sole_contact": "full_sole", "contact_target": "ground",
+        "uncertainty": "Anatomical side is not visible",
+    }
+    for item in items:
+        if item is not foot:
+            item["decision"] = "unknown"
+            item["edited_text"] = "Evidence does not resolve this interval"
+    tampered = deepcopy(items)
+    tampered_foot = next(item for item in tampered if item["id"] == foot["id"])
+    tampered_foot["source"]["sole_contact"] = "toe"
+    with pytest.raises(HTTPException, match="Model candidates cannot be changed"):
+        service.save_detail_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                   tampered, approve=False)
+    project = service.save_detail_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                         items, approve=True)
+    exported = build_handoff(project, 0, 2)
+    actual = next(item for item in exported["detail_items"] if item["id"] == foot["id"])
+    assert actual["reviewed_text"] == "Left screen foot supports on full sole"
+    assert actual["reviewed_values"]["sole_contact"] == "full_sole"
+    assert set(actual["reviewed_values"]) == {
+        "screen_foot", "anatomical_foot", "support_state", "sole_contact", "contact_target", "uncertainty"}
+    assert "source" not in actual and "candidate" not in actual
+    assert foot["source"]["sole_contact"] == "unknown"
+    other = next(item for item in exported["detail_items"] if item["id"] != foot["id"])
+    assert other["reviewed_text"] == "Evidence does not resolve this interval"
+    assert other["reviewed_values"] is None
 
 
 def test_shot_review_import_preserves_distinct_actions_and_human_edit(service, video):

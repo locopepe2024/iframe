@@ -9,6 +9,7 @@ import sqlite3
 from pathlib import Path
 
 from src.apps.recreation.shot_review import timeline_key, validate_items
+from src.apps.recreation.staged_review import approve_detail, foot_values, valid_macro
 
 
 def build_handoff(record: dict, shot_index: int, expected_revision: int) -> dict:
@@ -24,6 +25,16 @@ def build_handoff(record: dict, shot_index: int, expected_revision: int) -> dict
         raise ValueError("review is stale against the confirmed timeline")
     if review.get("source_fingerprint") != record.get("source_fingerprint"):
         raise ValueError("review source fingerprint changed")
+    macro = record.get("macro_review")
+    detail = record.get("detail_review") or {}
+    if not valid_macro(record, macro) or macro.get("macro_revision") != expected_revision:
+        raise ValueError("frozen macro review is missing or stale")
+    if detail.get("status") != "approved" or detail.get("macro_digest") != macro["digest"]:
+        raise ValueError("approved detail review is missing or stale")
+    try:
+        approve_detail(record, detail)
+    except Exception as exc:
+        raise ValueError("approved detail review is invalid") from exc
     validate_items(review.get("items"), record)
 
     shot = shots[shot_index]
@@ -34,12 +45,6 @@ def build_handoff(record: dict, shot_index: int, expected_revision: int) -> dict
     items = [item for item in review["items"] if item["shot_id"] == shot["id"]]
     if not items or any(item["decision"] == "pending" for item in items):
         raise ValueError("shot has no reviewed items or still has pending items")
-    missing = [item["id"] for item in items if item["kind"] == "action"
-               and item["decision"] in {"accept", "edit"}
-               and (not item.get("reviewed_support_side") or not item.get("reviewed_contact_type"))]
-    if missing:
-        raise ValueError(f"action support/contact review is missing: {', '.join(missing)}")
-
     events = []
     for item in items:
         decision = item["decision"]
@@ -49,19 +54,29 @@ def build_handoff(record: dict, shot_index: int, expected_revision: int) -> dict
             "frame_span": item["frame_span"], "evidence_frames": item["evidence_frames"],
             "actor_id": item["actor_id"], "reviewed_text": reviewed_text,
             "source_provenance": item["source"].get("provenance", "model_candidate"),
-            "support_side": item.get("reviewed_support_side") if item["kind"] == "action" else None,
-            "contact_type": item.get("reviewed_contact_type") if item["kind"] == "action" else None,
         })
     return {
-        "schema": "iframe.reviewed-shot-motion-handoff.v2",
+        "schema": "iframe.reviewed-shot-motion-handoff.v3",
         "project_id": record["id"], "analysis_id": record["analysis_id"],
         "source_fingerprint": record["source_fingerprint"],
         "review_revision": expected_revision, "timeline_key": review["timeline_key"],
+        "macro_digest": macro["digest"], "detail_run_id": detail["run_id"],
+        "detail_review_revision": detail["review_revision"],
         "shot_id": shot["id"], "shot_index": shot_index,
         "start_pts": shot["start_pts"], "end_pts": shot["end_pts"],
         "time_base": analysis["time_base"], "frame_range": [frames[0], frames[-1]],
         "frame_pts": [frame_pts[i - 1] for i in frames],
         "events": events,
+        "detail_items": [
+            {"id": item["id"], "kind": item["kind"], "decision": item["decision"],
+             "frame_span": item["frame_span"], "evidence_frames": item["evidence_frames"],
+             "actor_id": item["actor_id"],
+             "reviewed_text": (item["edited_text"].strip() if item["decision"] in {"edit", "unknown"} else
+                               item["candidate"].strip() if item["decision"] == "accept" else ""),
+             "reviewed_values": (foot_values(item) if item["decision"] in {"accept", "edit"} and
+                                 item["kind"] == "foot" else None)}
+            for item in detail["items"] if item["shot_id"] == shot["id"]
+        ],
         "constraints": {"hard_ik_intervals": [], "contact_policy": "no_hard_ik_without_sole_geometry"},
     }
 

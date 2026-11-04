@@ -17,6 +17,8 @@ export interface RecreationProject {
   error: string | null; analysis: SourceAnalysis | null;
   timeline: { cuts: { pts: number; source: string }[]; shots: RecreationShot[] } | null;
   shot_review?: ShotReview | null;
+  macro_review?: MacroReview | null;
+  detail_review?: DetailReview | null;
 }
 
 export type ShotReviewDecision = "pending" | "accept" | "edit" | "reject" | "unknown";
@@ -33,6 +35,29 @@ export interface ShotReview {
   timeline_key: string; review_revision: number; items: ShotReviewItem[]; updated_at: number;
 }
 export interface ShotReviewEnvelope { timeline_key: string; review: ShotReview | null; stale: boolean }
+export interface MacroReview {
+  analysis_id: string; source_fingerprint: string; timeline_key: string;
+  macro_revision: number; digest: string; items: ShotReviewItem[];
+}
+export interface DetailReviewItem {
+  id: string; kind: "foot" | "body" | "camera" | "optics" | "uncertainty";
+  shot_id: string; frame_span: [number, number]; evidence_frames: number[];
+  candidate: string; edited_text: string; decision: ShotReviewDecision; actor_id: string;
+  source: Record<string, unknown>;
+  reviewed_values?: {
+    screen_foot: "screen_left" | "screen_right" | "unknown";
+    anatomical_foot: "left" | "right" | "unknown";
+    support_state: "supporting" | "touching" | "swinging" | "airborne" | "unknown";
+    sole_contact: "full_sole" | "heel" | "forefoot" | "toe" | "rolling" | "none" | "unknown";
+    contact_target: "ground" | "object" | "none" | "unknown";
+    uncertainty: string;
+  };
+}
+export interface DetailReview {
+  schema_version: string; analysis_id: string; source_fingerprint: string; timeline_key: string;
+  macro_digest: string; run_id: string; review_revision: number;
+  status: "reviewing" | "approved"; items: DetailReviewItem[];
+}
 
 export interface RecreationShot {
   id?: string; start_pts: number; end_pts: number;
@@ -379,5 +404,18 @@ export const recreationApi = {
     update: { items: ShotReviewItem[] } | { candidate: Record<string, unknown> }): Promise<RecreationProject> =>
     axios.put(`${API_URL}/recreation/projects/${project.id}/shot-review`, {
       analysis_id: project.analysis_id, timeline_key: timelineKey, review_revision: reviewRevision, ...update,
+    }).then(r => r.data),
+  freezeMacroReview: (project: RecreationProject, timelineKey: string, reviewRevision: number): Promise<RecreationProject> =>
+    axios.post(`${API_URL}/recreation/projects/${project.id}/macro-review/freeze`, {
+      analysis_id: project.analysis_id, timeline_key: timelineKey, review_revision: reviewRevision,
+    }).then(r => r.data),
+  importDetailReview: (project: RecreationProject, timelineKey: string, candidate: Record<string, unknown>): Promise<RecreationProject> =>
+    axios.post(`${API_URL}/recreation/projects/${project.id}/detail-review/import`, {
+      analysis_id: project.analysis_id, timeline_key: timelineKey, candidate,
+    }).then(r => r.data),
+  saveDetailReview: (project: RecreationProject, timelineKey: string, review: DetailReview, approve: boolean): Promise<RecreationProject> =>
+    axios.put(`${API_URL}/recreation/projects/${project.id}/detail-review`, {
+      analysis_id: project.analysis_id, timeline_key: timelineKey, review_revision: review.review_revision,
+      items: review.items, approve,
     }).then(r => r.data),
 };
