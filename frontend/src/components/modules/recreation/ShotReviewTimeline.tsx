@@ -68,7 +68,7 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     setMessage("");
   };
 
-  const useCurrentFrame = (item: ShotReviewItem, field: "first" | "last" | "evidence") => {
+  const setFromCurrentFrame = (item: ShotReviewItem, field: "first" | "last" | "evidence") => {
     const pts = project.analysis?.frame_pts[currentFrame - 1];
     const shot = project.timeline?.shots.find(row => row.id === item.shot_id);
     if (pts === undefined || !shot || pts < shot.start_pts || pts >= shot.end_pts) return;
@@ -121,10 +121,10 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
 
   function exportCompletionRequest() {
     if (!review) return;
-    const uncertainties = review.items.filter(item => item.kind === "uncertainty" && item.source.provenance !== "human");
-    const request = { schema_version: "shot-candidate-completion.v1", source_fingerprint: project.source_fingerprint,
+    const candidates = review.items.filter(item => item.source.provenance !== "human");
+    const request = { schema_version: "shot-candidate-completion.v2", source_fingerprint: project.source_fingerprint,
       analysis_id: project.analysis_id, timeline_key: key, candidate_digest: candidateDigest,
-      uncertainties: uncertainties.map(item => ({ item_id: item.id, shot_id: item.shot_id,
+      candidates: candidates.map(item => ({ item_id: item.id, shot_id: item.shot_id,
         frame_span: item.frame_span, evidence_frames: item.evidence_frames, original: item.candidate,
         context: review.items.filter(row => row.shot_id === item.shot_id && row.frame_span[0] <= item.frame_span[1] && row.frame_span[1] >= item.frame_span[0]) })) };
     const url = URL.createObjectURL(new Blob([JSON.stringify(request, null, 2)], { type: "application/json" }));
@@ -151,11 +151,30 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
 
   const groups = project.timeline?.shots.map((shot, index) => ({ shot, index, items: review?.items.filter(item => item.shot_id === shot.id) ?? [] })) ?? [];
   const missingShots = groups.filter(group => group.items.length === 0);
-  const uncertainties = review?.items.filter(item => item.kind === "uncertainty" && item.source.provenance !== "human") ?? [];
-  const completionReady = uncertainties.length === 0 || completionValid;
-  const pendingItems = review?.items.filter(item => item.decision === "pending" && (completionReady || item.kind !== "uncertainty")) ?? [];
+  const modelItems = review?.items.filter(item => item.source.provenance !== "human") ?? [];
+  const completionById = new Map(completion?.items.map(row => [row.item_id, row]) ?? []);
+  const secondPassReady = modelItems.length === 0 || (completionValid && completionById.size === modelItems.length);
+  const pendingItems = review?.items.filter(item => item.decision === "pending") ?? [];
+  const missingSecondPass = modelItems.filter(item => item.decision === "pending" && !completionById.has(item.id));
+  const changedItems = modelItems.filter(item => item.decision === "pending" && completionById.get(item.id)?.status === "predicted" &&
+    completionById.get(item.id)?.prediction.trim() !== item.candidate.trim());
+  const matchingItems = modelItems.filter(item => item.decision === "pending" && completionById.get(item.id)?.status === "predicted" &&
+    completionById.get(item.id)?.prediction.trim() === item.candidate.trim());
+  const disputedItems = modelItems.filter(item => item.decision === "pending" && completionById.get(item.id)?.status === "unresolved");
+  const otherPendingItems = pendingItems.filter(item => item.source.provenance === "human");
   const unknownItems = review?.items.filter(item => item.decision === "unknown") ?? [];
-  const macroReady = Boolean(review && completionReady && review.items.length > 0 && missingShots.length === 0 && pendingItems.length === 0);
+  const macroReady = Boolean(review && secondPassReady && review.items.length > 0 && missingShots.length === 0 && pendingItems.length === 0);
+  const selectItem = (item: ShotReviewItem) => { setSelectedId(item.id); seek(item.frame_span[0]); };
+  const acceptMatching = () => {
+    if (!review || !secondPassReady || !matchingItems.length) return;
+    const ids = new Set(matchingItems.map(item => item.id));
+    void save({ items: review.items.map(item => ids.has(item.id) ? { ...item, decision: "accept" } : item) });
+  };
+  const acceptSecondPass = (item: ShotReviewItem) => {
+    const prediction = completionById.get(item.id);
+    if (!review || !secondPassReady || item.decision !== "pending" || prediction?.status !== "predicted") return;
+    void save({ items: review.items.map(row => row.id === item.id ? { ...row, decision: "edit", edited_text: prediction.prediction } : row) });
+  };
   const framePts = project.analysis?.frame_pts[currentFrame - 1];
   const activeGroup = groups.find(({ shot }) => framePts !== undefined && framePts >= shot.start_pts && framePts < shot.end_pts) ?? groups[0];
   const visibleGroups = activeGroup ? [activeGroup] : [];
@@ -181,21 +200,22 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     {stale && <p role="alert" className="text-amber-300 text-sm">{t.stale}</p>}
     {message && <p role="status" className="text-sm text-text-muted break-words">{message}</p>}
     <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "待确认再预测" : "Candidate completion"}>
-      <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-medium">{locale === "zh" ? "待确认再预测" : "Candidate completion"}</h4><p className="text-xs text-text-muted">{locale === "zh" ? `${uncertainties.length} 项模型未决 · ${completionReady ? "可进入一审" : "等待前后帧预测"}` : `${uncertainties.length} model uncertainties · ${completionReady ? "Ready for macro review" : "Awaiting temporal analysis"}`}</p></div>
-        <div className="flex flex-wrap gap-2"><button type="button" className="glass-button min-h-9 inline-flex items-center gap-2" disabled={!review} onClick={exportCompletionRequest}><Download size={16} />{locale === "zh" ? "导出预测任务" : "Export prediction task"}</button>
-          <label className="glass-button min-h-9 inline-flex cursor-pointer items-center gap-2"><FileInput size={16} />{locale === "zh" ? "导入预测结果" : "Import predictions"}<input type="file" accept="application/json,.json" className="sr-only" disabled={busy || stale || !review} onChange={e => void importCompletion(e.target.files?.[0])} /></label></div></div>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-medium">{locale === "zh" ? "第二轮分析" : "Second analysis"}</h4><p className="text-xs text-text-muted">{locale === "zh" ? `${completionById.size}/${modelItems.length} 项模型候选已有第二轮 · ${secondPassReady ? "可对照确认" : "需覆盖全部候选"}` : `${completionById.size}/${modelItems.length} model candidates have a second pass · ${secondPassReady ? "Ready to compare" : "Full coverage required"}`}</p></div>
+        <div className="flex flex-wrap gap-2"><button type="button" className="glass-button min-h-9 inline-flex items-center gap-2" disabled={!review} onClick={exportCompletionRequest}><Download size={16} />{locale === "zh" ? "导出第二轮任务" : "Export second-pass task"}</button>
+          <label className="glass-button min-h-9 inline-flex cursor-pointer items-center gap-2"><FileInput size={16} />{locale === "zh" ? "导入第二轮结果" : "Import second analysis"}<input type="file" accept="application/json,.json" className="sr-only" disabled={busy || stale || !review} onChange={e => void importCompletion(e.target.files?.[0])} /></label></div></div>
     </div>
     <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "人工审核清单" : "Human review queue"}>
-      <div className="flex items-center gap-2 text-sm font-medium"><AlertCircle size={16} aria-hidden="true" />{locale === "zh" ? "人工审核清单" : "Human review queue"}</div>
+      <div className="flex items-center gap-2 text-sm font-medium"><AlertCircle size={16} aria-hidden="true" />{locale === "zh" ? "两轮对照审核" : "Compare both analyses"}</div>
       <p className="mt-1 text-xs text-text-muted">{locale === "zh"
-        ? `${missingShots.length} 个镜头缺少标注 · ${pendingItems.length} 项待判定 · ${unknownItems.length} 项保留未知`
-        : `${missingShots.length} shots without annotations · ${pendingItems.length} pending decisions · ${unknownItems.length} unresolved decisions`}</p>
-      {missingShots.length + pendingItems.length + unknownItems.length > 0 ? <div className="mt-2 flex flex-wrap gap-2">
-        {missingShots.map(({ shot, index }) => <button key={shot.id} type="button" className="glass-button min-h-9 px-3 text-left text-xs" onClick={() => seek(firstFrame(shot))}>{locale === "zh" ? `镜头 ${index + 1}：缺少标注` : `Shot ${index + 1}: no annotations`}</button>)}
-        {[...pendingItems, ...unknownItems].map(item => <button key={item.id} type="button" className="glass-button min-h-9 px-3 text-left text-xs" onClick={() => { setSelectedId(item.id); seek(item.frame_span[0]); }}>
-          {item.frame_span[0]}–{item.frame_span[1]} · {t[item.kind]} · {item.decision === "pending" ? t.pending : t.unknown}
-        </button>)}
-      </div> : <p className="mt-2 text-xs text-text-muted">{locale === "zh" ? "现有审核项均已判定，且每个镜头有标注。" : "Existing items are decided and every shot has an annotation."}</p>}
+        ? `${missingSecondPass.length} 项待第二轮 · ${matchingItems.length} 项一致 · ${changedItems.length} 项有差异 · ${disputedItems.length} 项仍有分歧 · ${otherPendingItems.length} 项人工标注待判定`
+        : `${missingSecondPass.length} awaiting second pass · ${matchingItems.length} unchanged · ${changedItems.length} changed · ${disputedItems.length} unresolved · ${otherPendingItems.length} manual items pending`}</p>
+      {missingShots.map(({ shot, index }) => <button key={shot.id} type="button" className="glass-button mt-2 min-h-9 px-3 text-left text-xs" onClick={() => seek(firstFrame(shot))}>{locale === "zh" ? `镜头 ${index + 1}：缺少标注` : `Shot ${index + 1}: no annotations`}</button>)}
+      {missingSecondPass.length > 0 && <div className="mt-3"><h4 className="text-xs font-medium">{locale === "zh" ? "等待第二轮" : "Awaiting second pass"}</h4><div className="mt-1 flex flex-wrap gap-1">{missingSecondPass.map(item => <button key={item.id} type="button" className="glass-button min-h-8 px-2 text-xs" onClick={() => selectItem(item)}>{item.frame_span[0]}–{item.frame_span[1]} · {t[item.kind]}</button>)}</div></div>}
+      {matchingItems.length > 0 && <details className="mt-3 text-xs"><summary className="cursor-pointer font-medium">{locale === "zh" ? `两轮一致 · ${matchingItems.length} 项` : `Unchanged · ${matchingItems.length}`}</summary><div className="mt-2 space-y-1">{matchingItems.map(item => <button key={item.id} type="button" className="block text-left text-text-muted hover:text-foreground" onClick={() => selectItem(item)}>{item.frame_span[0]}–{item.frame_span[1]} · {t[item.kind]} · {item.candidate}</button>)}</div><button type="button" className="glass-button mt-2 min-h-9 px-3" disabled={!secondPassReady || stale || busy} onClick={acceptMatching}>{locale === "zh" ? `确认 ${matchingItems.length} 项一致结果` : `Confirm ${matchingItems.length} unchanged items`}</button></details>}
+      {changedItems.length > 0 && <div className="mt-3"><h4 className="text-xs font-medium">{locale === "zh" ? "两轮差异" : "Changes between analyses"}</h4><div className="mt-1 flex flex-wrap gap-1">{changedItems.map(item => <button key={item.id} type="button" className="glass-button min-h-8 px-2 text-xs" onClick={() => selectItem(item)}>{item.frame_span[0]}–{item.frame_span[1]} · {t[item.kind]}</button>)}</div></div>}
+      {disputedItems.length > 0 && <div className="mt-3"><h4 className="text-xs font-medium">{locale === "zh" ? "仍有分歧" : "Still unresolved"}</h4><div className="mt-1 flex flex-wrap gap-1">{disputedItems.map(item => <button key={item.id} type="button" className="glass-button min-h-8 px-2 text-xs" onClick={() => selectItem(item)}>{item.frame_span[0]}–{item.frame_span[1]} · {t[item.kind]}</button>)}</div></div>}
+      {[...otherPendingItems, ...unknownItems].length > 0 && <div className="mt-3 flex flex-wrap gap-1">{[...otherPendingItems, ...unknownItems].map(item => <button key={item.id} type="button" className="glass-button min-h-8 px-2 text-xs" onClick={() => selectItem(item)}>{item.frame_span[0]}–{item.frame_span[1]} · {t[item.kind]} · {t[item.decision]}</button>)}</div>}
+      {pendingItems.length === 0 && missingShots.length === 0 && <p className="mt-2 text-xs text-text-muted">{locale === "zh" ? "所有审核项均已判定。" : "All review items have decisions."}</p>}
     </div>
     <p className="text-xs text-text-muted">{t.current} <span className="font-mono text-foreground">{currentFrame} · {project.analysis && seconds(project.analysis, project.analysis.frame_pts[currentFrame - 1]).toFixed(6)} s</span></p>
     {!review && <p className="text-sm text-text-muted">{t.empty}</p>}
@@ -220,15 +240,15 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
       <div className="space-y-3">
         {items.filter(item => item.id === activeItemId).map(item => <article key={item.id} className={`border rounded-md p-3 space-y-2 ${currentFrame >= item.frame_span[0] && currentFrame <= item.frame_span[1] ? "border-primary/60" : "border-border"}`}>
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">{item.source.provenance === "human" ? <select aria-label={t.title} className="glass-input text-foreground" value={item.kind} disabled={stale} onChange={e => update(item.id, "kind", e.target.value)}>{(["object", "action", "camera", "optics", "scene", "cut_scene"] as const).map(kind => <option key={kind} value={kind}>{t[kind]}</option>)}</select> : <span className="font-semibold text-foreground">{t[item.kind]}</span>}<button type="button" className="text-left hover:text-foreground break-all" title={t.locate} onClick={() => seek(item.frame_span[0])}>#{item.id}</button><span>{item.frame_span[0]}–{item.frame_span[1]}</span>{item.actor_id && <span>{item.actor_id}</span>}</div>
-        {item.candidate && <p className="text-sm"><span className="text-text-muted">{t.candidate}: </span>{item.candidate}</p>}
-        {completionValid && completion?.items.find(row => row.item_id === item.id) && (() => { const result = completion.items.find(row => row.item_id === item.id)!; return <div className="border-l-2 border-primary/60 pl-3 text-sm"><p className="font-medium">{result.status === "predicted" ? (locale === "zh" ? "时序预测" : "Temporal prediction") : (locale === "zh" ? "仍有分歧" : "Unresolved")}: {result.prediction || result.reason}</p><p className="text-xs text-text-muted">{result.reason} · {result.method}</p><div className="flex flex-wrap gap-1">{result.evidence_frames.map(frame => <button key={frame} type="button" className="glass-button px-2 py-1 font-mono text-xs" onClick={() => seek(frame)}>{frame}</button>)}</div></div>; })()}
+        {item.candidate && <p className="text-sm"><span className="text-text-muted">{locale === "zh" ? "第一轮" : "First analysis"}: </span>{item.candidate}</p>}
+        {completionById.get(item.id) && (() => { const result = completionById.get(item.id)!; return <div className="border-l-2 border-primary/60 pl-3 space-y-2 text-sm"><p><span className="text-text-muted">{locale === "zh" ? "第二轮" : "Second analysis"}: </span>{result.prediction || result.reason}</p><p className="text-xs text-text-muted">{result.status === "unresolved" ? (locale === "zh" ? "仍有分歧 · " : "Unresolved · ") : result.prediction.trim() === item.candidate.trim() ? (locale === "zh" ? "两轮一致 · " : "Unchanged · ") : (locale === "zh" ? "两轮不同 · " : "Changed · ")}{result.reason} · {result.method}</p><div className="flex flex-wrap gap-1">{result.evidence_frames.map(frame => <button key={frame} type="button" className="glass-button px-2 py-1 font-mono text-xs" onClick={() => seek(frame)}>{frame}</button>)}</div>{result.status === "predicted" && result.prediction.trim() !== item.candidate.trim() && item.decision === "pending" && <button type="button" className="glass-button min-h-9 px-3" disabled={!secondPassReady || stale || busy} onClick={() => acceptSecondPass(item)}>{locale === "zh" ? "确认第二轮分析" : "Confirm second analysis"}</button>}</div>; })()}
         <div className="flex flex-wrap gap-1 items-center text-xs"><span className="text-text-muted mr-1">{t.evidence}</span>{item.evidence_frames.map(frame => <button type="button" key={frame} className="glass-button px-2 py-1 font-mono" onClick={() => seek(frame)}>{frame} · {project.analysis && seconds(project.analysis, project.analysis.frame_pts[frame - 1]).toFixed(3)}s</button>)}</div>
         <div className="flex flex-wrap gap-3 text-xs text-text-muted">
           <label>{t.first}<input type="number" min="1" className="glass-input block mt-1 w-24 text-foreground" value={item.frame_span[0]} disabled={stale} onChange={e => updateFrames(item.id, "first", e.target.value)} /></label>
           <label>{t.last}<input type="number" min="1" className="glass-input block mt-1 w-24 text-foreground" value={item.frame_span[1]} disabled={stale} onChange={e => updateFrames(item.id, "last", e.target.value)} /></label>
           <label>{t.evidenceInput}<input type="text" className="glass-input block mt-1 min-w-[180px] text-foreground" value={item.evidence_frames.join(", ")} disabled={stale} onChange={e => updateFrames(item.id, "evidence", e.target.value)} /></label>
         </div>
-        <div className="flex flex-wrap gap-2 text-xs">{(["first", "last", "evidence"] as const).map(field => <button key={field} type="button" className="glass-button min-h-8 px-2" disabled={stale || busy} onClick={() => useCurrentFrame(item, field)}>{field === "first" ? t.setFirst : field === "last" ? t.setLast : t.addEvidence}</button>)}</div>
+        <div className="flex flex-wrap gap-2 text-xs">{(["first", "last", "evidence"] as const).map(field => <button key={field} type="button" className="glass-button min-h-8 px-2" disabled={stale || busy} onClick={() => setFromCurrentFrame(item, field)}>{field === "first" ? t.setFirst : field === "last" ? t.setLast : t.addEvidence}</button>)}</div>
         <div className="flex flex-wrap items-end gap-3"><label className="text-xs text-text-muted">{t.correction}<textarea className="glass-input block mt-1 w-full min-w-[220px] min-h-16 text-sm text-foreground" value={item.edited_text} disabled={stale} onChange={e => update(item.id, "edited_text", e.target.value)} /></label>
           <label className="text-xs text-text-muted">{t.title}<select className="glass-input block mt-1 min-h-10 text-sm text-foreground" value={item.decision} disabled={stale} onChange={e => update(item.id, "decision", e.target.value)}>{decisions.map(value => <option key={value} value={value}>{t[value]}</option>)}</select></label></div>
         {item.source.provenance !== "human" && <details className="text-xs text-text-muted"><summary className="cursor-pointer">{t.source}</summary><pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(item.source, null, 2)}</pre></details>}

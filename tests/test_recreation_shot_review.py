@@ -4,7 +4,7 @@ from fastapi import HTTPException
 import pytest
 
 from src.apps.recreation.shot_review import timeline_key
-from src.apps.recreation.candidate_completion import candidate_digest, valid_completion
+from src.apps.recreation.candidate_completion import candidate_digest, model_candidate_ids, valid_completion
 from scripts.director3d.export_reviewed_shot_handoff import build_handoff
 from tests.test_recreation import completed, service, video
 
@@ -53,17 +53,25 @@ def test_model_uncertainties_need_source_bound_completion_before_macro_freeze(se
     for item in items:
         item["decision"] = "unknown"
     project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 2, items=items)
-    with pytest.raises(HTTPException, match="Complete model uncertainties"):
+    with pytest.raises(HTTPException, match="Complete second analysis"):
         service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 3)
     uncertainty = next(item for item in items if item["kind"] == "uncertainty")
-    package = {"schema_version": "shot-candidate-completion.v1", "run_id": "temporal-1",
+    package = {"schema_version": "shot-candidate-completion.v2", "run_id": "temporal-1",
                "source_fingerprint": project["source_fingerprint"], "analysis_id": project["analysis_id"],
                "timeline_key": timeline_key(project), "candidate_digest": candidate_digest(project),
-               "items": [{"item_id": uncertainty["id"], "status": "predicted",
-                          "prediction": "Contact is most likely brief", "reason": "Frames 1 and 4 bound the motion",
-                          "method": "temporal_llm", "evidence_frames": [1, 2, 4]}]}
+               "items": [{"item_id": item["id"], "status": "predicted",
+                          "prediction": "Contact is most likely brief" if item == uncertainty else item["candidate"],
+                          "reason": "Adjacent source frames bound the motion", "method": "temporal_llm",
+                          "evidence_frames": item["evidence_frames"] or [item["frame_span"][0]]}
+                         for item in items if item["id"] in model_candidate_ids(project)]}
+    partial = deepcopy(package)
+    partial["schema_version"] = "shot-candidate-completion.v1"
+    partial["items"] = [row for row in partial["items"] if row["item_id"] == uncertainty["id"]]
+    with pytest.raises(HTTPException, match="every model candidate"):
+        service.import_candidate_completion(project["id"], project["analysis_id"], timeline_key(project), partial)
     invalid = deepcopy(package)
-    invalid["items"][0]["evidence_frames"] = [1, len(project["analysis"]["frame_pts"])]
+    next(row for row in invalid["items"] if row["item_id"] == uncertainty["id"])["evidence_frames"] = [
+        1, len(project["analysis"]["frame_pts"])]
     with pytest.raises(HTTPException, match="same confirmed shot"):
         service.import_candidate_completion(project["id"], project["analysis_id"], timeline_key(project), invalid)
     project = service.import_candidate_completion(project["id"], project["analysis_id"], timeline_key(project), package)
@@ -127,6 +135,17 @@ def cover_macro_shots(project, items):
     return items
 
 
+def complete_second_analysis(service, project):
+    package = {"schema_version": "shot-candidate-completion.v2", "run_id": "second-pass-test",
+               "source_fingerprint": project["source_fingerprint"], "analysis_id": project["analysis_id"],
+               "timeline_key": timeline_key(project), "candidate_digest": candidate_digest(project),
+               "items": [{"item_id": item["id"], "status": "predicted", "prediction": item["candidate"],
+                          "reason": "Adjacent source frames agree", "method": "temporal-review",
+                          "evidence_frames": item["evidence_frames"] or [item["frame_span"][0]]}
+                         for item in project["shot_review"]["items"] if item["id"] in model_candidate_ids(project)]}
+    return service.import_candidate_completion(project["id"], project["analysis_id"], timeline_key(project), package)
+
+
 def test_two_stage_review_gates_handoff_and_keeps_unknown_explicit(service, video):
     project = reviewed(service, video)
     with pytest.raises(HTTPException, match="pending decisions"):
@@ -136,6 +155,7 @@ def test_two_stage_review_gates_handoff_and_keeps_unknown_explicit(service, vide
         item.update(decision="unknown", reviewed_support_side="unknown", reviewed_contact_type="unknown")
     project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1,
                                        items=cover_macro_shots(project, items))
+    project = complete_second_analysis(service, project)
     project = service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 2)
     candidate = detail_candidate(project)
     candidate["macro_digest"] = "stale"
@@ -167,6 +187,7 @@ def test_detail_preserves_one_to_three_frame_foot_transition(service, video):
         item["decision"] = "unknown"
     project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1,
                                        items=cover_macro_shots(project, items))
+    project = complete_second_analysis(service, project)
     project = service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 2)
     candidate = detail_candidate(project)
     first_shot = project["timeline"]["shots"][0]["id"]
@@ -191,6 +212,7 @@ def test_detail_edit_replaces_model_values_in_handoff(service, video):
         item["decision"] = "unknown"
     project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1,
                                        items=macro_items)
+    project = complete_second_analysis(service, project)
     project = service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 2)
     project = service.import_detail_review(project["id"], project["analysis_id"], timeline_key(project),
                                            detail_candidate(project))

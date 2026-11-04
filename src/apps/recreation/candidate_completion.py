@@ -26,6 +26,19 @@ def uncertainty_ids(record):
             if item["kind"] == "uncertainty" and item["source"].get("provenance") != "human"}
 
 
+def model_candidate_ids(record):
+    return {item["id"] for item in (record.get("shot_review") or {}).get("items", [])
+            if item["source"].get("provenance") != "human"}
+
+
+def required_ids(record, schema_version):
+    if schema_version == "shot-candidate-completion.v2":
+        return model_candidate_ids(record)
+    if schema_version == "shot-candidate-completion.v1" and model_candidate_ids(record) == uncertainty_ids(record):
+        return uncertainty_ids(record)
+    return set()
+
+
 def valid_completion(record):
     completion = record.get("candidate_completion") or {}
     return bool(completion.get("status") == "completed"
@@ -33,12 +46,17 @@ def valid_completion(record):
                 and completion.get("analysis_id") == record.get("analysis_id")
                 and completion.get("timeline_key") == timeline_key(record)
                 and completion.get("candidate_digest") == candidate_digest(record)
-                and {row["item_id"] for row in completion.get("items", [])} == uncertainty_ids(record))
+                and required_ids(record, completion.get("schema_version"))
+                and {row["item_id"] for row in completion.get("items", [])} ==
+                    required_ids(record, completion.get("schema_version")))
 
 
 def import_completion(record, package):
-    if not isinstance(package, dict) or package.get("schema_version") != "shot-candidate-completion.v1":
+    if not isinstance(package, dict) or package.get("schema_version") not in {
+            "shot-candidate-completion.v1", "shot-candidate-completion.v2"}:
         raise HTTPException(422, "Invalid candidate completion schema")
+    if package["schema_version"] == "shot-candidate-completion.v1" and model_candidate_ids(record) != uncertainty_ids(record):
+        raise HTTPException(422, "Second pass must cover every model candidate")
     for key, value in (("source_fingerprint", record.get("source_fingerprint")),
                        ("analysis_id", record.get("analysis_id")),
                        ("timeline_key", timeline_key(record)),
@@ -51,11 +69,13 @@ def import_completion(record, package):
     items = package.get("items")
     if not isinstance(items, list) or len(items) > 300 or any(not isinstance(row, dict) for row in items):
         raise HTTPException(422, "Invalid candidate completion items")
+    expected_ids = (model_candidate_ids(record) if package["schema_version"] == "shot-candidate-completion.v2"
+                    else uncertainty_ids(record))
     originals = {item["id"]: item for item in record["shot_review"]["items"]
-                 if item["id"] in uncertainty_ids(record)}
+                 if item["id"] in expected_ids}
     ids = [row.get("item_id") for row in items]
     if len(ids) != len(set(ids)) or set(ids) != set(originals):
-        raise HTTPException(422, "Every model uncertainty needs one completion result")
+        raise HTTPException(422, "Every model candidate needs one second-pass result")
     frames = record["analysis"]["frame_pts"]
     shots = {shot["id"]: shot for shot in record["timeline"]["shots"]}
     for row in items:

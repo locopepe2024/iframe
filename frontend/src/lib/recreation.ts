@@ -40,7 +40,7 @@ export interface CandidateCompletionItem {
   reason: string; method: string; evidence_frames: number[];
 }
 export interface CandidateCompletion {
-  schema_version: "shot-candidate-completion.v1"; status: "completed";
+  schema_version: "shot-candidate-completion.v1" | "shot-candidate-completion.v2"; status: "completed";
   source_fingerprint: string; analysis_id: string; timeline_key: string;
   candidate_digest: string; run_id: string; model: string; prompt_revision: string;
   items: CandidateCompletionItem[];
