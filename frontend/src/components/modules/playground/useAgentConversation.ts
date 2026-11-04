@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { agentRequest, knowledgeRequest, type ChatMessage, type ChatModel, type ChatSession } from '@/lib/api';
 import { usePlaygroundStore } from './usePlaygroundStore';
-import { referenceName } from './referenceMedia';
+import { mentionedReferencePaths, referenceName } from './referenceMedia';
 import { readCompanionSkills, COMPANION_SKILLS_STORAGE_KEY, type CompanionSkillId } from './companionSkills';
 
 export function requestsCurrentInformation(content: string): boolean {
@@ -121,7 +121,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     if (!sessionId || sending.current || remoteBusy || loading || modelsLoading || modelsError || !models.some(m => m.api_model_id === model)) return;
     const snapshot = usePlaygroundStore.getState();
     if (!snapshot.prompt.trim()) return;
-    const inputMedia = snapshot.prompt.includes('@') ? snapshot.inputMedia : [];
+    const inputMedia = mentionedReferencePaths(snapshot.prompt, snapshot.inputMedia, snapshot.mediaNames, snapshot.history);
     const currentResearch = liveResearchAvailable && requestsCurrentInformation(snapshot.prompt) && model !== 'minimax-h3-ir';
     if (knowledgeSearch && model === 'minimax-h3-ir') {
       setError('H3 提示词优化模型不支持知识库检索，请切换普通 Chat 模型');
