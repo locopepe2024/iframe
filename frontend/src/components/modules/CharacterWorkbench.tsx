@@ -1381,28 +1381,13 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     };
 
     const designEditor = <>
-      <fieldset className="mx-4 my-3 grid gap-2 rounded border border-glass-border p-3 sm:grid-cols-3">
-        <legend className="px-1 text-xs font-medium text-foreground">角色米制尺寸（可选）</legend>
-        {([['heightM', '身高'], ['bodyWidthM', '体宽'], ['reachM', '单臂可达距离'], ['armSpanM', '臂展']] as const).map(([key, label]) =>
-          <label key={key} className="text-xs text-text-secondary">{label}（米）
-            <input aria-label={`${label}（米）`} type="number" min="0.01" max="5" step="0.01" value={metricBody[key]}
-              onChange={event => { setMetricBody(current => ({ ...current, [key]: event.target.value })); setDesignStatus("draft"); }}
-              className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
-          </label>)}
-        {([['legToTorsoRatio', '腿长/躯干长'], ['shoulderToHeadWidthRatio', '肩宽/头宽'], ['headToHeightRatio', '头高/身高']] as const).map(([key, label]) =>
-          <label key={key} className="text-xs text-text-secondary">{label}
-            <input aria-label={label} type="number" min="0.01" max={key === 'headToHeightRatio' ? '0.99' : '9.99'} step="0.01"
-              value={metricBody[key]} onChange={event => { setMetricBody(current => ({ ...current, [key]: event.target.value })); setDesignStatus("draft"); }}
-              className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
-          </label>)}
-        <p className="text-xs text-text-muted sm:col-span-3">腿长为胯点到地面，躯干长为胯点到肩线；头高为头顶到下巴。未知值留空，已填写的数值随角色设计版本保存。</p>
-      </fieldset>
       <CharacterDesignPanel
         description={asset.description} details={designInput}
         onDictionaryConfiguration={recordDictionaryConfiguration}
         configurations={dictionaryConfigurations}
         previousExpressionText={dictionaryConfigurations.find(configuration => configuration.preset_id === "dictionary.panel.expression")?.rendered_text}
         identityFields={identityFeatures} lookFields={lookFeatures}
+        metricBody={metricBody} onMetricBodyChange={(key, value) => { setMetricBody(current => ({ ...current, [key]: value })); setDesignStatus("draft"); }}
         onFieldsChange={(section, key, value) => updateStructuredDesign(section === "identity" ? { [key]: value } : {}, section === "look" ? { [key]: value } : {})}
         onDictionaryFields={(text, fields, remaining) => {
             updateStructuredDesign(fields.identity, fields.look, text, remaining);

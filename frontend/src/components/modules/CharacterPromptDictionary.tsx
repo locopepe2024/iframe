@@ -15,6 +15,7 @@ import { CHARACTER_PANEL_GROUPS, CHARACTER_PANEL_LABELS, CHARACTER_PANEL_ORDER, 
 import type { PromptSlashSuggestion } from "./playground/ReferencePromptEditor";
 import type { CharacterConstraints } from "@/lib/characterStructuredDesign";
 import { characterDictionaryField } from "@/lib/characterDictionaryFields";
+import CharacterMetricBodyFields, { type CharacterMetricBody } from "./CharacterMetricBodyFields";
 
 type Entry = {
   id: string; title: string; text: string; type: "词条" | "配置面板" | "Prompt 模板" | "Prompt 案例";
@@ -56,13 +57,14 @@ function currentConfigurationSelections(configuration: DictionaryConfiguration, 
   }));
 }
 
-export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration, configurations, currentFields }: {
+export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration, configurations, currentFields, metricBody, onMetricBodyChange }: {
   suggestion: PromptSlashSuggestion;
   onClose: () => void;
   onApply: (text: string, source: Entry) => void;
   onConfiguration?: (configuration: DictionaryConfiguration) => void;
   configurations?: DictionaryConfiguration[];
   currentFields?: { identity: IdentityFeatures; look: LookFeatures };
+  metricBody?: CharacterMetricBody; onMetricBodyChange?: (key: keyof CharacterMetricBody, value: string) => void;
   keyHandler: MutableRefObject<((event: KeyboardEvent) => boolean) | null>;
 }) {
   const host = useContext(CharacterDictionaryHost);
@@ -318,6 +320,8 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
         </label>)}
       </fieldset>)}
       </div>}
+      {selected.id === "dictionary.panel.basic" && metricBody && onMetricBodyChange &&
+        <div className="mt-3"><CharacterMetricBodyFields value={metricBody} onChange={onMetricBodyChange} /></div>}
       {selected.usageHint && <p className="mt-2 text-xs text-text-secondary">{selected.usageHint}</p>}
       {previewUrl && <img src={previewUrl} alt={`${selected.title} 案例预览`} className="mt-2 max-h-40 w-full rounded object-contain" />}
       <label className="mt-2 block text-xs text-text-secondary" htmlFor={`${id}-preview`}>将插入的完整文字</label>
