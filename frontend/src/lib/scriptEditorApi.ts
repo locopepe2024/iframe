@@ -83,7 +83,7 @@ export const scriptEditorApi = {
     return res.data;
   },
 
-  /** 导入文档（FDX/Fountain/TXT → Tiptap JSON） */
+  /** 导入文档（FDX/Fountain/TXT/DOCX → Tiptap JSON） */
   importDocument: async (projectId: string, file: File): Promise<any> => {
     const buffer = await file.arrayBuffer();
     const base64 = btoa(
@@ -91,7 +91,7 @@ export const scriptEditorApi = {
     );
 
     const ext = file.name.split('.').pop()?.toLowerCase() || 'txt';
-    const fileType = ext === 'fdx' ? 'fdx' : ext === 'fountain' ? 'fountain' : 'txt';
+    const fileType = ext === 'fdx' ? 'fdx' : ext === 'fountain' ? 'fountain' : ext === 'docx' ? 'docx' : 'txt';
 
     const res = await axios.post(`${API_BASE}/projects/${projectId}/document/import`, {
       filename: file.name,

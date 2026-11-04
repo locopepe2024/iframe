@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Upload, FileText, Loader2, ChevronLeft, ChevronRight, Check, BookOpen } from "lucide-react";
 import { api } from "@/lib/api";
+import { scriptEditorApi } from "@/lib/scriptEditorApi";
 import { useTranslations } from "next-intl";
 
 interface ImportFileDialogProps {
     isOpen: boolean;
     onClose: () => void;
     onSuccess?: (result: any) => void;
+    initialText?: string;
+    initialTitle?: string;
 }
 
 interface EpisodePreview {
@@ -39,7 +42,7 @@ interface PreviewResult {
 
 type Step = 1 | 2 | 3;
 
-export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportFileDialogProps) {
+export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialText, initialTitle }: ImportFileDialogProps) {
     // Step state
     const [step, setStep] = useState<Step>(1);
 
@@ -67,6 +70,13 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
     const t = useTranslations("series");
     const tc = useTranslations("common");
 
+    useEffect(() => {
+        if (isOpen && initialText) {
+            setFile(new File([initialText], `${initialTitle || "剧本"}.txt`, { type: "text/plain" }));
+            setSeriesTitle(initialTitle || "");
+        }
+    }, [isOpen, initialText, initialTitle]);
+
     const resetState = () => {
         setStep(1);
         setFile(null);
@@ -90,6 +100,10 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
         const ext = selectedFile.name.split('.').pop()?.toLowerCase();
         if (ext !== 'txt' && ext !== 'md' && ext !== 'docx') {
             setError(t("onlyTxtMdDocx"));
+            return;
+        }
+        if (selectedFile.size > 10 * 1024 * 1024) {
+            setError(t("fileTooLarge"));
             return;
         }
         setFile(selectedFile);
@@ -122,12 +136,20 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
         setIsDragOver(false);
     }, []);
 
-    // Step 1 -> Step 2: Analyze file
+    // Raw files enter an editable draft; only edited text enters episode analysis.
     const handleAnalyze = async () => {
         if (!file || !seriesTitle.trim()) return;
         setIsAnalyzing(true);
         setError(null);
         try {
+            if (!initialText) {
+                const project = await api.createProject(seriesTitle.trim(), "", true);
+                const imported = await scriptEditorApi.importDocument(project.id, file);
+                await scriptEditorApi.saveDocument(project.id, imported.content);
+                handleClose();
+                window.location.hash = `#/project/${project.id}/editor`;
+                return;
+            }
             const result = await api.importFilePreview(file, suggestedEpisodes);
             setPreviewResult(result);
             setStep(2);
@@ -209,7 +231,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
         handleClose();
     };
 
-    const stepLabels = [t("stepUpload"), t("stepPreview"), t("stepDone")];
+    const stepLabels = [t("editorSource"), t("stepPreview"), t("stepDone")];
     const seriesContextText = previewResult?.assignments
         ? previewResult.assignments.filter(item => item.scope === "series").map(item => item.source).join("")
         : previewResult?.series_context?.preamble;
@@ -233,7 +255,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-display font-bold text-foreground">{t("importTitle")}</h2>
+                            <h2 className="text-xl font-display font-bold text-foreground">{t(initialText ? "editorImportTitle" : "importTitle")}</h2>
                             <button
                                 onClick={handleClose}
                                 className="p-2 rounded-lg hover:bg-hover-bg text-text-secondary hover:text-foreground transition-colors"
@@ -243,7 +265,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                         </div>
 
                         {/* Step Indicator */}
-                        <div className="flex items-center justify-center gap-2 mb-8">
+                        {initialText && <div className="flex items-center justify-center gap-2 mb-8">
                             {stepLabels.map((label, idx) => {
                                 const stepNum = (idx + 1) as Step;
                                 const isActive = step === stepNum;
@@ -268,7 +290,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                     </div>
                                 );
                             })}
-                        </div>
+                        </div>}
 
                         {/* Error Message */}
                         {error && (
@@ -283,7 +305,11 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                             {step === 1 && (
                                 <div className="space-y-4">
                                     {/* File Upload Zone */}
-                                    <div
+                                    {initialText ? (
+                                        <div className="flex items-center gap-3 border border-glass-border rounded-md p-4 text-sm text-foreground">
+                                            <FileText size={20} /> {t("editorSource")} · {initialText.length.toLocaleString()} 字
+                                        </div>
+                                    ) : <div
                                         onDrop={handleDrop}
                                         onDragOver={handleDragOver}
                                         onDragLeave={handleDragLeave}
@@ -321,7 +347,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                                 <p className="text-text-secondary text-sm">{t("supportedFormats")}</p>
                                             </>
                                         )}
-                                    </div>
+                                    </div>}
 
                                     {/* Series Title */}
                                     <div>
@@ -338,7 +364,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                     </div>
 
                                     {/* Description */}
-                                    <div>
+                                    {initialText && <div>
                                         <label className="block text-sm font-medium text-text-secondary mb-2">
                                             {t("descriptionOptional")}
                                         </label>
@@ -349,10 +375,10 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                             rows={3}
                                             className="glass-input w-full resize-none"
                                         />
-                                    </div>
+                                    </div>}
 
                                     {/* Suggested Episodes */}
-                                    <div>
+                                    {initialText && <div>
                                         <label className="block text-sm font-medium text-text-secondary mb-2">
                                             {t("suggestedEpisodes")}
                                         </label>
@@ -364,7 +390,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                             max={100}
                                             className="glass-input w-24"
                                         />
-                                    </div>
+                                    </div>}
 
                                     {/* Action Button */}
                                     <div className="flex gap-3 pt-4">
@@ -382,7 +408,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                                     {t("analyzing")}
                                                 </>
                                             ) : (
-                                                t("startAnalysis")
+                                                initialText ? t("startAnalysis") : t("openEditor")
                                             )}
                                         </button>
                                     </div>
