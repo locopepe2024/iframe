@@ -26,12 +26,11 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [completion, setCompletion] = useState<CandidateCompletion | null>(null);
   const [completionValid, setCompletionValid] = useState(false);
-  const [candidateDigest, setCandidateDigest] = useState("");
 
   useEffect(() => {
     let active = true;
     recreationApi.getShotReview(project.id).then(result => {
-      if (active) { setReview(result.review); setKey(result.timeline_key); setStale(result.stale); setCompletion(result.completion ?? null); setCompletionValid(result.completion_valid ?? false); setCandidateDigest(result.candidate_digest ?? ""); setSelectedId(result.review?.items.find(item => item.decision === "pending")?.id ?? result.review?.items[0]?.id ?? null); }
+      if (active) { setReview(result.review); setKey(result.timeline_key); setStale(result.stale); setCompletion(result.completion ?? null); setCompletionValid(result.completion_valid ?? false); setSelectedId(result.review?.items.find(item => item.decision === "pending")?.id ?? result.review?.items[0]?.id ?? null); }
     }).catch(() => { if (active) setMessage(t.conflict); });
     return () => { active = false; };
   }, [project.id, project.timeline?.shots.map(shot => `${shot.id}:${shot.start_pts}:${shot.end_pts}`).join("|")]);
@@ -93,7 +92,7 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
       setReview(record.shot_review ?? null); setStale(false); onSaved(record); setMessage(t.loaded);
       if ("candidate" in update) {
         const next = await recreationApi.getShotReview(project.id);
-        setCompletionValid(next.completion_valid ?? false); setCandidateDigest(next.candidate_digest ?? "");
+        setCompletionValid(next.completion_valid ?? false);
       }
     } catch (error) { setMessage(error instanceof Error ? error.message : t.conflict); }
     finally { setBusy(false); }
@@ -119,17 +118,16 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     finally { setBusy(false); }
   }
 
-  function exportCompletionRequest() {
-    if (!review) return;
-    const candidates = review.items.filter(item => item.source.provenance !== "human");
-    const request = { schema_version: "shot-candidate-completion.v2", source_fingerprint: project.source_fingerprint,
-      analysis_id: project.analysis_id, timeline_key: key, candidate_digest: candidateDigest,
-      candidates: candidates.map(item => ({ item_id: item.id, shot_id: item.shot_id,
-        frame_span: item.frame_span, evidence_frames: item.evidence_frames, original: item.candidate,
-        context: review.items.filter(row => row.shot_id === item.shot_id && row.frame_span[0] <= item.frame_span[1] && row.frame_span[1] >= item.frame_span[0]) })) };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(request, null, 2)], { type: "application/json" }));
-    const link = document.createElement("a"); link.href = url; link.download = `${project.id}-candidate-completion-request.json`; link.click();
-    URL.revokeObjectURL(url);
+  async function exportCompletionRequest() {
+    if (!review || !key) return;
+    setBusy(true); setMessage("");
+    try {
+      const pack = await recreationApi.secondPassFramePack(project, key);
+      const url = URL.createObjectURL(pack);
+      const link = document.createElement("a"); link.href = url; link.download = `${project.id}-second-pass.zip`; link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) { setMessage(error instanceof Error ? error.message : t.invalid); }
+    finally { setBusy(false); }
   }
 
   async function freezeMacro() {
@@ -201,7 +199,7 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     {message && <p role="status" className="text-sm text-text-muted break-words">{message}</p>}
     <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "待确认再预测" : "Candidate completion"}>
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-medium">{locale === "zh" ? "第二轮分析" : "Second analysis"}</h4><p className="text-xs text-text-muted">{locale === "zh" ? `${completionById.size}/${modelItems.length} 项模型候选已有第二轮 · ${secondPassReady ? "可对照确认" : "需覆盖全部候选"}` : `${completionById.size}/${modelItems.length} model candidates have a second pass · ${secondPassReady ? "Ready to compare" : "Full coverage required"}`}</p></div>
-        <div className="flex flex-wrap gap-2"><button type="button" className="glass-button min-h-9 inline-flex items-center gap-2" disabled={!review} onClick={exportCompletionRequest}><Download size={16} />{locale === "zh" ? "导出第二轮任务" : "Export second-pass task"}</button>
+        <div className="flex flex-wrap gap-2"><button type="button" className="glass-button min-h-9 inline-flex items-center gap-2" disabled={!review || stale || busy} onClick={() => void exportCompletionRequest()}><Download size={16} />{locale === "zh" ? "导出参考帧包" : "Export frame pack"}</button>
           <label className="glass-button min-h-9 inline-flex cursor-pointer items-center gap-2"><FileInput size={16} />{locale === "zh" ? "导入第二轮结果" : "Import second analysis"}<input type="file" accept="application/json,.json" className="sr-only" disabled={busy || stale || !review} onChange={e => void importCompletion(e.target.files?.[0])} /></label></div></div>
     </div>
     <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "人工审核清单" : "Human review queue"}>
