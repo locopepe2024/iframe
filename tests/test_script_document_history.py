@@ -1,4 +1,7 @@
 from pathlib import Path
+import base64
+from io import BytesIO
+from zipfile import ZipFile
 
 
 def _doc(text: str):
@@ -75,4 +78,28 @@ def test_legacy_project_opens_with_editable_source_text(tmp_path, monkeypatch):
     assert [block["content"][0]["text"] for block in loaded["content"]["content"]] == [
         "故事的开端：沈夏在车站等电话。",
         "她最终转身离开。",
+    ]
+
+
+def test_docx_import_creates_editable_paragraphs_without_splitting_episodes():
+    from src.apps.comic_gen import api
+
+    document_xml = (
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:body><w:p><w:r><w:t>第1集 甲到达</w:t></w:r></w:p>'
+        '<w:p><w:r><w:t>第2集 乙离开</w:t></w:r></w:p></w:body></w:document>'
+    )
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", document_xml)
+    request = api.ImportDocRequest(
+        filename="series.docx", file_type="docx",
+        content=base64.b64encode(buffer.getvalue()).decode(),
+    )
+
+    result = api.import_document("draft-project", request)
+
+    assert result["file_type"] == "docx"
+    assert [block["content"][0]["text"] for block in result["content"]["content"]] == [
+        "第1集 甲到达", "第2集 乙离开",
     ]

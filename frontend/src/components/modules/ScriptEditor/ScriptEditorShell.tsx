@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { EditorContent } from '@tiptap/react';
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X, ListPlus } from 'lucide-react';
+import { api } from '@/lib/api';
+import ImportFileDialog from '@/components/series/ImportFileDialog';
 import { useEditorStore } from '@/store/editorStore';
 import { useEditorSetup } from './hooks/useEditorSetup';
 import FormatToolbar from './toolbar/FormatToolbar';
@@ -39,6 +41,11 @@ export default function ScriptEditorShell({
   const t = useTranslations('scriptEditor');
   const { editor, isReady } = useEditorSetup({ content: initialContent });
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [seriesImportOpen, setSeriesImportOpen] = useState(false);
+  const [seriesImportSaving, setSeriesImportSaving] = useState(false);
+  const [seriesSourceText, setSeriesSourceText] = useState('');
+  const [projectTitle, setProjectTitle] = useState('');
+  const [seriesImportError, setSeriesImportError] = useState('');
   const [documentLoading, setDocumentLoading] = useState(Boolean(projectId));
   const { showHint, analysis, applyFormatting, dismissHint } = usePasteHandler(editor);
   const { showShortcutHelp, closeShortcutHelp } = useKeyboardShortcuts(editor);
@@ -49,6 +56,12 @@ export default function ScriptEditorShell({
   const { save } = useAutoSave(editor, projectId ?? null);
   const refreshDerivation = useDerivation(editor);
   useL3Completion(editor, projectId ?? null);
+
+  useEffect(() => {
+    if (!projectId) return;
+    api.getProject(projectId).then((project) => setProjectTitle(project.title || '剧本'))
+      .catch(() => setProjectTitle('剧本'));
+  }, [projectId]);
 
   const isDirty = useEditorStore((s) => s.isDirty);
   const lastSavedAt = useEditorStore((s) => s.lastSavedAt);
@@ -105,6 +118,25 @@ export default function ScriptEditorShell({
     useEditorStore.getState().setDirty(false);
     useEditorStore.getState().setLastSavedAt(new Date());
   }, [editor, refreshDerivation]);
+
+  const beginSeriesImport = useCallback(async () => {
+    if (!editor || !projectId || seriesImportSaving) return;
+    setSeriesImportError('');
+    setSeriesImportSaving(true);
+    try {
+      const source = editor.getText({ blockSeparator: '\n' });
+      if (!source.trim()) throw new Error('请先整理剧本内容');
+      await scriptEditorApi.saveDocument(projectId, editor.getJSON(), true);
+      useEditorStore.getState().setDirty(false);
+      useEditorStore.getState().setLastSavedAt(new Date());
+      setSeriesSourceText(source);
+      setSeriesImportOpen(true);
+    } catch (error) {
+      setSeriesImportError(error instanceof Error ? error.message : '保存剧本失败');
+    } finally {
+      setSeriesImportSaving(false);
+    }
+  }, [editor, projectId, seriesImportSaving]);
 
   const showLeft = mode === 'full' && !leftCollapsed && showSidebars;
   const showRight = mode === 'full' && !rightCollapsed && showSidebars;
@@ -165,9 +197,18 @@ export default function ScriptEditorShell({
             )}
           </div>
           <div className="flex items-center gap-3">
+            {projectId && editor && !documentLoading && (
+              <button type="button" onClick={() => { void beginSeriesImport(); }}
+                disabled={seriesImportSaving}
+                className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10"
+                title="按当前编辑内容预览并创建系列">
+                <ListPlus size={14} /> 创建系列
+              </button>
+            )}
             <span className="text-xs text-text-muted">
               {isDirty ? t('status.unsaved') : lastSavedAt ? t('status.savedAt', { time: lastSavedAt.toLocaleTimeString() }) : ''}
             </span>
+            {seriesImportError && <span role="alert" className="text-xs text-red-400">{seriesImportError}</span>}
             {mode === 'full' && (
               <button
                 type="button"
@@ -315,6 +356,8 @@ export default function ScriptEditorShell({
           onRestore={handleRestore}
         />
       )}
+      <ImportFileDialog isOpen={seriesImportOpen} onClose={() => setSeriesImportOpen(false)}
+        initialText={seriesSourceText} initialTitle={projectTitle} />
     </div>
   );
 }

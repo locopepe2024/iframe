@@ -9575,7 +9575,7 @@ def restore_document_snapshot(project_id: str, timestamp: str):
 class ImportDocRequest(BaseModel):
     filename: str
     content: str  # base64 encoded file content
-    file_type: str  # "fdx" | "fountain" | "txt"
+    file_type: str  # "fdx" | "fountain" | "txt" | "docx"
 
 
 class ExportDocRequest(BaseModel):
@@ -9787,32 +9787,38 @@ def _parse_txt(text: str) -> dict:
 
 @app.post("/projects/{project_id}/document/import")
 def import_document(project_id: str, req: ImportDocRequest):
-    """Import FDX/Fountain/TXT file and convert to Tiptap JSON."""
+    """Import a script file and convert to Tiptap JSON."""
     import base64
+    import tempfile
 
     try:
-        raw_bytes = base64.b64decode(req.content)
-        # Script formats are text; detect common binary media early so a JPEG
-        # header (0xff 0xd8) is never surfaced as a confusing UTF-8 traceback.
-        if raw_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF")):
-            raise ValueError("binary media was submitted to the document importer; choose a TXT, Fountain, or FDX file")
-        try:
-            text = raw_bytes.decode("utf-8-sig")
-        except UnicodeDecodeError:
+        raw_bytes = base64.b64decode(req.content, validate=True)
+        file_type = req.file_type.lower()
+        if file_type == "docx":
+            from ...utils.reference_files import read_reference_document
+            with tempfile.TemporaryDirectory(prefix="iframe-editor-import-") as directory:
+                source = Path(directory) / "source.docx"
+                source.write_bytes(raw_bytes)
+                text = read_reference_document(str(source))
+        else:
+            # Reject binary media before trying the text decoders.
+            if raw_bytes.startswith((b"\xff\xd8\xff", b"\x89PNG", b"RIFF")):
+                raise ValueError("binary media was submitted to the document importer; choose a TXT, Fountain, FDX, or DOCX file")
             try:
-                text = raw_bytes.decode("utf-16")
+                text = raw_bytes.decode("utf-8-sig")
             except UnicodeDecodeError:
-                text = raw_bytes.decode("gb18030", errors="replace")
+                try:
+                    text = raw_bytes.decode("utf-16")
+                except UnicodeDecodeError:
+                    text = raw_bytes.decode("gb18030", errors="replace")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to decode file content: {e}")
-
-    file_type = req.file_type.lower()
 
     if file_type == "fdx":
         doc = _parse_fdx(text)
     elif file_type == "fountain":
         doc = _parse_fountain(text)
-    elif file_type == "txt":
+    elif file_type in ("txt", "docx"):
         doc = _parse_txt(text)
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_type}")

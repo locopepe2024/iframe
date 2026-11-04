@@ -13,12 +13,13 @@ export interface ImportDialogProps {
   onImportSuccess: (content: any) => void
 }
 
-type FileType = 'fdx' | 'fountain' | 'txt'
+type FileType = 'fdx' | 'fountain' | 'txt' | 'docx'
 
 const ACCEPTED_EXTENSIONS: Record<string, FileType> = {
   '.fdx': 'fdx',
   '.fountain': 'fountain',
   '.txt': 'txt',
+  '.docx': 'docx',
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
@@ -185,7 +186,7 @@ export default function ImportDialog({ open, onClose, projectId, onImportSuccess
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".fdx,.fountain,.txt"
+                accept=".fdx,.fountain,.txt,.docx"
                 onChange={onFileSelect}
                 className="hidden"
               />
