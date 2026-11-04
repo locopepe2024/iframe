@@ -43,7 +43,7 @@
     "recast-navigation": "0.43.1",
     "styled-components": "5.3.11",
     "tailwind-merge": "^3.4.0",
-    "three": "^0.181.2",
+    "three": "0.187.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
@@ -52,6 +52,7 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "@types/three": "0.187.0",
     "eslint": "^8",
     "eslint-config-next": "14.2.33",
     "happy-dom": "^20.8.9",

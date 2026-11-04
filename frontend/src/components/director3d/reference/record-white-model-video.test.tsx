@@ -8,7 +8,7 @@ it("samples each timeline frame into a video canvas and returns encoded data", a
   const drawImage = vi.fn();
   const fillRect = vi.fn();
   const requestFrame = vi.fn();
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage, fillRect, set fillStyle(_value: string) {} } as unknown as GPUCanvasContext);
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage, fillRect, set fillStyle(_value: string) {} } as unknown as CanvasRenderingContext2D);
   const stopTrack = vi.fn();
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 0));
   vi.stubGlobal("cancelAnimationFrame", (handle: number) => window.clearTimeout(handle));
@@ -44,7 +44,7 @@ it("samples each timeline frame into a video canvas and returns encoded data", a
 });
 
 it("skips intermediate timeline frames when painting falls behind real time", async () => {
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: vi.fn(), fillRect: vi.fn(), set fillStyle(_value: string) {} } as unknown as GPUCanvasContext);
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ drawImage: vi.fn(), fillRect: vi.fn(), set fillStyle(_value: string) {} } as unknown as CanvasRenderingContext2D);
   vi.spyOn(HTMLCanvasElement.prototype, "captureStream").mockReturnValue({ getTracks: () => [{ stop: vi.fn() }], getVideoTracks: () => [{ requestFrame: vi.fn() }] } as unknown as MediaStream);
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 30));
   vi.stubGlobal("cancelAnimationFrame", (handle: number) => window.clearTimeout(handle));
