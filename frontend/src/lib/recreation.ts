@@ -411,6 +411,10 @@ export const recreationApi = {
     axios.post(`${API_URL}/recreation/projects/${project.id}/evidence`, { analysis_id: project.analysis_id, pts }).then(r => r.data),
   getShotReview: (projectId: string): Promise<ShotReviewEnvelope> =>
     axios.get(`${API_URL}/recreation/projects/${projectId}/shot-review`).then(r => r.data),
+  secondPassFramePack: (project: RecreationProject, timelineKey: string): Promise<Blob> =>
+    axios.get(`${API_URL}/recreation/projects/${project.id}/candidate-completion/frame-pack`, {
+      params: { analysis_id: project.analysis_id, timeline_key: timelineKey }, responseType: "blob",
+    }).then(r => r.data),
   importCandidateCompletion: (project: RecreationProject, timelineKey: string, completion: CandidateCompletion): Promise<RecreationProject> =>
     axios.post(`${API_URL}/recreation/projects/${project.id}/candidate-completion/import`, {
       analysis_id: project.analysis_id, timeline_key: timelineKey, package: completion,
