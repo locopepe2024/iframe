@@ -14,6 +14,25 @@ SCREEN_FEET = {"screen_left", "screen_right", "unknown"}
 ANATOMICAL_FEET = {"left", "right", "unknown"}
 SUPPORT_STATES = {"supporting", "touching", "swinging", "airborne", "unknown"}
 SOLE_CONTACTS = {"full_sole", "heel", "forefoot", "toe", "rolling", "none", "unknown"}
+FOOT_FIELDS = ("screen_foot", "anatomical_foot", "support_state", "sole_contact", "contact_target", "uncertainty")
+
+
+def foot_values(item):
+    values = item.get("reviewed_values") if item["decision"] == "edit" else item["source"]
+    return {field: values[field] for field in FOOT_FIELDS}
+
+
+def validate_foot_values(values):
+    if (not isinstance(values, dict) or set(values) != set(FOOT_FIELDS) or
+            values.get("screen_foot") not in SCREEN_FEET or
+            values.get("anatomical_foot") not in ANATOMICAL_FEET or
+            values.get("support_state") not in SUPPORT_STATES or
+            values.get("sole_contact") not in SOLE_CONTACTS or
+            values.get("contact_target") not in {"ground", "object", "none", "unknown"} or
+            not isinstance(values.get("uncertainty"), str) or len(values["uncertainty"]) > 2000):
+        raise HTTPException(422, "Invalid per-foot detail")
+    if values["anatomical_foot"] == "unknown" and not values["uncertainty"].strip():
+        raise HTTPException(422, "Unknown anatomical side needs a reason")
 
 
 def digest(value):
@@ -85,14 +104,13 @@ def validate_detail_items(record, items):
         if not isinstance(source, dict) or len(json.dumps(source, ensure_ascii=False)) > 12000:
             raise HTTPException(422, "Invalid detail source")
         if item["kind"] == "foot":
-            if (source.get("screen_foot") not in SCREEN_FEET or
-                    source.get("anatomical_foot") not in ANATOMICAL_FEET or
-                    source.get("support_state") not in SUPPORT_STATES or
-                    source.get("sole_contact") not in SOLE_CONTACTS or
-                    source.get("contact_target") not in {"ground", "object", "none", "unknown"}):
-                raise HTTPException(422, "Invalid per-foot detail")
-            if source["anatomical_foot"] == "unknown" and not source.get("uncertainty"):
-                raise HTTPException(422, "Unknown anatomical side needs a reason")
+            validate_foot_values({field: source.get(field) for field in FOOT_FIELDS})
+            if item["decision"] == "edit":
+                validate_foot_values(item.get("reviewed_values"))
+            elif item.get("reviewed_values") is not None:
+                raise HTTPException(422, "Only edited feet may carry reviewed values")
+        elif item.get("reviewed_values") is not None:
+            raise HTTPException(422, "Only feet may carry reviewed values")
 
 
 def validate_coverage(record, items):
@@ -104,7 +122,7 @@ def validate_coverage(record, items):
             continue
         key = item["kind"]
         if key == "foot":
-            key += ":" + item["source"]["screen_foot"]
+            key += ":" + foot_values(item)["screen_foot"]
         for number in range(item["frame_span"][0], item["frame_span"][1] + 1):
             coverage[number].add(key)
     gaps = {number: sorted(required - values) for number, values in coverage.items() if required - values}
@@ -123,9 +141,10 @@ def import_detail(record, macro, candidate):
     if not isinstance(run_id, str) or not run_id or len(run_id) > 100:
         raise HTTPException(422, "Detail run ID is required")
     raw_items = candidate.get("items")
-    if not isinstance(raw_items, list):
+    if not isinstance(raw_items, list) or any(not isinstance(item, dict) for item in raw_items):
         raise HTTPException(422, "Detail candidates are required")
-    items = [{**item, "decision": "pending", "edited_text": ""} for item in raw_items]
+    items = [{key: value for key, value in item.items() if key != "reviewed_values"} |
+             {"decision": "pending", "edited_text": ""} for item in raw_items]
     validate_detail_items(record, items)
     validate_coverage(record, items)
     return {"schema_version": "shot-detail-review.v1", **source_binding(record),

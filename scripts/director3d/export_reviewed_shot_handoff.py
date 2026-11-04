@@ -9,7 +9,7 @@ import sqlite3
 from pathlib import Path
 
 from src.apps.recreation.shot_review import timeline_key, validate_items
-from src.apps.recreation.staged_review import approve_detail, valid_macro
+from src.apps.recreation.staged_review import approve_detail, foot_values, valid_macro
 
 
 def build_handoff(record: dict, shot_index: int, expected_revision: int) -> dict:
@@ -67,7 +67,16 @@ def build_handoff(record: dict, shot_index: int, expected_revision: int) -> dict
         "time_base": analysis["time_base"], "frame_range": [frames[0], frames[-1]],
         "frame_pts": [frame_pts[i - 1] for i in frames],
         "events": events,
-        "detail_items": [item for item in detail["items"] if item["shot_id"] == shot["id"]],
+        "detail_items": [
+            {"id": item["id"], "kind": item["kind"], "decision": item["decision"],
+             "frame_span": item["frame_span"], "evidence_frames": item["evidence_frames"],
+             "actor_id": item["actor_id"],
+             "reviewed_text": (item["edited_text"].strip() if item["decision"] in {"edit", "unknown"} else
+                               item["candidate"].strip() if item["decision"] == "accept" else ""),
+             "reviewed_values": (foot_values(item) if item["decision"] in {"accept", "edit"} and
+                                 item["kind"] == "foot" else None)}
+            for item in detail["items"] if item["shot_id"] == shot["id"]
+        ],
         "constraints": {"hard_ik_intervals": [], "contact_policy": "no_hard_ik_without_sole_geometry"},
     }
 

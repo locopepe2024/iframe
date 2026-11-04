@@ -1516,6 +1516,13 @@ class RecreationService:
             if detail.get("macro_digest") != (record.get("macro_review") or {}).get("digest"):
                 raise HTTPException(409, "Frozen macro review changed")
             validate_detail_items(record, items)
+            original = {item["id"]: item for item in detail["items"]}
+            if set(original) != {item["id"] for item in items} or any(
+                any(item[field] != original[item["id"]][field]
+                    for field in ("kind", "shot_id", "candidate", "actor_id", "source"))
+                for item in items
+            ):
+                raise HTTPException(409, "Model candidates cannot be changed during review")
             detail = {**detail, "items": items, "review_revision": review_revision + 1}
             if approve:
                 approve_detail(record, detail)

@@ -150,6 +150,50 @@ def test_detail_preserves_one_to_three_frame_foot_transition(service, video):
         service.import_detail_review(project["id"], project["analysis_id"], timeline_key(project), candidate)
 
 
+def test_detail_edit_replaces_model_values_in_handoff(service, video):
+    project = reviewed(service, video)
+    macro_items = cover_macro_shots(project, deepcopy(project["shot_review"]["items"]))
+    for item in macro_items:
+        item["decision"] = "unknown"
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                       items=macro_items)
+    project = service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 2)
+    project = service.import_detail_review(project["id"], project["analysis_id"], timeline_key(project),
+                                           detail_candidate(project))
+    items = deepcopy(project["detail_review"]["items"])
+    foot = next(item for item in items if item["kind"] == "foot" and item["source"]["screen_foot"] == "screen_left")
+    foot["decision"] = "edit"
+    foot["edited_text"] = "Left screen foot supports on full sole"
+    foot["reviewed_values"] = {
+        "screen_foot": "screen_left", "anatomical_foot": "unknown",
+        "support_state": "supporting", "sole_contact": "full_sole", "contact_target": "ground",
+        "uncertainty": "Anatomical side is not visible",
+    }
+    for item in items:
+        if item is not foot:
+            item["decision"] = "unknown"
+            item["edited_text"] = "Evidence does not resolve this interval"
+    tampered = deepcopy(items)
+    tampered_foot = next(item for item in tampered if item["id"] == foot["id"])
+    tampered_foot["source"]["sole_contact"] = "toe"
+    with pytest.raises(HTTPException, match="Model candidates cannot be changed"):
+        service.save_detail_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                   tampered, approve=False)
+    project = service.save_detail_review(project["id"], project["analysis_id"], timeline_key(project), 1,
+                                         items, approve=True)
+    exported = build_handoff(project, 0, 2)
+    actual = next(item for item in exported["detail_items"] if item["id"] == foot["id"])
+    assert actual["reviewed_text"] == "Left screen foot supports on full sole"
+    assert actual["reviewed_values"]["sole_contact"] == "full_sole"
+    assert set(actual["reviewed_values"]) == {
+        "screen_foot", "anatomical_foot", "support_state", "sole_contact", "contact_target", "uncertainty"}
+    assert "source" not in actual and "candidate" not in actual
+    assert foot["source"]["sole_contact"] == "unknown"
+    other = next(item for item in exported["detail_items"] if item["id"] != foot["id"])
+    assert other["reviewed_text"] == "Evidence does not resolve this interval"
+    assert other["reviewed_values"] is None
+
+
 def test_shot_review_import_preserves_distinct_actions_and_human_edit(service, video):
     project = reviewed(service, video)
     review = project["shot_review"]
