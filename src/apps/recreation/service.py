@@ -27,6 +27,7 @@ from .mentions import TOKEN, compile_mentions
 from .prompt_contract import compile_h3, guidance_snapshot
 from .shot_review import import_candidates, timeline_key, validate_items
 from .candidate_completion import import_completion
+from .second_pass_frames import build_frame_pack
 from .staged_review import approve_detail, freeze_macro, import_detail, source_binding, validate_detail_items
 from ...utils.model_catalog import load_generated_model_catalog
 from ...utils.uniart_catalog import fetch_uniart_catalog
@@ -1503,6 +1504,14 @@ class RecreationService:
             record["candidate_completion"] = import_completion(record, package)
             self._save(db, record)
             return record
+
+    def second_pass_frame_pack(self, project_id, analysis_id, key):
+        record = self.get(project_id)
+        if analysis_id != record.get("analysis_id") or key != timeline_key(record):
+            raise HTTPException(409, "Second-pass source changed")
+        if (record.get("shot_review") or {}).get("timeline_key") != key:
+            raise HTTPException(409, "First analysis is stale for this timeline")
+        return build_frame_pack(record, self._verified_source_path(record))
 
     def import_detail_review(self, project_id, analysis_id, key, candidate):
         with self.db() as db:

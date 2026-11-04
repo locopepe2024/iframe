@@ -1,5 +1,6 @@
 """Authenticated recreation APIs. Processing stays in the backend's FFmpeg runtime."""
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Query, Form
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, StrictInt
 
 from ..identity import UserContext
@@ -225,6 +226,17 @@ def import_candidate_completion(project_id: str, request: CandidateCompletionReq
                                 user: UserContext = Depends(require_studio_user)):
     return public(RecreationService(user).import_candidate_completion(
         project_id, request.analysis_id, request.timeline_key, request.package), user)
+
+
+@router.get("/projects/{project_id}/candidate-completion/frame-pack")
+def candidate_completion_frame_pack(project_id: str, analysis_id: str, timeline_key: str,
+                                    user: UserContext = Depends(require_studio_user)):
+    try:
+        content = RecreationService(user).second_pass_frame_pack(project_id, analysis_id, timeline_key)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return Response(content=content, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{project_id}-second-pass.zip"'})
 
 
 @router.post("/projects/{project_id}/detail-review/import")

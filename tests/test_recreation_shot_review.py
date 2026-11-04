@@ -1,4 +1,7 @@
 from copy import deepcopy
+from io import BytesIO
+import json
+from zipfile import ZipFile
 
 from fastapi import HTTPException
 import pytest
@@ -6,6 +9,7 @@ import pytest
 from src.apps.recreation.shot_review import timeline_key
 from src.apps.recreation.candidate_completion import candidate_digest, model_candidate_ids, valid_completion
 from scripts.director3d.export_reviewed_shot_handoff import build_handoff
+from scripts.recreation.second_pass_infer import infer_pack
 from tests.test_recreation import completed, service, video
 
 
@@ -19,6 +23,48 @@ def reviewed(service, video):
     ]}
     saved = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 0, candidate=candidate)
     return saved
+
+
+def test_second_pass_uses_adjacent_source_frames_and_imports_model_result(service, video):
+    project = reviewed(service, video)
+    pack = service.second_pass_frame_pack(project["id"], project["analysis_id"], timeline_key(project))
+    with ZipFile(BytesIO(pack)) as archive:
+        manifest = json.loads(archive.read("manifest.json"))
+        assert manifest["source_fingerprint"] == project["source_fingerprint"]
+        first = manifest["candidates"][0]
+        assert first["frame_span"] == [2, 3]
+        assert first["reference_frames"] == [1, 2, 3, 4]
+        assert first["first_analysis_source"]["action"] == "first kick"
+        assert first["context"][0]["first_analysis"] == "second kick"
+        assert all(archive.read(frame["file"]) for frame in manifest["frames"])
+
+    calls = []
+    def model(messages, **kwargs):
+        parts = messages[1]["content"]
+        calls.append(parts)
+        frame = int(next(part["text"].split()[2].rstrip(",") for part in parts
+                         if part["type"] == "text" and part["text"].startswith("Source frame")))
+        return json.dumps({"status": "predicted", "prediction": "motion continues",
+                           "reason": "ordered adjacent frames", "evidence_frames": [frame]})
+
+    result = infer_pack(pack, "test-vision", chat=model)
+    assert len(calls) == len(manifest["candidates"])
+    assert sum(part["type"] == "image_url" for part in calls[0]) == 4
+    saved = service.import_candidate_completion(project["id"], project["analysis_id"],
+                                                timeline_key(project), result)
+    assert valid_completion(saved)
+
+
+def test_second_pass_rejects_stale_timeline_and_model_evidence(service, video):
+    project = reviewed(service, video)
+    with pytest.raises(HTTPException, match="source changed"):
+        service.second_pass_frame_pack(project["id"], project["analysis_id"], "stale")
+    pack = service.second_pass_frame_pack(project["id"], project["analysis_id"], timeline_key(project))
+    def model(_messages, **_kwargs):
+        return json.dumps({"status": "predicted", "prediction": "unsupported",
+                           "reason": "guess", "evidence_frames": [999]})
+    with pytest.raises(ValueError, match="Invalid model result"):
+        infer_pack(pack, "test-vision", chat=model)
 
 
 def test_import_surfaces_unknown_analysis_without_overwriting_review(service, video):

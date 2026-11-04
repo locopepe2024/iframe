@@ -44,6 +44,17 @@ Do not treat a generic `unknown` or blurred single frame as a request for the re
 to repeat the temporal analysis. Frame-level feet and exact contact timing remain for
 detail analysis after the macro review is frozen.
 
+The v2 second-pass frame pack contains every model candidate, with pending items first.
+Each item carries its first-pass text and source fields, overlapping first-pass context,
+and source frames at the interval boundaries, midpoint, evidence frames, and immediate
+neighbors within the confirmed shot. The manifest binds frame numbers and PTS to the
+source fingerprint, analysis, timeline, and candidate digest. A vision model reads the
+ordered images and returns a complete `shot-candidate-completion.v2` JSON package;
+unresolved cases need a specific reason and source-frame evidence. The script
+`python3 -m scripts.recreation.second_pass_infer INPUT.zip OUTPUT.json --model MODEL`
+uses the configured `LLM_PROVIDER` credentials. The imported result remains a model
+proposal until the reviewer compares both passes and confirms decisions in the UI.
+
 ## Macro review contract
 
 The first model pass proposes, for each shot, a half-open source-PTS range and
