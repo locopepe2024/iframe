@@ -83,6 +83,25 @@ def manifest_revision(path):
     return value
 
 
+def static_asset_paths(root):
+    assets = root / "_next/static"
+    return sorted(str(path.relative_to(root)) for path in assets.rglob("*") if path.is_file())
+
+
+def preserve_static_assets(current, staged, paths):
+    for name in paths:
+        relative = Path(name)
+        if relative.parts[:2] != ("_next", "static") or ".." in relative.parts:
+            raise RuntimeError(f"Invalid previous static asset: {name}")
+        source = current / relative
+        target = staged / relative
+        if not source.is_file() or source.is_symlink():
+            raise RuntimeError(f"Missing previous static asset: {name}")
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+
+
 def verify_topology(backend, frontend):
     mounts = backend["Mounts"]
     output = [m for m in mounts if m["Destination"] == "/app/output"]
@@ -333,7 +352,8 @@ def prepare(repo, expected):
         store_identity(image, isolated)
         if store_ids(isolated) != baseline:
             raise RuntimeError("Candidate startup changed project or series identities")
-        (release / "prepared.json").write_text(json.dumps({"revision": rev, "image": image, "ids": baseline}, indent=2))
+        (release / "prepared.json").write_text(json.dumps({"revision": rev, "image": image, "ids": baseline,
+                                                        "static_assets": static_asset_paths(release / "static")}, indent=2))
         print(f"Prepared {rev}: isolated candidate healthy; production unchanged")
     finally:
         remove_container(candidate)
@@ -357,6 +377,13 @@ def deploy(repo, expected):
     if old_static.exists() or any(subprocess.run(["docker", "inspect", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0 for name in (old_name, old_frontend)):
         raise RuntimeError("Rollback target already exists")
     staged_static = release / "static"
+    current_release = RELEASES / manifest_revision(STATIC / "build-manifest.json")
+    current_deployment = current_release / "deployment.json"
+    previous = json.loads(current_deployment.read_text()) if current_deployment.exists() else {}
+    previous_assets = previous.get("static_assets")
+    if not isinstance(previous_assets, list):
+        previous_assets = static_asset_paths(STATIC)
+    preserve_static_assets(STATIC, staged_static, previous_assets)
     backup = release / "data-before-switch"
     if backup.exists():
         raise RuntimeError("Data backup already exists")
@@ -394,7 +421,9 @@ def deploy(repo, expected):
         wait_http("http://127.0.0.1:3000/build-manifest.json", expected_revision=rev)
         if manifest_revision(STATIC / "build-manifest.json") != rev:
             raise RuntimeError("Live static revision mismatch")
-        (release / "deployment.json").write_text(json.dumps({"revision": rev, "rollback_backend": old_name, "rollback_frontend": old_frontend, "rollback_static": str(old_static)}, indent=2))
+        (release / "deployment.json").write_text(json.dumps({"revision": rev, "rollback_backend": old_name,
+            "rollback_frontend": old_frontend, "rollback_static": str(old_static),
+            "static_assets": prepared.get("static_assets", static_asset_paths(STATIC))}, indent=2))
         print(f"Deployed {rev}; rollback preserved as {old_name} and {old_static}")
     except Exception:
         if frontend_renamed:

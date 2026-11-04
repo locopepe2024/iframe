@@ -153,6 +153,33 @@ def test_release_checks_served_static_revision(monkeypatch):
     release.wait_http("http://localhost/build-manifest.json", expected_revision="new", attempts=1)
 
 
+def test_release_preserves_previous_lazy_chunks_without_overwriting_current(tmp_path):
+    current = tmp_path / "current"
+    staged = tmp_path / "staged"
+    old_chunk = current / "_next/static/chunks/old.js"
+    old_chunk.parent.mkdir(parents=True)
+    old_chunk.write_text("old module")
+    shared = current / "_next/static/chunks/shared.js"
+    shared.write_text("old shared")
+    older_chunk = current / "_next/static/chunks/older.js"
+    older_chunk.write_text("older module")
+    new_shared = staged / "_next/static/chunks/shared.js"
+    new_shared.parent.mkdir(parents=True)
+    new_shared.write_text("new shared")
+    new_chunk = staged / "_next/static/chunks/new.js"
+    new_chunk.write_text("new module")
+    native_assets = release.static_asset_paths(staged)
+
+    release.preserve_static_assets(current, staged, ["_next/static/chunks/old.js", "_next/static/chunks/shared.js"])
+
+    assert old_chunk.read_text() == (staged / "_next/static/chunks/old.js").read_text()
+    assert new_shared.read_text() == "new shared"
+    assert release.static_asset_paths(staged) == sorted([*native_assets, "_next/static/chunks/old.js"])
+    assert not (staged / "_next/static/chunks/older.js").exists()
+    with pytest.raises(RuntimeError, match="Invalid previous static asset"):
+        release.preserve_static_assets(current, staged, ["../outside.js"])
+
+
 def test_store_check_imports_application_from_container_workdir(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(release, "run", lambda *args: calls.append(args) or '{"projects": 2, "series": 1}')
