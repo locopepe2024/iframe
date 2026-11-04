@@ -238,6 +238,20 @@ it('keeps two referenced images and the prompt in the local timeline after a fai
     hook.unmount();
 });
 
+it('does not send video generation parameters to an ordinary Chat model', async () => {
+    mockConversation(Promise.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }));
+    usePlaygroundStore.setState({ prompt: '参考 @face.png 和 @scene.png', inputMedia: ['/face.png', '/scene.png'],
+        mediaNames: { '/face.png': 'face.png', '/scene.png': 'scene.png' }, parameters: { duration: 30, ratio: '9:16' } });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    await act(async () => { await hook.result.current.send(); });
+    const request = vi.mocked(agentRequest).mock.calls.find(([path, method]) => path === '/sessions/chat-session/messages' && method === 'POST')?.[2] as Record<string, unknown>;
+    expect(request).toMatchObject({ input_media: ['/face.png', '/scene.png'] });
+    expect(request).not.toHaveProperty('duration');
+    expect(request).not.toHaveProperty('ratio');
+    hook.unmount();
+});
+
 it('does not overwrite a new prompt typed while a failed request is pending', async () => {
     const response = deferred<unknown>();
     mockConversation(response.promise);

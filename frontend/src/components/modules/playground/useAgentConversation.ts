@@ -147,8 +147,10 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
         live_research: (knowledgeSearch && liveResearch && liveResearchAvailable) || currentResearch,
         knowledge_query: knowledgeSearch && knowledgeQuery.trim() ? knowledgeQuery.trim() : undefined,
         asset_names: assetNames,
-        duration: typeof snapshot.parameters.duration === 'number' ? snapshot.parameters.duration : undefined,
-        ratio: typeof snapshot.parameters.ratio === 'string' ? snapshot.parameters.ratio : undefined,
+        ...(model === 'minimax-h3-ir' ? {
+          duration: typeof snapshot.parameters.duration === 'number' ? snapshot.parameters.duration : undefined,
+          ratio: typeof snapshot.parameters.ratio === 'string' ? snapshot.parameters.ratio : undefined,
+        } : {}),
       });
       if (active.current === sessionId) {
         lastSubmittedAt.current = Date.now();
