@@ -48,6 +48,7 @@ import EpisodeAssetPlanPanel from "./EpisodeAssetPlanPanel";
 import AssetNameEditor from "@/components/common/AssetNameEditor";
 import CharacterVoiceBinding from "./cast/CharacterVoiceBinding";
 import { faceShapePanelPrompt, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
+import type { CharacterSpatialConstraints } from "@/lib/assetSpatialConstraints";
 
 type CharacterImagePanel = "full_body" | "three_view" | "headshot";
 type CharacterWorkbenchPanel = CharacterImagePanel | "face_model" | "video";
@@ -90,6 +91,7 @@ type DesignResultSnapshot = {
 };
 
 type DesignDraft = {
+    spatial_constraints?: CharacterSpatialConstraints;
     constraints?: CharacterConstraints;
     dictionary_configurations?: DictionaryConfiguration[];
     schema_version?: string;
@@ -502,6 +504,15 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const [designing, setDesigning] = useState(false);
     const [designStatus, setDesignStatus] = useState(savedDesign.confirmed ? "confirmed" : "draft");
     const [designRevision, setDesignRevision] = useState<number>(asset.character_design?.design_revisions?.at(-1)?.revision || 0);
+    const [metricBody, setMetricBody] = useState(() => ({
+        heightM: String(savedDesign.spatial_constraints?.heightM ?? ""),
+        bodyWidthM: String(savedDesign.spatial_constraints?.bodyWidthM ?? ""),
+        reachM: String(savedDesign.spatial_constraints?.reachM ?? ""),
+        armSpanM: String(savedDesign.spatial_constraints?.armSpanM ?? ""),
+        legToTorsoRatio: String(savedDesign.spatial_constraints?.legToTorsoRatio ?? ""),
+        shoulderToHeadWidthRatio: String(savedDesign.spatial_constraints?.shoulderToHeadWidthRatio ?? ""),
+        headToHeightRatio: String(savedDesign.spatial_constraints?.headToHeightRatio ?? ""),
+    }));
     const [savingDesign, setSavingDesign] = useState(false);
     const [designError, setDesignError] = useState("");
     const [designInput, setDesignInput] = useState(savedInput?.prompt ?? ([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n") || confirmedDesignContent(savedDesign) || asset.full_body_prompt || ""));
@@ -894,6 +905,23 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
 
     const saveDesign = async (source: "panel" | "ai") => {
         if (!onUpdateAttributes || savingDesign) return;
+        const metricValues = [metricBody.heightM, metricBody.bodyWidthM, metricBody.reachM];
+        const ratioValues = [metricBody.legToTorsoRatio, metricBody.shoulderToHeadWidthRatio, metricBody.headToHeightRatio];
+        if (metricValues.some(Boolean) && (metricValues.some(value => !value.trim()) || metricValues.some(value => !Number.isFinite(Number(value)) || Number(value) <= 0 || Number(value) > 5))) {
+            setDesignError("米制身高、体宽和单臂可达距离需全部填写，且每项大于 0、至多 5 米。");
+            return;
+        }
+        if (metricBody.armSpanM.trim() && (!metricValues.every(value => value.trim()) || !Number.isFinite(Number(metricBody.armSpanM))
+            || Number(metricBody.armSpanM) <= 0 || Number(metricBody.armSpanM) > 5)) {
+            setDesignError("臂展需在填写基本米制尺寸后设置，且大于 0、至多 5 米。");
+            return;
+        }
+        if (ratioValues.some(Boolean) && (!metricValues.every(value => value.trim())
+            || ratioValues.some((value, index) => value.trim() && (!Number.isFinite(Number(value)) || Number(value) <= 0
+                || Number(value) >= (index === 2 ? 1 : 10))))) {
+            setDesignError("比例需在填写米制尺寸后设置；头高/身高需小于 1，其余比例需小于 10。");
+            return;
+        }
         if ([normalizedConstraints.must_keep, normalizedConstraints.negative_prompt].some(items => items.length > 20 || items.some(item => item.length > 500))) {
             setDesignError("每类设计约束最多 20 项，每项最多 500 字。");
             return;
@@ -975,6 +1003,14 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const activeLookMode = useAIResult ? resultLookEditorMode : lookEditorMode;
         const unansweredOutput = useAIResult ? unanswered : [];
         const draft: DesignDraft = {
+            ...(metricValues.some(Boolean) ? { spatial_constraints: {
+                schemaVersion: "iframe.character-spatial.v1", unit: "meter",
+                heightM: Number(metricBody.heightM), bodyWidthM: Number(metricBody.bodyWidthM), reachM: Number(metricBody.reachM),
+                ...(metricBody.armSpanM.trim() ? { armSpanM: Number(metricBody.armSpanM) } : {}),
+                ...(metricBody.legToTorsoRatio.trim() ? { legToTorsoRatio: Number(metricBody.legToTorsoRatio) } : {}),
+                ...(metricBody.shoulderToHeadWidthRatio.trim() ? { shoulderToHeadWidthRatio: Number(metricBody.shoulderToHeadWidthRatio) } : {}),
+                ...(metricBody.headToHeightRatio.trim() ? { headToHeightRatio: Number(metricBody.headToHeightRatio) } : {}),
+            } satisfies CharacterSpatialConstraints } : {}),
             constraints: normalizedConstraints,
             dictionary_configurations: dictionaryConfigurations,
             schema_version: "iframe.character-fields.v1",
@@ -1344,7 +1380,24 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             refreshAssetIndex();
     };
 
-    const designEditor = <CharacterDesignPanel
+    const designEditor = <>
+      <fieldset className="mx-4 my-3 grid gap-2 rounded border border-glass-border p-3 sm:grid-cols-3">
+        <legend className="px-1 text-xs font-medium text-foreground">角色米制尺寸（可选）</legend>
+        {([['heightM', '身高'], ['bodyWidthM', '体宽'], ['reachM', '单臂可达距离'], ['armSpanM', '臂展']] as const).map(([key, label]) =>
+          <label key={key} className="text-xs text-text-secondary">{label}（米）
+            <input aria-label={`${label}（米）`} type="number" min="0.01" max="5" step="0.01" value={metricBody[key]}
+              onChange={event => { setMetricBody(current => ({ ...current, [key]: event.target.value })); setDesignStatus("draft"); }}
+              className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+          </label>)}
+        {([['legToTorsoRatio', '腿长/躯干长'], ['shoulderToHeadWidthRatio', '肩宽/头宽'], ['headToHeightRatio', '头高/身高']] as const).map(([key, label]) =>
+          <label key={key} className="text-xs text-text-secondary">{label}
+            <input aria-label={label} type="number" min="0.01" max={key === 'headToHeightRatio' ? '0.99' : '9.99'} step="0.01"
+              value={metricBody[key]} onChange={event => { setMetricBody(current => ({ ...current, [key]: event.target.value })); setDesignStatus("draft"); }}
+              className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+          </label>)}
+        <p className="text-xs text-text-muted sm:col-span-3">腿长为胯点到地面，躯干长为胯点到肩线；头高为头顶到下巴。未知值留空，已填写的数值随角色设计版本保存。</p>
+      </fieldset>
+      <CharacterDesignPanel
         description={asset.description} details={designInput}
         onDictionaryConfiguration={recordDictionaryConfiguration}
         configurations={dictionaryConfigurations}
@@ -1455,6 +1508,15 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             setDesignFieldAnswers(snapshot.field_answers || {});
             setDesignReferenceAssets(snapshot.reference_assets || []);
             setWhiteFaceShape(snapshot.white_face_shape);
+            setMetricBody({
+                heightM: String(snapshot.spatial_constraints?.heightM ?? ""),
+                bodyWidthM: String(snapshot.spatial_constraints?.bodyWidthM ?? ""),
+                reachM: String(snapshot.spatial_constraints?.reachM ?? ""),
+                armSpanM: String(snapshot.spatial_constraints?.armSpanM ?? ""),
+                legToTorsoRatio: String(snapshot.spatial_constraints?.legToTorsoRatio ?? ""),
+                shoulderToHeadWidthRatio: String(snapshot.spatial_constraints?.shoulderToHeadWidthRatio ?? ""),
+                headToHeightRatio: String(snapshot.spatial_constraints?.headToHeightRatio ?? ""),
+            });
             setPromptPickerReferences(current => ({
                 ...current,
                 full_body: current.full_body.filter(item => !item.applied_fields?.includes("face_geometry")),
@@ -1463,7 +1525,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             setDesignTab(snapshot.active_design_source === "ai" ? "ai" : "design"); setDesignStatus("draft");
             setPromptsNeedDesignApply(false);
         }}
-    />;
+    /></>;
 
     const imageSettings = <div className="space-y-3 px-4 pb-4">
         <label className="block text-xs text-text-secondary" htmlFor="character-image-negative">出图负面提示词</label>
