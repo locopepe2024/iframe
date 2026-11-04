@@ -4,6 +4,7 @@ from fastapi import HTTPException
 import pytest
 
 from src.apps.recreation.shot_review import timeline_key
+from scripts.director3d.export_reviewed_shot_handoff import build_handoff
 from tests.test_recreation import completed, service, video
 
 
@@ -17,6 +18,47 @@ def reviewed(service, video):
     ]}
     saved = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 0, candidate=candidate)
     return saved
+
+
+def test_import_surfaces_unknown_analysis_without_overwriting_review(service, video):
+    project = reviewed(service, video)
+    items = deepcopy(project["shot_review"]["items"])
+    items[0]["decision"] = "edit"
+    items[0]["edited_text"] = "Reviewed left kick"
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1, items=items)
+    candidate = {"events": [
+        {"id": "kick-1", "actor_id": "man", "frame_span": [2, 3], "evidence_frames": [2],
+         "action": "model kick", "contact": "unknown", "left_right_basis": "unknown: blurred leg",
+         "uncertainty": "sole hidden"}],
+        "transitions": [{"from": "a", "to": "b", "evidence_frames": [2, 3], "unknown": "landing frame unclear"}],
+        "unresolved": ["camera motion cannot be separated from subject motion"]}
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 2,
+                                       candidate=candidate)
+    rows = project["shot_review"]["items"]
+    assert rows[0]["edited_text"] == "Reviewed left kick"
+    assert rows[0]["source"]["action"] == "first kick"
+    assert {row["source"].get("field") for row in rows if row["kind"] == "uncertainty"} >= {
+        "contact", "left_right_basis", "uncertainty", "unknown", "unresolved"}
+    assert all(row["decision"] == "pending" for row in rows[2:])
+
+
+def test_handoff_requires_separate_support_and_contact_review(service, video):
+    project = reviewed(service, video)
+    items = deepcopy(project["shot_review"]["items"])
+    for item in items:
+        item["decision"] = "accept"
+        item["source"]["contact"] = "forefoot"
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1, items=items)
+    with pytest.raises(ValueError, match="support/contact review is missing"):
+        build_handoff(project, 0, 2)
+    for item in items:
+        item["reviewed_support_side"] = "right"
+        item["reviewed_contact_type"] = "unknown"
+    project = service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 2, items=items)
+    handoff = build_handoff(project, 0, 3)
+    assert handoff["events"][0]["support_side"] == "right"
+    assert handoff["events"][0]["contact_type"] == "unknown"
+    assert handoff["constraints"]["hard_ik_intervals"] == []
 
 
 def test_shot_review_import_preserves_distinct_actions_and_human_edit(service, video):

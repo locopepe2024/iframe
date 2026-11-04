@@ -21,9 +21,11 @@ export interface RecreationProject {
 
 export type ShotReviewDecision = "pending" | "accept" | "edit" | "reject" | "unknown";
 export interface ShotReviewItem {
-  id: string; kind: "cut_scene" | "camera" | "optics" | "scene" | "object" | "action";
+  id: string; kind: "cut_scene" | "camera" | "optics" | "scene" | "object" | "action" | "uncertainty";
   shot_id: string; frame_span: [number, number]; evidence_frames: number[];
   candidate: string; edited_text: string; decision: ShotReviewDecision; actor_id: string;
+  reviewed_support_side?: "left" | "right" | "both" | "airborne" | "unknown";
+  reviewed_contact_type?: "full_sole" | "forefoot" | "toe" | "rolling" | "airborne" | "unknown";
   source: Record<string, unknown>;
 }
 export interface ShotReview {
