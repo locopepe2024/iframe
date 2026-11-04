@@ -1467,9 +1467,13 @@ class RecreationService:
                 raise HTTPException(409, "Review changed; refresh before saving")
             if (items is None) == (candidate is None):
                 raise HTTPException(422, "Provide either review items or candidate analysis")
-            if candidate is not None and current_revision:
-                raise HTTPException(409, "Candidate import would overwrite an existing review")
-            selected = import_candidates(candidate, record) if candidate is not None else items
+            if candidate is not None:
+                imported = import_candidates(candidate, record)
+                existing = previous.get("items", []) if current_revision else []
+                known_ids = {item["id"] for item in existing}
+                selected = existing + [item for item in imported if item["id"] not in known_ids]
+            else:
+                selected = items
             validate_items(selected, record)
             record["shot_review"] = {"schema_version": "shot-review.v1", "analysis_id": analysis_id,
                                      "source_fingerprint": record["source_fingerprint"],

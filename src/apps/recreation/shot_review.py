@@ -5,8 +5,10 @@ import json
 from fastapi import HTTPException
 
 
-KINDS = {"cut_scene", "camera", "optics", "scene", "object", "action"}
+KINDS = {"cut_scene", "camera", "optics", "scene", "object", "action", "uncertainty"}
 DECISIONS = {"pending", "accept", "edit", "reject", "unknown"}
+SUPPORT_SIDES = {"left", "right", "both", "airborne", "unknown"}
+CONTACT_TYPES = {"full_sole", "forefoot", "toe", "rolling", "airborne", "unknown"}
 
 
 def timeline_key(record):
@@ -53,6 +55,10 @@ def validate_items(items, record):
                 raise HTTPException(422, f"Invalid {field}")
         if item["decision"] == "edit" and not item["edited_text"].strip():
             raise HTTPException(422, "Edited review items require human text")
+        if item.get("reviewed_support_side") is not None and (item["kind"] != "action" or item["reviewed_support_side"] not in SUPPORT_SIDES):
+            raise HTTPException(422, "Invalid reviewed support side")
+        if item.get("reviewed_contact_type") is not None and (item["kind"] != "action" or item["reviewed_contact_type"] not in CONTACT_TYPES):
+            raise HTTPException(422, "Invalid reviewed contact type")
         if not isinstance(item.get("source"), dict) or len(json.dumps(item["source"], ensure_ascii=False)) > 12000:
             raise HTTPException(422, "Invalid source candidate")
         if item["source"].get("provenance") == "human" and item["decision"] == "accept" and not item["edited_text"].strip():
@@ -75,6 +81,10 @@ def import_candidates(raw, record):
                       "candidate": candidate, "edited_text": "", "decision": "pending",
                       "actor_id": actor, "source": source})
 
+    def add_uncertainty(ident, span, evidence, value, source):
+        if isinstance(value, str) and value.strip() and value.strip().lower() != "none":
+            add("uncertainty", ident, span, evidence, value, source)
+
     items = []
     for index, row in enumerate(raw.get("shot_candidates", []), 1):
         first = row.get("first_frame")
@@ -83,6 +93,11 @@ def import_candidates(raw, record):
             raise HTTPException(422, "Invalid cut candidate frames")
         add("cut_scene", str(index), [min([first, *evidence]), max([first, *evidence])], evidence,
             str(row.get("interpretation", "")), row)
+        if row.get("basis") == "unknown":
+            add_uncertainty(f"cut-{index}-basis", [min([first, *evidence]), max([first, *evidence])], evidence,
+                            "cut basis: unknown", {"parent": row, "field": "basis"})
+        add_uncertainty(f"cut-{index}", [min([first, *evidence]), max([first, *evidence])], evidence,
+                        row.get("uncertainty"), {"parent": row, "field": "uncertainty"})
     scene = raw.get("scene")
     if isinstance(scene, dict):
         for index, shot in enumerate(shots, 1):
@@ -91,6 +106,8 @@ def import_candidates(raw, record):
             if covered:
                 add("scene", str(index), [covered[0], covered[-1]], [],
                     ", ".join(scene.get("visible_elements", [])), scene)
+                add_uncertainty(f"scene-{index}", [covered[0], covered[-1]], [],
+                                scene.get("uncertainty"), {"parent": scene, "field": "uncertainty"})
     for index, row in enumerate(raw.get("object_tracks", []), 1):
         observations = row.get("observations", [])
         observed = [entry.get("frame") for entry in observations if isinstance(entry, dict)]
@@ -103,6 +120,8 @@ def import_candidates(raw, record):
         span = [min(first, last, *observed), max(first, last, *observed)]
         add("object", str(row.get("id") or index), span, sorted(set(observed)),
             str(row.get("description", "")), row)
+        add_uncertainty(f"object-{index}", span, sorted(set(observed)),
+                        row.get("uncertainty"), {"parent": row, "field": "uncertainty"})
     for index, row in enumerate(raw.get("camera_segments", []), 1):
         span = row.get("frame_span")
         evidence = row.get("evidence_frames", [])
@@ -110,6 +129,10 @@ def import_candidates(raw, record):
             str(row.get("interpretation", "")), row)
         add("optics", str(row.get("id") or index), span, evidence,
             f"{row.get('optical_change', 'unknown')}: {row.get('view_scale_start', '')} -> {row.get('view_scale_end', '')}", row)
+        for field in ("position_motion", "orientation_motion", "optical_change"):
+            if row.get(field) == "unknown":
+                add_uncertainty(f"camera-{index}-{field}", span, evidence, f"{field}: unknown", {"parent": row, "field": field})
+        add_uncertainty(f"camera-{index}", span, evidence, row.get("uncertainty"), {"parent": row, "field": "uncertainty"})
     for index, row in enumerate(raw.get("events", []), 1):
         span = row.get("frame_span")
         evidence = row.get("evidence_frames", [])
@@ -117,5 +140,24 @@ def import_candidates(raw, record):
             evidence = [frame for frame in evidence if type(frame) is int and span[0] <= frame <= span[1]]
         add("action", str(row.get("id") or index), span, evidence,
             str(row.get("action", "")), row, str(row.get("actor_id", "")))
+        add_uncertainty(f"action-{index}-uncertainty", span, evidence,
+                        row.get("uncertainty"), {"parent": row, "field": "uncertainty"})
+        left_right = row.get("left_right_basis")
+        if isinstance(left_right, str) and any(marker in left_right.lower() for marker in ("unknown", "uncertain", "无法", "不确定", "不可")):
+            add_uncertainty(f"action-{index}-left_right_basis", span, evidence, left_right,
+                            {"parent": row, "field": "left_right_basis"})
+        if row.get("contact") == "unknown":
+            add_uncertainty(f"action-{index}-contact", span, evidence, "contact: unknown", {"parent": row, "field": "contact"})
+    for index, row in enumerate(raw.get("transitions", []), 1):
+        evidence = row.get("evidence_frames", [])
+        if evidence:
+            add_uncertainty(f"transition-{index}", [min(evidence), max(evidence)], evidence,
+                            row.get("unknown"), {"parent": row, "field": "unknown"})
+    for index, value in enumerate(raw.get("unresolved", []), 1):
+        for shot in shots:
+            covered = [number for number, pts in enumerate(frames, 1) if shot["start_pts"] <= pts < shot["end_pts"]]
+            if covered:
+                add_uncertainty(f"unresolved-{index}-{shot['id']}", [covered[0], covered[-1]], [], value,
+                                {"provenance": "model_candidate", "field": "unresolved", "index": index})
     validate_items(items, record)
     return items
