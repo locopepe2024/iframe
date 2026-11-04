@@ -818,6 +818,38 @@ it('edits the same measured height from the basic quick panel', async () => {
     }) }));
 });
 
+it('shows only measured height in character editing', async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    designDetailsEditor().commands.setContent('黑发、窄脸、素黑劲装');
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
+    expect(screen.queryByRole('textbox', { name: '设计字段 · 身高' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: '设计字段 · 高矮印象' })).not.toBeInTheDocument();
+    for (const [label, value] of [['身高（米）', '1.78'], ['体宽（米）', '0.46'], ['单臂可达距离（米）', '0.75']]) {
+        fireEvent.change(screen.getByRole('spinbutton', { name: label }), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: '关闭角色编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        identity: expect.objectContaining({ features: expect.not.objectContaining({ height: expect.anything() }) }),
+        spatial_constraints: expect.objectContaining({ heightM: 1.78 }),
+    }) }));
+    openImagePrompt();
+    expect(imagePromptInput().textContent?.match(/身高：1\.78 米/g)).toHaveLength(1);
+});
+
+it('uses measured height over a saved structured height in image prompts', () => {
+    const design = {
+        confirmed: true,
+        active_design_source: 'panel',
+        identity: { editor_mode: 'fields', features: { height: '身高约182厘米', face: '窄长脸' } },
+        spatial_constraints: { schemaVersion: 'iframe.character-spatial.v1', unit: 'meter', heightM: 1.78, bodyWidthM: 0.46, reachM: 0.75 },
+    };
+    mountSimpleDesign({ character_design: { design_draft: design, design_revisions: [{ revision: 1, design }] } });
+    openImagePrompt();
+    expect(imagePromptInput()).toHaveTextContent('身高：1.78 米');
+    expect(imagePromptInput()).not.toHaveTextContent('身高约182厘米');
+});
+
 it('includes saved white face proportions and new geometry once in a panel image prompt', () => {
     const shape = { faceLength: 90, faceWidth: 120, cheekWidth: 117, jawWidth: 75, eyeSpacing: 80, noseProjection: 75, foreheadWidth: 108, mouthCornerTilt: 115 };
     const saved = {

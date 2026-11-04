@@ -59,12 +59,11 @@ const configurationPanels: CharacterDictionaryPreset[] = [
   panel("modern-clothing", "现代服装搭配 · 女装", "穿着[女装款式]，颜色为[颜色]，面料为[面料]，版型为[版型]，搭配要求为[搭配单品]，衣物状态为[衣物状态]。衣片连接清楚，保留自然褶皱。", ["clothing-panel"], "服装 现代 女装"),
   panel("face", "面容选择面板", "脸型为[脸型]，额头为[额头]，颧骨为[颧骨]，下颌为[下颌]，下巴为[下巴]，眼型为[眼型]，眉形为[眉形]，鼻型为[鼻型]，唇形为[唇形]，眼周细节为[眼周纹理]，肤色为[肤色]，肤质为[肤质]，妆容为[妆容]。", ["face-overview"], "面容 面部 五官 额头 颧骨 下颌 下巴 鼻型 唇形 眼角纹 眼袋 肤色 肤质"),
   sectionedDictionaryPreset({
-    id: "dictionary.panel.basic", title: "基础特征", type: "配置面板", categories: ["basic-traits", "gender", "age-stage", "height"], domain: "身份", source,
-    search: "基础特征 性别 年龄 年纪 身高", optionalFields: ["性别", "年龄阶段", "身高"],
+    id: "dictionary.panel.basic", title: "基础特征", type: "配置面板", categories: ["basic-traits", "gender", "age-stage"], domain: "身份", source,
+    search: "基础特征 性别 年龄 年纪", optionalFields: ["性别", "年龄阶段"],
     sections: [
       { label: "性别", parts: ["[性别]。"] },
       { label: "年龄", parts: ["[年龄阶段]。"] },
-      { label: "身高", parts: ["[身高]。"] },
     ],
   }),
   panel("skin", "肤色与肤质选择面板", "肤色为[肤色]，肤质为[肤质]。", ["skin-tone", "skin"], "肤色 肤质 皮肤 skin tone complexion"),
