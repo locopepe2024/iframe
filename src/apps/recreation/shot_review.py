@@ -70,6 +70,12 @@ def import_candidates(raw, record):
         raise HTTPException(422, "Candidate analysis must be a JSON object")
     frames = record["analysis"]["frame_pts"]
     shots = record["timeline"]["shots"]
+    scoped_frames = [frame for row in raw.get("shot_candidates", []) for frame in [row.get("first_frame"), *(row.get("evidence_frames") or [])]
+                     if type(frame) is int]
+    scoped_frames += [frame for row in raw.get("camera_segments", []) for frame in (row.get("frame_span") or []) if type(frame) is int]
+    scoped_frames += [frame for row in raw.get("events", []) for frame in (row.get("frame_span") or []) if type(frame) is int]
+    scoped_frames += [frame for row in raw.get("object_tracks", []) for frame in (row.get("first_visible_frame"), row.get("last_visible_frame")) if type(frame) is int]
+    covered_max = max(scoped_frames) if scoped_frames else len(frames)
 
     def add(kind, ident, span, evidence, candidate, source, actor=""):
         span = _frame_span(span, len(frames))
@@ -103,7 +109,8 @@ def import_candidates(raw, record):
         for index, shot in enumerate(shots, 1):
             covered = [number for number, pts in enumerate(frames, 1)
                        if shot["start_pts"] <= pts < shot["end_pts"]]
-            if covered:
+            if covered and covered[0] <= covered_max:
+                covered = [number for number in covered if number <= covered_max]
                 add("scene", str(index), [covered[0], covered[-1]], [],
                     ", ".join(scene.get("visible_elements", [])), scene)
                 add_uncertainty(f"scene-{index}", [covered[0], covered[-1]], [],
@@ -156,7 +163,8 @@ def import_candidates(raw, record):
     for index, value in enumerate(raw.get("unresolved", []), 1):
         for shot in shots:
             covered = [number for number, pts in enumerate(frames, 1) if shot["start_pts"] <= pts < shot["end_pts"]]
-            if covered:
+            if covered and covered[0] <= covered_max:
+                covered = [number for number in covered if number <= covered_max]
                 add_uncertainty(f"unresolved-{index}-{shot['id']}", [covered[0], covered[-1]], [], value,
                                 {"provenance": "model_candidate", "field": "unresolved", "index": index})
     validate_items(items, record)

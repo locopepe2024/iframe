@@ -10,6 +10,7 @@ from .service import (
     RecreationService,
 )
 from .shot_review import timeline_key
+from .candidate_completion import candidate_digest, valid_completion
 
 router = APIRouter(prefix="/recreation", tags=["recreation"])
 
@@ -84,6 +85,12 @@ class MacroFreezeRequest(BaseModel):
     analysis_id: str
     timeline_key: str
     review_revision: int = Field(ge=1)
+
+
+class CandidateCompletionRequest(BaseModel):
+    analysis_id: str
+    timeline_key: str
+    package: dict
 
 
 class DetailImportRequest(BaseModel):
@@ -195,6 +202,8 @@ def evidence(project_id: str, request: EvidenceRequest, user: UserContext = Depe
 def get_shot_review(project_id: str, user: UserContext = Depends(require_studio_user)):
     record = RecreationService(user).get(project_id)
     return {"timeline_key": timeline_key(record), "review": record.get("shot_review"),
+            "completion": record.get("candidate_completion"), "completion_valid": valid_completion(record),
+            "candidate_digest": candidate_digest(record),
             "stale": bool(record.get("shot_review") and record["shot_review"]["timeline_key"] != timeline_key(record))}
 
 
@@ -209,6 +218,13 @@ def save_shot_review(project_id: str, request: ShotReviewRequest, user: UserCont
 def freeze_macro_review(project_id: str, request: MacroFreezeRequest, user: UserContext = Depends(require_studio_user)):
     return public(RecreationService(user).freeze_macro_review(
         project_id, request.analysis_id, request.timeline_key, request.review_revision), user)
+
+
+@router.post("/projects/{project_id}/candidate-completion/import")
+def import_candidate_completion(project_id: str, request: CandidateCompletionRequest,
+                                user: UserContext = Depends(require_studio_user)):
+    return public(RecreationService(user).import_candidate_completion(
+        project_id, request.analysis_id, request.timeline_key, request.package), user)
 
 
 @router.post("/projects/{project_id}/detail-review/import")
