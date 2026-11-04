@@ -162,8 +162,9 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
     // The question remains in the saved design draft for auditability; only
     // the user's confirmed value belongs in an image prompt.
     const answers = Object.values(design?.field_answers || {});
+    const identity = normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key));
+    if (design?.spatial_constraints?.heightM) delete identity.height;
     if (design?.identity?.editor_mode !== "notes" && design?.look?.editor_mode !== "notes") {
-        const identity = normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key));
         const look = normalizeCharacterFeatures(design?.look?.features, LOOK_FIELDS.map(([key]) => key));
         const structured = [
             characterStructuredText(identity, {}) || String(design?.identity?.visual_notes || ""),
@@ -172,8 +173,7 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
         if (structured) return [design?.supplemental_prompt || "", structured, ...answers, ...designScopeDescription(design?.route, design?.identity?.features?.age?.trim() ? undefined : design?.age_stage), design?.style_notes || ""].filter(Boolean).join("\n");
     }
     return designPromptDescription(
-        characterSectionText(normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key)),
-            IDENTITY_FIELDS.map(([key]) => key), design?.identity?.visual_notes, design?.identity?.editor_mode),
+        characterSectionText(identity, IDENTITY_FIELDS.map(([key]) => key), design?.identity?.visual_notes, design?.identity?.editor_mode),
         characterSectionText(normalizeCharacterFeatures(design?.look?.features, LOOK_FIELDS.map(([key]) => key)),
             LOOK_FIELDS.map(([key]) => key), design?.look?.visual_notes, design?.look?.editor_mode),
         [...answers, ...designScopeDescription(design?.route, design?.identity?.features?.age?.trim() ? undefined : design?.age_stage), design?.style_notes || ""],
@@ -184,7 +184,8 @@ function confirmedDesignDescription(design: DesignDraft | undefined): string {
     const whiteFaceText = design?.white_face_shape
         ? design.active_design_source === "ai" ? faceShapePrompt(design.white_face_shape) : faceShapePanelPrompt(design.white_face_shape)
         : "";
-    return [confirmedDesignContent(design), whiteFaceText,
+    return [design?.spatial_constraints?.heightM ? `身高：${design.spatial_constraints.heightM} 米` : "",
+        confirmedDesignContent(design), whiteFaceText,
         characterConstraintsText(normalizeCharacterConstraints(design?.constraints))].filter(Boolean).join("\n");
 }
 
@@ -774,13 +775,14 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const appliedDesignNegative = useRef(normalizeCharacterConstraints(
         (asset.character_design?.design_revisions?.at(-1)?.design as DesignDraft | undefined)?.constraints).negative_prompt);
 
-    const projectedIdentity = characterSectionText(identityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes, identityEditorMode);
+    const promptIdentityFeatures = metricBody.heightM.trim() ? { ...identityFeatures, height: undefined } : identityFeatures;
+    const projectedIdentity = characterSectionText(promptIdentityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes, identityEditorMode);
     const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes, lookEditorMode);
     const normalizedConstraints = normalizeCharacterConstraints(designConstraints);
     const designConstraintText = characterConstraintsText(normalizedConstraints);
     const panelDesignPrompt = [
         supplementalPrompt,
-        characterStructuredText(identityFeatures, lookFeatures),
+        characterStructuredText(promptIdentityFeatures, lookFeatures),
     ].filter(Boolean).join("\n") || designInput || designPromptDescription(
         projectedIdentity,
         projectedLook,
@@ -794,7 +796,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const savedDesignSnapshot = useRef<DesignDraft>(savedDesign);
     const [hasSavedDesign, setHasSavedDesign] = useState(!!asset.character_design);
 
-    const promptForSource = (source: "panel" | "ai") => [source === "ai" ? designResult || "" : panelDesignPrompt,
+    const promptForSource = (source: "panel" | "ai") => [metricBody.heightM.trim() ? `身高：${metricBody.heightM} 米` : "",
+        source === "ai" ? designResult || "" : panelDesignPrompt,
         whiteFaceShape ? source === "ai" ? faceShapePrompt(whiteFaceShape) : faceShapePanelPrompt(whiteFaceShape) : ""].filter(Boolean).join("\n");
     const descriptionForSource = (source: "panel" | "ai") => [promptForSource(source), designConstraintText].filter(Boolean).join("\n");
 

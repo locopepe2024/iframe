@@ -462,14 +462,15 @@ it("fills a male garment slot with a menswear combination", () => {
 });
 
 
-it("opens height configuration and defers a height slot without body-build vocabulary", () => {
+it("keeps the basic configuration focused on gender and age", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
-  const { replaceWithText } = setup("身高");
+  const { replaceWithText } = setup("基础特征");
   fireEvent.click(screen.getByRole("option", { name: /^基础特征$/ }));
-  fireEvent.change(screen.getByRole("combobox", { name: "身高" }), { target: { value: "身高约180厘米" } });
-  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("身高：身高约180厘米。");
+  expect(screen.queryByRole("combobox", { name: "身高" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole("combobox", { name: "年龄阶段" }), { target: { value: "老年" } });
+  expect(screen.getByRole("textbox", { name: "将插入的完整文字" })).toHaveValue("年龄：人物年龄阶段为老年。");
   fireEvent.click(screen.getByRole("button", { name: "应用配置" }));
-  expect(replaceWithText).toHaveBeenCalledWith("身高：身高约180厘米。");
+  expect(replaceWithText).toHaveBeenCalledWith("年龄：人物年龄阶段为老年。");
 });
 
 it("fills a height slot with just the selected height", () => {
