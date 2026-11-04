@@ -79,7 +79,7 @@ from .models import (
 )
 from .asset_revisions import commit_asset_revision
 from .llm import DirectorShootingChunkError, ScriptProcessor, numbered_episode_headings
-from .import_attribution import analyze_attribution, episode_count_hint, materialize, needs_attribution, structured_assignments
+from .import_attribution import analyze_attribution, episode_count_hint, materialize, needs_attribution
 from .structured_evidence import source_version
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -12629,10 +12629,8 @@ class ComicGenPipeline(StudioOwnerMixin):
                 numbered_count = len(numbered_episode_headings(text))
             except ValueError:
                 numbered_count = 0
-            episode_count = numbered_count or episode_count_hint(text) or suggested_episodes
             analyzed = analyze_attribution(
-                self.script_processor.llm, text, episode_count,
-                fixed_assignments=structured_assignments(text, episode_count),
+                self.script_processor.llm, text, numbered_count or episode_count_hint(text) or suggested_episodes
             )
             assignments = analyzed["assignments"]
             preamble = "".join(
