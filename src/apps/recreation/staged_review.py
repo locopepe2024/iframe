@@ -6,6 +6,7 @@ import json
 from fastapi import HTTPException
 
 from .shot_review import timeline_key, validate_items
+from .candidate_completion import uncertainty_ids, valid_completion
 
 
 DETAIL_KINDS = {"foot", "body", "camera", "optics", "uncertainty"}
@@ -61,6 +62,8 @@ def freeze_macro(record, expected_revision):
     validate_items(items, record)
     if not items or any(item["decision"] == "pending" for item in items):
         raise HTTPException(409, "Macro review has pending decisions")
+    if uncertainty_ids(record) and not valid_completion(record):
+        raise HTTPException(409, "Complete model uncertainties before macro review")
     shots = {shot["id"] for shot in record["timeline"]["shots"]}
     if not shots <= {item["shot_id"] for item in items}:
         raise HTTPException(409, "Macro review does not cover every shot")

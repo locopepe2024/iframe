@@ -17,6 +17,7 @@ export interface RecreationProject {
   error: string | null; analysis: SourceAnalysis | null;
   timeline: { cuts: { pts: number; source: string }[]; shots: RecreationShot[] } | null;
   shot_review?: ShotReview | null;
+  candidate_completion?: CandidateCompletion | null;
   macro_review?: MacroReview | null;
   detail_review?: DetailReview | null;
 }
@@ -34,7 +35,17 @@ export interface ShotReview {
   schema_version: string; analysis_id: string; source_fingerprint: string;
   timeline_key: string; review_revision: number; items: ShotReviewItem[]; updated_at: number;
 }
-export interface ShotReviewEnvelope { timeline_key: string; review: ShotReview | null; stale: boolean }
+export interface CandidateCompletionItem {
+  item_id: string; status: "predicted" | "unresolved"; prediction: string;
+  reason: string; method: string; evidence_frames: number[];
+}
+export interface CandidateCompletion {
+  schema_version: "shot-candidate-completion.v1"; status: "completed";
+  source_fingerprint: string; analysis_id: string; timeline_key: string;
+  candidate_digest: string; run_id: string; model: string; prompt_revision: string;
+  items: CandidateCompletionItem[];
+}
+export interface ShotReviewEnvelope { timeline_key: string; review: ShotReview | null; completion?: CandidateCompletion | null; completion_valid?: boolean; candidate_digest?: string; stale: boolean }
 export interface MacroReview {
   analysis_id: string; source_fingerprint: string; timeline_key: string;
   macro_revision: number; digest: string; items: ShotReviewItem[];
@@ -400,6 +411,10 @@ export const recreationApi = {
     axios.post(`${API_URL}/recreation/projects/${project.id}/evidence`, { analysis_id: project.analysis_id, pts }).then(r => r.data),
   getShotReview: (projectId: string): Promise<ShotReviewEnvelope> =>
     axios.get(`${API_URL}/recreation/projects/${projectId}/shot-review`).then(r => r.data),
+  importCandidateCompletion: (project: RecreationProject, timelineKey: string, completion: CandidateCompletion): Promise<RecreationProject> =>
+    axios.post(`${API_URL}/recreation/projects/${project.id}/candidate-completion/import`, {
+      analysis_id: project.analysis_id, timeline_key: timelineKey, package: completion,
+    }).then(r => r.data),
   saveShotReview: (project: RecreationProject, timelineKey: string, reviewRevision: number,
     update: { items: ShotReviewItem[] } | { candidate: Record<string, unknown> }): Promise<RecreationProject> =>
     axios.put(`${API_URL}/recreation/projects/${project.id}/shot-review`, {
