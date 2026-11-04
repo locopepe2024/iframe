@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { AlertCircle, Check, Download, FileInput, Plus, Save } from "lucide-react";
 import { useLocale } from "next-intl";
 import { API_URL } from "@/lib/api";
-import { recreationApi, RecreationProject, RecreationShot, seconds, ShotReview, ShotReviewDecision, ShotReviewItem } from "@/lib/recreation";
+import { CandidateCompletion, recreationApi, RecreationProject, RecreationShot, seconds, ShotReview, ShotReviewDecision, ShotReviewItem } from "@/lib/recreation";
 import DetailReviewPanel from "./DetailReviewPanel";
 
 const decisions: ShotReviewDecision[] = ["pending", "accept", "edit", "reject", "unknown"];
@@ -24,11 +24,14 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [completion, setCompletion] = useState<CandidateCompletion | null>(null);
+  const [completionValid, setCompletionValid] = useState(false);
+  const [candidateDigest, setCandidateDigest] = useState("");
 
   useEffect(() => {
     let active = true;
     recreationApi.getShotReview(project.id).then(result => {
-      if (active) { setReview(result.review); setKey(result.timeline_key); setStale(result.stale); setSelectedId(result.review?.items.find(item => item.decision === "pending")?.id ?? result.review?.items[0]?.id ?? null); }
+      if (active) { setReview(result.review); setKey(result.timeline_key); setStale(result.stale); setCompletion(result.completion ?? null); setCompletionValid(result.completion_valid ?? false); setCandidateDigest(result.candidate_digest ?? ""); setSelectedId(result.review?.items.find(item => item.decision === "pending")?.id ?? result.review?.items[0]?.id ?? null); }
     }).catch(() => { if (active) setMessage(t.conflict); });
     return () => { active = false; };
   }, [project.id, project.timeline?.shots.map(shot => `${shot.id}:${shot.start_pts}:${shot.end_pts}`).join("|")]);
@@ -88,6 +91,10 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     try {
       const record = await recreationApi.saveShotReview(project, key, stale ? 0 : review?.review_revision ?? 0, update);
       setReview(record.shot_review ?? null); setStale(false); onSaved(record); setMessage(t.loaded);
+      if ("candidate" in update) {
+        const next = await recreationApi.getShotReview(project.id);
+        setCompletionValid(next.completion_valid ?? false); setCandidateDigest(next.candidate_digest ?? "");
+      }
     } catch (error) { setMessage(error instanceof Error ? error.message : t.conflict); }
     finally { setBusy(false); }
   }
@@ -98,6 +105,31 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
       const candidate = JSON.parse(await file.text()) as Record<string, unknown>;
       await save({ candidate });
     } catch (error) { setMessage(error instanceof Error ? error.message : t.invalid); }
+  }
+
+  async function importCompletion(file: File | undefined) {
+    if (!file) return;
+    setBusy(true); setMessage("");
+    try {
+      const packageData = JSON.parse(await file.text()) as CandidateCompletion;
+      const record = await recreationApi.importCandidateCompletion(project, key, packageData);
+      setCompletion(record.candidate_completion ?? null); setCompletionValid(true); onSaved(record);
+      setMessage(locale === "zh" ? "待确认再预测已导入" : "Candidate completion imported");
+    } catch (error) { setMessage(error instanceof Error ? error.message : t.invalid); }
+    finally { setBusy(false); }
+  }
+
+  function exportCompletionRequest() {
+    if (!review) return;
+    const uncertainties = review.items.filter(item => item.kind === "uncertainty" && item.source.provenance !== "human");
+    const request = { schema_version: "shot-candidate-completion.v1", source_fingerprint: project.source_fingerprint,
+      analysis_id: project.analysis_id, timeline_key: key, candidate_digest: candidateDigest,
+      uncertainties: uncertainties.map(item => ({ item_id: item.id, shot_id: item.shot_id,
+        frame_span: item.frame_span, evidence_frames: item.evidence_frames, original: item.candidate,
+        context: review.items.filter(row => row.shot_id === item.shot_id && row.frame_span[0] <= item.frame_span[1] && row.frame_span[1] >= item.frame_span[0]) })) };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(request, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a"); link.href = url; link.download = `${project.id}-candidate-completion-request.json`; link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function freezeMacro() {
@@ -119,9 +151,11 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
 
   const groups = project.timeline?.shots.map((shot, index) => ({ shot, index, items: review?.items.filter(item => item.shot_id === shot.id) ?? [] })) ?? [];
   const missingShots = groups.filter(group => group.items.length === 0);
-  const pendingItems = review?.items.filter(item => item.decision === "pending") ?? [];
+  const uncertainties = review?.items.filter(item => item.kind === "uncertainty" && item.source.provenance !== "human") ?? [];
+  const completionReady = uncertainties.length === 0 || completionValid;
+  const pendingItems = review?.items.filter(item => item.decision === "pending" && (completionReady || item.kind !== "uncertainty")) ?? [];
   const unknownItems = review?.items.filter(item => item.decision === "unknown") ?? [];
-  const macroReady = Boolean(review && review.items.length > 0 && missingShots.length === 0 && pendingItems.length === 0);
+  const macroReady = Boolean(review && completionReady && review.items.length > 0 && missingShots.length === 0 && pendingItems.length === 0);
   const framePts = project.analysis?.frame_pts[currentFrame - 1];
   const activeGroup = groups.find(({ shot }) => framePts !== undefined && framePts >= shot.start_pts && framePts < shot.end_pts) ?? groups[0];
   const visibleGroups = activeGroup ? [activeGroup] : [];
@@ -146,6 +180,11 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     </div>
     {stale && <p role="alert" className="text-amber-300 text-sm">{t.stale}</p>}
     {message && <p role="status" className="text-sm text-text-muted break-words">{message}</p>}
+    <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "待确认再预测" : "Candidate completion"}>
+      <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-medium">{locale === "zh" ? "待确认再预测" : "Candidate completion"}</h4><p className="text-xs text-text-muted">{locale === "zh" ? `${uncertainties.length} 项模型未决 · ${completionReady ? "可进入一审" : "等待前后帧预测"}` : `${uncertainties.length} model uncertainties · ${completionReady ? "Ready for macro review" : "Awaiting temporal analysis"}`}</p></div>
+        <div className="flex flex-wrap gap-2"><button type="button" className="glass-button min-h-9 inline-flex items-center gap-2" disabled={!review} onClick={exportCompletionRequest}><Download size={16} />{locale === "zh" ? "导出预测任务" : "Export prediction task"}</button>
+          <label className="glass-button min-h-9 inline-flex cursor-pointer items-center gap-2"><FileInput size={16} />{locale === "zh" ? "导入预测结果" : "Import predictions"}<input type="file" accept="application/json,.json" className="sr-only" disabled={busy || stale || !review} onChange={e => void importCompletion(e.target.files?.[0])} /></label></div></div>
+    </div>
     <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "人工审核清单" : "Human review queue"}>
       <div className="flex items-center gap-2 text-sm font-medium"><AlertCircle size={16} aria-hidden="true" />{locale === "zh" ? "人工审核清单" : "Human review queue"}</div>
       <p className="mt-1 text-xs text-text-muted">{locale === "zh"
@@ -182,6 +221,7 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
         {items.filter(item => item.id === activeItemId).map(item => <article key={item.id} className={`border rounded-md p-3 space-y-2 ${currentFrame >= item.frame_span[0] && currentFrame <= item.frame_span[1] ? "border-primary/60" : "border-border"}`}>
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">{item.source.provenance === "human" ? <select aria-label={t.title} className="glass-input text-foreground" value={item.kind} disabled={stale} onChange={e => update(item.id, "kind", e.target.value)}>{(["object", "action", "camera", "optics", "scene", "cut_scene"] as const).map(kind => <option key={kind} value={kind}>{t[kind]}</option>)}</select> : <span className="font-semibold text-foreground">{t[item.kind]}</span>}<button type="button" className="text-left hover:text-foreground break-all" title={t.locate} onClick={() => seek(item.frame_span[0])}>#{item.id}</button><span>{item.frame_span[0]}–{item.frame_span[1]}</span>{item.actor_id && <span>{item.actor_id}</span>}</div>
         {item.candidate && <p className="text-sm"><span className="text-text-muted">{t.candidate}: </span>{item.candidate}</p>}
+        {completionValid && completion?.items.find(row => row.item_id === item.id) && (() => { const result = completion.items.find(row => row.item_id === item.id)!; return <div className="border-l-2 border-primary/60 pl-3 text-sm"><p className="font-medium">{result.status === "predicted" ? (locale === "zh" ? "时序预测" : "Temporal prediction") : (locale === "zh" ? "仍有分歧" : "Unresolved")}: {result.prediction || result.reason}</p><p className="text-xs text-text-muted">{result.reason} · {result.method}</p><div className="flex flex-wrap gap-1">{result.evidence_frames.map(frame => <button key={frame} type="button" className="glass-button px-2 py-1 font-mono text-xs" onClick={() => seek(frame)}>{frame}</button>)}</div></div>; })()}
         <div className="flex flex-wrap gap-1 items-center text-xs"><span className="text-text-muted mr-1">{t.evidence}</span>{item.evidence_frames.map(frame => <button type="button" key={frame} className="glass-button px-2 py-1 font-mono" onClick={() => seek(frame)}>{frame} · {project.analysis && seconds(project.analysis, project.analysis.frame_pts[frame - 1]).toFixed(3)}s</button>)}</div>
         <div className="flex flex-wrap gap-3 text-xs text-text-muted">
           <label>{t.first}<input type="number" min="1" className="glass-input block mt-1 w-24 text-foreground" value={item.frame_span[0]} disabled={stale} onChange={e => updateFrames(item.id, "first", e.target.value)} /></label>
