@@ -199,6 +199,28 @@ it('shows an Agent submission and its referenced media before the reply arrives'
     hook.unmount();
 });
 
+it('sends only the reference named in the Agent prompt', async () => {
+    const response = deferred<unknown>();
+    mockConversation(response.promise);
+    usePlaygroundStore.setState({
+        prompt: '解读下 @素材-e0a1-first 的服装，配饰提示词',
+        inputMedia: ['/first.png', '/second.png'],
+        mediaNames: { '/first.png': '素材-e0a1-first', '/second.png': '素材-e0a1-second' },
+    });
+    const hook = renderHook(() => useAgentConversation(true, 'session'));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    let sending!: Promise<void>;
+    act(() => { sending = hook.result.current.send(); });
+    expect(hook.result.current.messages[0]).toMatchObject({
+        input_media: ['/first.png'], asset_names: ['素材-e0a1-first'],
+    });
+    await waitFor(() => expect(agentRequest).toHaveBeenCalledWith('/sessions/chat-session/messages', 'POST', expect.objectContaining({
+        input_media: ['/first.png'], asset_names: ['素材-e0a1-first'],
+    })));
+    await act(async () => { response.resolve({ user_message: { id: 'u' }, assistant_message: { id: 'a' } }); await sending; });
+    hook.unmount();
+});
+
 it('keeps the composer empty when sending fails after submission', async () => {
     const response = deferred<unknown>();
     mockConversation(response.promise);

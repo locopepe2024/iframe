@@ -42,6 +42,22 @@ export function referenceName(path: string, names: Record<string, string>, histo
     return /\.(mp4|mov|webm|avi|mkv)$/i.test(pathname) ? 'Untitled video' : 'Untitled image';
 }
 
+export function mentionedReferencePaths(prompt: string, paths: string[], names: Record<string, string>, history: Generation[]): string[] {
+    const candidates = paths.map(path => ({ path, label: referenceName(path, names, history) }))
+        .sort((a, b) => b.label.length - a.label.length);
+    const mentioned = new Set<string>();
+    for (let index = 0; index < prompt.length; index++) {
+        if (prompt[index] !== '@') continue;
+        const candidate = candidates.find(({ label }) => prompt.startsWith(`@${label}`, index)
+            && !/[A-Za-z0-9_.-]/.test(prompt[index + label.length + 1] || ''));
+        if (candidate) {
+            mentioned.add(candidate.path);
+            index += candidate.label.length;
+        }
+    }
+    return paths.filter(path => mentioned.has(path));
+}
+
 export function shortReferenceLabel(value: string): string {
     const chars = Array.from(value);
     return chars.length > 5 ? chars.slice(0, 5).join('') + '...' : value;

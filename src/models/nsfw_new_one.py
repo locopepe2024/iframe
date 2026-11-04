@@ -91,7 +91,10 @@ class GreenAImageModel(ImageGenModel):
         headers = {"Authorization": f"Bearer {self.config['api_key']}"}
         base = self.config["base_url"]
         path = "/images/edits" if refs else "/images/generations"
-        response = requests.post(base + path, headers=headers, json=body, timeout=300)
+        # Image edits are synchronous at this gateway. A read timeout cannot
+        # safely be retried because a second POST may create another paid task.
+        read_timeout = 840 if refs else 300
+        response = requests.post(base + path, headers=headers, json=body, timeout=(30, read_timeout))
         response.raise_for_status()
         result = response.json()
         if result.get("status") in {"failed", "FAILURE"}:

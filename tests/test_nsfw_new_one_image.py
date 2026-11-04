@@ -32,10 +32,12 @@ def test_seedream_uses_nsfw_node_and_saves_result_locally(monkeypatch, tmp_path)
 def test_seedream_reference_uses_local_signed_media(monkeypatch, tmp_path):
     monkeypatch.setenv("NSFW_NEW_ONE_BASE_URL", "http://172.17.0.1:3000/v1")
     monkeypatch.setattr(nsfw_new_one, "signed_provider_media_url", lambda path: "http://nsfw.example/provider/media/signed")
-    monkeypatch.setattr(nsfw_new_one.requests, "post", lambda url, **kwargs: (
-        pytest.fail("wrong endpoint") if not url.endswith("/images/edits") else
-        Mock(json=lambda: {"data": [{"url": "https://result.example/image.jpg"}]})
-    ))
+    def post(url, **kwargs):
+        assert url.endswith("/images/edits")
+        assert kwargs["timeout"] == (30, 840)
+        return Mock(json=lambda: {"data": [{"url": "https://result.example/image.jpg"}]})
+
+    monkeypatch.setattr(nsfw_new_one.requests, "post", post)
     monkeypatch.setattr(nsfw_new_one.requests, "get", lambda *args, **kwargs: Mock(content=b"image"))
     target = tmp_path / "image.jpg"
     nsfw_new_one.NSFWNewOneImageModel({"api_key": "test"}).generate(
