@@ -783,10 +783,12 @@ function mountSimpleDesign(extra: Record<string, unknown> = {}) {
 it('saves measured body size and optional character proportions with the design', async () => {
     const { onUpdateAttributes } = mountSimpleDesign();
     designDetailsEditor().commands.setContent('黑发、窄脸、素黑劲装');
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
     for (const [label, value] of [
         ['身高（米）', '1.78'], ['体宽（米）', '0.46'], ['单臂可达距离（米）', '0.75'], ['臂展（米）', '1.82'],
         ['腿长/躯干长', '1.4'], ['肩宽/头宽', '2.2'], ['头高/身高', '0.13'],
     ]) fireEvent.change(screen.getByRole('spinbutton', { name: label }), { target: { value } });
+    fireEvent.click(screen.getByRole('button', { name: '关闭角色编辑' }));
     fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
     await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
         spatial_constraints: {
@@ -794,6 +796,25 @@ it('saves measured body size and optional character proportions with the design'
             bodyWidthM: 0.46, reachM: 0.75, armSpanM: 1.82, legToTorsoRatio: 1.4,
             shoulderToHeadWidthRatio: 2.2, headToHeightRatio: 0.13,
         },
+    }) }));
+});
+
+it('edits the same measured height from the basic quick panel', async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
+    fireEvent.click(within(screen.getByRole('region', { name: '角色设计' })).getByRole('button', { name: '快捷面板' }));
+    fireEvent.click(await screen.findByRole('option', { name: /^基础特征$/ }));
+    for (const [label, value] of [['身高（米）', '1.78'], ['体宽（米）', '0.46'], ['单臂可达距离（米）', '0.75']]) {
+        fireEvent.change(screen.getByRole('spinbutton', { name: label }), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole('button', { name: '关闭面板' }));
+    designDetailsEditor().commands.setContent('黑发、窄脸、素黑劲装');
+    fireEvent.click(screen.getByRole('button', { name: '角色编辑' }));
+    expect(screen.getByRole('spinbutton', { name: '身高（米）' })).toHaveValue(1.78);
+    fireEvent.click(screen.getByRole('button', { name: '关闭角色编辑' }));
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledWith({ character_design: expect.objectContaining({
+        spatial_constraints: expect.objectContaining({ heightM: 1.78, bodyWidthM: 0.46, reachM: 0.75 }),
     }) }));
 });
 

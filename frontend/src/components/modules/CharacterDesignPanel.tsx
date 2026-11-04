@@ -8,6 +8,7 @@ import ReferencePromptEditor, { type PromptSlashSuggestion, type ReferenceCandid
 import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures, type CharacterConstraints } from "@/lib/characterStructuredDesign";
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
+import CharacterMetricBodyFields, { type CharacterMetricBody } from "./CharacterMetricBodyFields";
 import { searchReferenceCandidates, selectedReferenceCandidates } from "@/lib/referenceCandidateSearch";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 
@@ -43,7 +44,7 @@ function DesignReferencePicker({ candidates, selected, onChange, onOpen }: { can
 }
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange, onRefreshReferences,
+    identityFields, lookFields, metricBody, onMetricBodyChange, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange, onRefreshReferences,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
@@ -52,6 +53,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     previousExpressionText?: string;
     supplemental: string; onSupplementalChange: (value: string) => void;
     identityFields: IdentityFeatures; lookFields: LookFeatures;
+    metricBody: CharacterMetricBody; onMetricBodyChange: (key: keyof CharacterMetricBody, value: string) => void;
     onFieldsChange: (section: "identity" | "look", key: string, value: string) => void;
     onDictionaryFields: (text: string, fields: { identity: Record<string, string>; look: Record<string, string>; constraints?: CharacterConstraints }, remainingText: string) => void;
     constraints: CharacterConstraints; onConstraintsChange: (value: CharacterConstraints) => void;
@@ -102,6 +104,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                         </label>)}
                     </div>
                 </fieldset>)}
+            <CharacterMetricBodyFields value={metricBody} onChange={onMetricBodyChange} />
         </div>
         <fieldset disabled={saving || busy} className="min-w-0 rounded border border-glass-border p-3">
             <legend className="px-1 text-xs font-medium">设计约束</legend>
@@ -162,6 +165,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                 </div>}
                 {slash && <CharacterPromptDictionary suggestion={slash} onClose={() => setSlash(null)} configurations={configurations}
                     currentFields={{ identity: identityFields, look: lookFields }}
+                    metricBody={metricBody} onMetricBodyChange={onMetricBodyChange}
                     onConfiguration={onDictionaryConfiguration} onApply={(text, entry) => {
                         if (entry.structuredFields) onDictionaryFields(text, entry.structuredFields, entry.remainingText || "");
                         else if (entry.preset?.id === "dictionary.panel.expression") {
