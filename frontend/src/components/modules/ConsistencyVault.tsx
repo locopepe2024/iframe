@@ -1113,11 +1113,25 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const [propLengthCm, setPropLengthCm] = useState<string>(
         type === "prop" && typeof savedPropLength === "number" ? String(savedPropLength) : "",
     );
+    const savedPropSpatial = asset.asset_design?.design_draft?.spatial_constraints;
+    const [propMetric, setPropMetric] = useState<string[]>([
+        ...(savedPropSpatial?.dimensionsM || ["", "", ""]),
+        ...(savedPropSpatial?.gripLocalM || ["", "", ""]),
+    ].map(String));
+    const [propMetricError, setPropMetricError] = useState("");
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const selectionVersion = useRef(0);
     const savedSceneDesign = asset.asset_design?.design_draft || {};
+    const savedSceneSpatial = savedSceneDesign.spatial_constraints;
+    const [sceneMetricRows, setSceneMetricRows] = useState<Array<{ id: string; label: string; center: string[]; dimensions: string[]; frontSide: string }>>(
+        (savedSceneSpatial?.buildings || []).map((building: any) => ({
+            id: building.id, label: building.label, center: building.centerM.map(String),
+            dimensions: building.dimensionsM.map(String), frontSide: building.frontSide,
+        })),
+    );
+    const [sceneMetricError, setSceneMetricError] = useState("");
     const savedWorkspace = type === "scene" ? savedSceneDesign.prompt_workspace : undefined;
     const [imagePrompt, setImagePrompt] = useState(savedWorkspace?.design?.prompt ?? (asset.image_prompt || asset.description || ""));
     const [scenePromptTab, setScenePromptTab] = useState<"design" | "ai">(savedWorkspace?.active_source === "ai" ? "ai" : "design");
@@ -1176,7 +1190,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const [aiLighting, setAiLighting] = useState<LightingInheritance | null>(savedWorkspace?.ai?.lighting_inheritance ?? null);
     const inheritedLighting = usingSceneAi ? aiLighting : designLighting;
     const setInheritedLighting = usingSceneAi ? setAiLighting : setDesignLighting;
-    const currentSceneSnapshot = { sceneDesign, imagePrompt, optimizedPrompt, imageGenerationMode,
+    const currentSceneSnapshot = { sceneDesign, sceneMetricRows, imagePrompt, optimizedPrompt, imageGenerationMode,
         aiGenerationMode, promptReferences, aiReferences, sceneDesignNeedsApply, designLighting, aiLighting };
     const savedSceneSnapshot = useRef(currentSceneSnapshot);
     const [hasSavedSceneDesign, setHasSavedSceneDesign] = useState(Boolean(savedWorkspace || savedSceneDesign.visual_notes));
@@ -1185,6 +1199,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const restoreSavedSceneDesign = () => {
         const snapshot = savedSceneSnapshot.current;
         setSceneDesign(snapshot.sceneDesign);
+        setSceneMetricRows(snapshot.sceneMetricRows);
         setImagePrompt(snapshot.imagePrompt);
         setOptimizedPrompt(snapshot.optimizedPrompt);
         setImageGenerationMode(snapshot.imageGenerationMode);
@@ -1372,11 +1387,28 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         if (type !== "prop") return;
         const raw = propLengthCm.trim();
         const length = raw ? Number(raw) : null;
-        if (length !== null && (!Number.isFinite(length) || length <= 0)) return;
+        if (length !== null && (!Number.isFinite(length) || length <= 0 || length > 10000)) {
+            setPropMetricError("道具长度需大于 0，且不超过 10000 厘米。");
+            return;
+        }
+        const hasMetric = propMetric.some(value => value.trim());
+        const numbers = propMetric.map(Number);
+        if (hasMetric && (propMetric.some(value => !value.trim()) || numbers.some(value => !Number.isFinite(value))
+            || numbers.slice(0, 3).some(value => value <= 0 || value > 10000)
+            || numbers.slice(3).some((value, index) => Math.abs(value) > numbers[index] / 2))) {
+            setPropMetricError("请填写完整的长宽高和抓握点；尺寸需为正数，抓握点需在道具范围内。");
+            return;
+        }
+        setPropMetricError("");
+        const { spatial_constraints: _previousSpatial, ...previousDesign } = asset.asset_design?.design_draft || {};
         await onUpdateAttributes({ asset_design: {
-            ...(asset.asset_design?.design_draft || {}),
+            ...previousDesign,
             visual_notes: asset.asset_design?.design_draft?.visual_notes || asset.description,
             dimensions: length === null ? {} : { length_cm: length },
+            ...(hasMetric ? { spatial_constraints: {
+                schemaVersion: "iframe.prop-spatial.v1", unit: "meter",
+                dimensionsM: numbers.slice(0, 3), gripLocalM: numbers.slice(3),
+            } } : {}),
         }});
     };
 
@@ -1582,6 +1614,22 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
             setPromptError(usingSceneAi ? "请先提交并检查 AI 优化结果，再保存使用。" : "请先填写具体的场景设计，再保存使用。");
             return;
         }
+        const buildings = sceneMetricRows.map(row => ({
+            id: row.id, label: row.label.trim(), frontSide: row.frontSide,
+            centerM: row.center.map(Number), dimensionsM: row.dimensions.map(Number),
+        }));
+        if (sceneMetricRows.some(row => !row.label.trim() || [...row.center, ...row.dimensions].some(value => !value.trim()))
+            || buildings.some(row => [...row.centerM, ...row.dimensionsM].some(value => !Number.isFinite(value))
+                || row.dimensionsM.some(value => value <= 0 || value > 10000))) {
+            setSceneMetricError("每处空间需填写名称、中心位置和长宽高；尺寸必须大于 0 米。");
+            return;
+        }
+        setSceneMetricError("");
+        const spatialConstraints = buildings.length ? {
+            schemaVersion: "iframe.scene-spatial.v1", coordinateSystem: "z_up", unit: "meter",
+            layoutId: savedSceneSpatial?.layoutId || `layout-${String(asset.id).slice(0, 70)}`,
+            buildings, anchors: savedSceneSpatial?.anchors || [], apertures: savedSceneSpatial?.apertures || [],
+        } : null;
         const snapshot = currentSceneSnapshot;
         const source = scenePromptTab;
         setSceneDesignSaving(true);
@@ -1589,6 +1637,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
         try {
             await onUpdateAttributes({ asset_design: {
                 visual_notes: sceneDesign.visual_notes.trim(),
+                ...(spatialConstraints ? { spatial_constraints: spatialConstraints } : {}),
                 ...(sceneDesign.asset_baseline ? {
                     asset_baseline: sceneDesign.asset_baseline,
                     shot_only_content: sceneDesign.shot_only_content,
@@ -1708,7 +1757,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                         </div>
 
                         {type === "prop" && (
-                            <label className="block space-y-1 text-sm text-text-secondary">
+                            <div className="space-y-2 text-sm text-text-secondary">
+                            <label className="block space-y-1">
                                 <span className="font-bold uppercase">道具长度（厘米）</span>
                                 <input aria-label="道具长度（厘米）" inputMode="decimal" type="number" min="0.1" step="0.1"
                                     value={propLengthCm} onChange={event => setPropLengthCm(event.target.value)}
@@ -1716,11 +1766,22 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                     placeholder="例如：95"
                                 />
                                 <span className="block text-xs text-text-muted">用于跨分镜保持道具实际长度；画面中的近大远小仍由镜头透视决定。</span>
+                            </label>
+                                <fieldset className="grid grid-cols-3 gap-2 rounded border border-glass-border p-3">
+                                    <legend className="px-1 text-xs font-medium">道具米制空间（可选）</legend>
+                                    {['长 X', '宽 Y', '高 Z', '抓握 X', '抓握 Y', '抓握 Z'].map((label, index) =>
+                                        <label key={label} className="text-xs">{label}（米）
+                                            <input aria-label={`${label}（米）`} type="number" step="0.01" value={propMetric[index]}
+                                                onChange={event => setPropMetric(current => current.map((value, at) => at === index ? event.target.value : value))}
+                                                className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+                                        </label>)}
+                                </fieldset>
+                                {propMetricError && <p role="alert" className="text-xs text-red-400">{propMetricError}</p>}
                                 <button type="button" onClick={() => void savePropDimensions()}
                                     className="rounded border border-glass-border px-3 py-1.5 text-xs text-primary hover:bg-primary/10">
                                     保存道具尺寸
                                 </button>
-                            </label>
+                            </div>
                         )}
 
                         {type === "scene" && activeTab === "image" && <div className="flex items-center gap-2 border-b border-glass-border">
@@ -1751,6 +1812,39 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                 <label className="block text-xs text-text-secondary">场景描述
                                     <textarea aria-label="场景空间与固定外观" value={sceneDesign.visual_notes} onChange={event => updateSceneDesign("visual_notes", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={3} />
                                 </label>
+                                <fieldset className="space-y-2 rounded border border-glass-border p-3">
+                                    <legend className="px-1 text-xs font-medium text-foreground">场景米制空间（可选）</legend>
+                                    {sceneMetricRows.map((row, rowIndex) => <div key={row.id} className="space-y-2 border-b border-glass-border pb-2 last:border-0">
+                                        <label className="block text-xs text-text-secondary">空间名称
+                                            <input aria-label={`空间 ${rowIndex + 1} 名称`} value={row.label}
+                                                onChange={event => setSceneMetricRows(current => current.map((item, index) => index === rowIndex ? { ...item, label: event.target.value } : item))}
+                                                className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+                                        </label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {['中心 X', '中心 Y', '中心 Z', '长度 X', '宽度 Y', '高度 Z'].map((label, index) =>
+                                                <label key={label} className="text-xs text-text-secondary">{label}（米）
+                                                    <input aria-label={`空间 ${rowIndex + 1} ${label}（米）`} type="number" step="0.1"
+                                                        value={index < 3 ? row.center[index] : row.dimensions[index - 3]}
+                                                        onChange={event => setSceneMetricRows(current => current.map((item, at) => at !== rowIndex ? item : index < 3
+                                                            ? { ...item, center: item.center.map((value, at) => at === index ? event.target.value : value) }
+                                                            : { ...item, dimensions: item.dimensions.map((value, at) => at === index - 3 ? event.target.value : value) }))}
+                                                        className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" />
+                                                </label>)}
+                                        </div>
+                                        <label className="text-xs text-text-secondary">正面朝向
+                                            <select aria-label={`空间 ${rowIndex + 1} 正面朝向`} value={row.frontSide}
+                                                onChange={event => setSceneMetricRows(current => current.map((item, index) => index === rowIndex ? { ...item, frontSide: event.target.value } : item))}
+                                                className="ml-2 rounded border border-glass-border bg-input-bg p-1 text-foreground">
+                                                <option value="negative_x">负 X</option><option value="positive_x">正 X</option>
+                                                <option value="negative_y">负 Y</option><option value="positive_y">正 Y</option>
+                                            </select>
+                                        </label>
+                                    </div>)}
+                                    <button type="button" onClick={() => setSceneMetricRows(current => [...current, {
+                                        id: `building-${Date.now()}`, label: "", center: ["0", "0", "0"], dimensions: ["", "", ""], frontSide: "positive_y",
+                                    }])} className="rounded border border-glass-border px-2 py-1 text-xs text-primary">添加空间</button>
+                                    {sceneMetricError && <p role="alert" className="text-xs text-red-400">{sceneMetricError}</p>}
+                                </fieldset>
                                 <label className="block text-xs text-text-secondary">风格
                                     <textarea aria-label="场景风格" value={sceneDesign.style} onChange={event => updateSceneDesign("style", event.target.value)} className="mt-1 w-full rounded border border-glass-border bg-input-bg p-2 text-sm text-foreground" rows={2} />
                                 </label>

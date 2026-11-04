@@ -795,6 +795,49 @@ it("applies, saves and restores selected scene layers without rewriting the AI s
     expect(screen.getByRole("textbox", { name: "图像提示词" })).toHaveValue(prompt);
 });
 
+it("saves scene buildings as meter-based design constraints", async () => {
+    const asset = { id: "street", name: "长街", description: "有粮铺的长街", source: "episode" };
+    const project = { id: "episode-1", characters: [], scenes: [asset], props: [] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockResolvedValue(project);
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    fireEvent.click(screen.getByText(asset.name));
+    fireEvent.click(screen.getByRole("button", { name: /基础面板 ·/ }));
+    fireEvent.click(screen.getByRole("button", { name: "添加空间" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "空间 1 名称" }), { target: { value: "粮铺" } });
+    for (const [label, value] of [["长度 X", "4"], ["宽度 Y", "5"], ["高度 Z", "3"]]) {
+        fireEvent.change(screen.getByRole("spinbutton", { name: `空间 1 ${label}（米）` }), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "保存并使用场景设计" }));
+    await waitFor(() => expect(mocks.saveSceneDesign).toHaveBeenCalled());
+    expect(mocks.saveSceneDesign.mock.calls.at(-1)?.[2].spatial_constraints).toEqual(expect.objectContaining({
+        unit: "meter", buildings: [expect.objectContaining({ label: "粮铺", centerM: [0, 0, 0], dimensionsM: [4, 5, 3] })],
+    }));
+});
+
+it("saves a prop's dimensions and grip in meters", async () => {
+    const asset = { id: "sword", name: "长剑", description: "黑铁长剑", source: "episode" };
+    const project = { id: "episode-1", characters: [], scenes: [], props: [asset] };
+    useProjectStore.setState({ currentProject: project as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.updateAssetAttributes.mockResolvedValue(project);
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole("button", { name: /Props/ }));
+    fireEvent.click(screen.getByText(asset.name));
+    for (const [label, value] of [["长 X", "0.8"], ["宽 Y", "0.1"], ["高 Z", "0.05"],
+        ["抓握 X", "-0.2"], ["抓握 Y", "0"], ["抓握 Z", "0"]]) {
+        fireEvent.change(screen.getByRole("spinbutton", { name: `${label}（米）` }), { target: { value } });
+    }
+    fireEvent.click(screen.getByRole("button", { name: "保存道具尺寸" }));
+    await waitFor(() => expect(mocks.updateAssetAttributes).toHaveBeenCalledWith("episode-1", "sword", "prop", expect.objectContaining({
+        asset_design: expect.objectContaining({ spatial_constraints: {
+            schemaVersion: "iframe.prop-spatial.v1", unit: "meter", dimensionsM: [0.8, 0.1, 0.05], gripLocalM: [-0.2, 0, 0],
+        } }),
+    })));
+});
+
 it("keeps a scene baseline during lighting edits and clears it when the location text changes", async () => {
     const baseline = { scene_identity: "青溪镇粮铺", location_type: "粮铺", fixed_geometry: ["木柜台"] };
     const asset = { id: "shop", name: "青溪镇粮铺", description: "旧描述", source: "episode",
