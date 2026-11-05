@@ -18,10 +18,13 @@ export function faceShellGeometry(shape: FaceShape): BufferGeometry {
         const width = value.faceWidth / 100;
         const length = value.faceLength / 100;
         const rows = [-1, -0.97, -0.92, -0.78, -0.64, -0.5, -0.34, -0.18, -0.04, 0.1, 0.24, 0.4, 0.56, 0.72, 0.88, 0.95, 0.99, 1];
-        const segments = 40;
+        const segments = 64;
         const vertices: number[] = [];
         const indices: number[] = [];
         const gaussian = (distance: number, spread: number) => Math.exp(-0.5 * (distance / spread) ** 2);
+        const noseBridgeWidth = 0.1 + (value.noseBridgeWidth - 100) * 0.0024;
+        const noseTipWidth = 0.13 + (value.noseTipWidth - 100) * 0.0024;
+        const nostrilOffset = 0.13 + (value.nostrilWidth - 100) * 0.002;
         const widthAt = (y: number) => {
             const chin = 0.32 * value.chinWidth / 100;
             const jaw = 0.55 * value.jawWidth / 100;
@@ -45,12 +48,12 @@ export function faceShellGeometry(shape: FaceShape): BufferGeometry {
                     + gaussian(x + 0.28 * value.eyeSpacing / 100, 0.12)) * gaussian(y - 0.16, 0.13);
                 const cheekbones = (gaussian(x - 0.42 * value.cheekWidth / 100, 0.17)
                     + gaussian(x + 0.42 * value.cheekWidth / 100, 0.17)) * gaussian(y + 0.1, 0.2);
-                const noseBridge = gaussian(x, 0.11 * value.noseBridgeWidth / 100)
-                    * gaussian(y - 0.22, 0.23) * 0.09 * value.noseBridgeHeight / 100;
-                const noseTip = gaussian(x, 0.13 * value.noseTipWidth / 100)
-                    * gaussian(y + 0.08, 0.12) * 0.15 * value.noseProjection / 100;
-                const noseWings = (gaussian(x - 0.13 * value.nostrilWidth / 100, 0.07)
-                    + gaussian(x + 0.13 * value.nostrilWidth / 100, 0.07)) * gaussian(y + 0.17, 0.07) * 0.035;
+                const noseBridge = gaussian(x, noseBridgeWidth)
+                    * gaussian(y - 0.22, 0.23) * (0.09 + (value.noseBridgeHeight - 100) * 0.0036);
+                const noseTip = gaussian(x, noseTipWidth)
+                    * gaussian(y + 0.08, 0.12) * (0.15 + (value.noseProjection - 100) * 0.004);
+                const noseWings = (gaussian(x - nostrilOffset, 0.07)
+                    + gaussian(x + nostrilOffset, 0.07)) * gaussian(y + 0.17, 0.07) * 0.035;
                 const chin = center * gaussian(y + 0.73, 0.16) * 0.12 * value.chinProjection / 100;
                 const relief = noseBridge + noseTip + noseWings + chin + cheekbones * 0.045 - eyeSockets * 0.07 * value.eyeDepth / 100;
                 vertices.push(x, y * 0.9 * length, skullDepth * Math.sin(angle) + front ** 3 * relief);
@@ -74,7 +77,10 @@ export function faceShellGeometry(shape: FaceShape): BufferGeometry {
 function FaceShell({ shape }: { shape: FaceShape }) {
     const geometry = useMemo(() => faceShellGeometry(shape), [shape]);
     useEffect(() => () => geometry.dispose(), [geometry]);
-    return <mesh geometry={geometry}><meshStandardMaterial color="#e0e4e2" roughness={0.88} flatShading /></mesh>;
+    return <group>
+        <mesh geometry={geometry}><meshStandardMaterial color="#e0e4e2" roughness={0.88} flatShading polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} /></mesh>
+        <mesh geometry={geometry}><meshBasicMaterial color="#3d5552" wireframe transparent opacity={0.28} depthWrite={false} /></mesh>
+    </group>;
 }
 
 function ResponsiveCamera() {
@@ -114,6 +120,17 @@ function Head({ shape, side = false, x }: { shape: FaceShape; side?: boolean; x:
         <mesh position={[0, -0.34 - 0.08 * philtrum, 0.49]} scale={[0.19 * mouth, 0.012 * lowerLip, 0.012]}><sphereGeometry args={[1, 20, 10]} /><meshStandardMaterial color="#a8adab" roughness={1} /></mesh>
         {[-1, 1].map(sign => <mesh key={`mouth-corner-${sign}`} position={[sign * 0.17 * mouth, -0.31 - 0.07 * philtrum + 0.08 * cornerTilt, 0.49]} scale={[0.026, 0.012, 0.012]}><sphereGeometry args={[1, 12, 8]} /><meshStandardMaterial color="#9ca2a1" roughness={1} /></mesh>)}
     </group>;
+}
+
+function FacePreview({ shape }: { shape: FaceShape }) {
+    return <Canvas gl={{ preserveDrawingBuffer: true, antialias: true }} camera={{ position: [0, 0, 5], fov: 40 }}>
+        <ResponsiveCamera />
+        <color attach="background" args={["#28302f"]} />
+        <ambientLight intensity={1.5} />
+        <directionalLight position={[2, 3, 5]} intensity={2} />
+        <Head shape={shape} x={-1.1} />
+        <Head shape={shape} x={1.1} side />
+    </Canvas>;
 }
 
 export default function WhiteFaceModel({ characterName, initialShape, onSaved, standalone = false }: {
@@ -167,15 +184,19 @@ export default function WhiteFaceModel({ characterName, initialShape, onSaved, s
                 {Object.entries(FACE_BASE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
             </select>
         </label>
-        <div ref={stageRef} className={`${standalone ? "aspect-[16/7] min-h-[360px]" : "aspect-[2/1]"} w-full overflow-hidden rounded bg-[#28302f]`}>
-            <Canvas gl={{ preserveDrawingBuffer: true, antialias: true }} camera={{ position: [0, 0, 5], fov: 40 }}>
-                <ResponsiveCamera />
-                <color attach="background" args={["#28302f"]} />
-                <ambientLight intensity={1.5} />
-                <directionalLight position={[2, 3, 5]} intensity={2} />
-                <Head shape={shape} x={-1.1} />
-                <Head shape={shape} x={1.1} side />
-            </Canvas>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="min-w-0">
+                <div className="mb-1 text-xs text-text-secondary">基础脸型 · 正面 / 侧面</div>
+                <div className="aspect-[2/1] w-full overflow-hidden rounded bg-[#28302f]" aria-label="基础脸型正面与侧面预览">
+                    <FacePreview shape={faceBaseShape(shape.basePreset)} />
+                </div>
+            </div>
+            <div className="min-w-0">
+                <div className="mb-1 text-xs text-text-secondary">当前调整 · 正面 / 侧面</div>
+                <div ref={stageRef} className="aspect-[2/1] w-full overflow-hidden rounded bg-[#28302f]" aria-label="当前调整正面与侧面预览">
+                    <FacePreview shape={shape} />
+                </div>
+            </div>
         </div>
         <div className="space-y-2">
             {CONTROL_GROUPS.map(([group, controls]) => <details key={group} open={group === "头部轮廓"} className="rounded border border-glass-border/60 p-2">
