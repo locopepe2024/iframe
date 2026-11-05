@@ -92,6 +92,8 @@ it("loads the selected three-view from the series when no episode is active", as
     projectStoreMocks.currentProject = null as any;
     apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
     apiMocks.authenticatedFetch.mockClear();
+    apiMocks.authenticatedFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ url: "/studio/owned-media/0123456789abcdef01234567/original-three-view.png" }) });
+    apiMocks.authenticatedFetch.mockResolvedValueOnce({ ok: false });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
     try {
         render(<CharacterWorkbench asset={{ id: "su-yan", name: "苏砚", description: "雪痕客",
@@ -101,6 +103,10 @@ it("loads the selected three-view from the series when no episode is active", as
         fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
         await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
             expect.stringContaining("scope=series&container_id=series-1&asset_type=character&asset_id=su-yan&variant_id=three-view-1"),
+            { cache: "no-store" },
+        ));
+        await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
+            "/studio/owned-media/0123456789abcdef01234567/original-three-view.png",
             expect.objectContaining({ signal: expect.any(AbortSignal) }),
         ));
     } finally {
