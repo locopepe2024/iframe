@@ -9,12 +9,12 @@ import headMesh from "../../../../public/models/character/makehuman-face-v1/head
 
 const meshData = headMesh as WhiteFaceMeshData;
 
-const { uploadLibraryImage, createLibraryAsset } = vi.hoisted(() => ({
-    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(),
+const { uploadLibraryImage, createLibraryAsset, authenticatedFetch } = vi.hoisted(() => ({
+    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(),
 }));
 
 vi.mock("@react-three/fiber", () => ({ Canvas: () => <canvas /> }));
-vi.mock("@/lib/api", () => ({ api: { uploadLibraryImage, createLibraryAsset } }));
+vi.mock("@/lib/api", () => ({ API_URL: "http://test", authenticatedFetch, api: { uploadLibraryImage, createLibraryAsset } }));
 
 beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => meshData }));
@@ -22,9 +22,43 @@ beforeEach(() => {
     createLibraryAsset.mockReset().mockResolvedValue({
         id: "face-prop", image_asset: { variants: [{ id: "face-v1" }] },
     });
+    authenticatedFetch.mockReset().mockResolvedValue({ ok: true, blob: async () => new Blob(["reference"], { type: "image/png" }) });
+    URL.createObjectURL = vi.fn(() => "blob:three-view");
+    URL.revokeObjectURL = vi.fn();
     HTMLCanvasElement.prototype.toBlob = function (callback) {
         callback(new Blob(["white-face"], { type: "image/png" }));
     };
+});
+
+it("fits a selected three-view source and saves the reviewed shape as its 100% baseline", async () => {
+    const onSaved = vi.fn();
+    render(<WhiteFaceModel characterName="苏砚" fitSource={{
+        scope: "series", containerId: "series-1", assetId: "su-yan", variantId: "three-view-1",
+    }} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    const image = await screen.findByAltText("苏砚三视图拟合参考");
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: 1223 });
+    Object.defineProperty(image, "naturalHeight", { configurable: true, value: 1286 });
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue({
+        left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => {},
+    });
+    const points = [[19, 16], [31, 16], [21, 21], [29, 21], [22, 12], [28, 12], [25, 25], [55, 12], [51, 16], [53, 25]];
+    for (const [clientX, clientY] of points) fireEvent.click(image, { clientX, clientY });
+    await waitFor(() => expect(screen.getByRole("button", { name: "拟合白模" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "拟合白模" }));
+    expect(screen.getByText(/拟合初稿/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("已核对正面与侧面白模"));
+    fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    const saved = onSaved.mock.calls[0][2];
+    expect(saved.faceWidth).toBe(100);
+    expect(saved.calibration).toEqual(expect.objectContaining({
+        source: { asset_type: "character", asset_id: "su-yan", variant_id: "three-view-1",
+            source_scope: "series", source_container_id: "series-1" }, reviewed: true,
+        residual: expect.any(Number),
+    }));
+    expect(createLibraryAsset.mock.calls[0][1].description).not.toContain("中性基准 100%");
 });
 
 it("saves the edited geometry as a stable reference and matching prompt", async () => {

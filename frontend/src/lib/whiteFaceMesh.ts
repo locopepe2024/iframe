@@ -1,5 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute, Uint16BufferAttribute } from "three";
-import { normalizeFaceShape, type FaceShape } from "./whiteFaceShape";
+import { effectiveFaceShape, type FaceShape } from "./whiteFaceShape";
 
 export type WhiteFaceMeshData = {
     schema: "makehuman-head.v1";
@@ -14,8 +14,8 @@ export function faceShellGeometry(shape: FaceShape, data: WhiteFaceMeshData): Bu
     if (data.schema !== "makehuman-head.v1" || data.positions.length !== data.sourceVertexIds.length * 3 || data.indices.length % 3) {
         throw new Error("Invalid white face mesh");
     }
-    const value = normalizeFaceShape(shape);
-    const change = (key: Exclude<keyof FaceShape, "basePreset">) => (value[key] - 100) / 25;
+    const value = effectiveFaceShape(shape);
+    const change = (key: Exclude<keyof FaceShape, "basePreset" | "calibration">) => (value[key] - 100) / 25;
     const positions = new Float32Array(data.positions.length);
     for (let i = 0; i < positions.length; i += 3) {
         const x = data.positions[i], y = data.positions[i + 1], z = data.positions[i + 2];
