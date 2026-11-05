@@ -1,4 +1,5 @@
 """Authenticated recreation APIs. Processing stays in the backend's FFmpeg runtime."""
+import time
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, Query, Form
 from fastapi.responses import Response
 from pydantic import BaseModel, Field, StrictInt
@@ -6,6 +7,7 @@ from pydantic import BaseModel, Field, StrictInt
 from ..identity import UserContext
 from ..studio_access import require_studio_user, sign_studio_media_paths, studio_media_preview_url
 from .service import (
+    _SECOND_PASS_STALE_SECONDS,
     DEFAULT_KEYFRAME_IMAGE_MODEL,
     DEFAULT_RECREATION_VIDEO_MODEL,
     RecreationService,
@@ -92,6 +94,12 @@ class CandidateCompletionRequest(BaseModel):
     analysis_id: str
     timeline_key: str
     package: dict
+
+
+class CandidateCompletionRunRequest(BaseModel):
+    analysis_id: str
+    timeline_key: str
+    model: str
 
 
 class DetailImportRequest(BaseModel):
@@ -202,8 +210,14 @@ def evidence(project_id: str, request: EvidenceRequest, user: UserContext = Depe
 @router.get("/projects/{project_id}/shot-review")
 def get_shot_review(project_id: str, user: UserContext = Depends(require_studio_user)):
     record = RecreationService(user).get(project_id)
+    completion_run = record.get("candidate_completion_run")
+    if (completion_run and completion_run.get("status") in {"queued", "running"} and
+            time.time() - completion_run.get("updated_at", 0) >= _SECOND_PASS_STALE_SECONDS):
+        completion_run = {**completion_run, "status": "failed",
+                          "error": "Second analysis stopped updating; retry the run"}
     return {"timeline_key": timeline_key(record), "review": record.get("shot_review"),
             "completion": record.get("candidate_completion"), "completion_valid": valid_completion(record),
+            "completion_run": completion_run,
             "candidate_digest": candidate_digest(record),
             "stale": bool(record.get("shot_review") and record["shot_review"]["timeline_key"] != timeline_key(record))}
 
@@ -226,6 +240,16 @@ def import_candidate_completion(project_id: str, request: CandidateCompletionReq
                                 user: UserContext = Depends(require_studio_user)):
     return public(RecreationService(user).import_candidate_completion(
         project_id, request.analysis_id, request.timeline_key, request.package), user)
+
+
+@router.post("/projects/{project_id}/candidate-completion/run", status_code=202)
+def run_candidate_completion(project_id: str, request: CandidateCompletionRunRequest,
+                             background: BackgroundTasks, user: UserContext = Depends(require_studio_user)):
+    service = RecreationService(user)
+    record, pack, config, run_id = service.start_second_pass(
+        project_id, request.analysis_id, request.timeline_key, request.model)
+    background.add_task(service.process_second_pass, project_id, run_id, pack, config, request.model)
+    return public(record, user)
 
 
 @router.get("/projects/{project_id}/candidate-completion/frame-pack")

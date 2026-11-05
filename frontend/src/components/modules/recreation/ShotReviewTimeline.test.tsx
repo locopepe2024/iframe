@@ -8,7 +8,7 @@ import ShotReviewTimeline from "./ShotReviewTimeline";
 
 vi.mock("@/lib/recreation", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/recreation")>(),
-  recreationApi: { getShotReview: vi.fn(), saveShotReview: vi.fn() },
+  recreationApi: { getShotReview: vi.fn(), saveShotReview: vi.fn(), models: vi.fn(), runSecondPass: vi.fn() },
 }));
 vi.mock("./DetailReviewPanel", () => ({ default: () => null }));
 
@@ -33,6 +33,12 @@ const project: RecreationProject = {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 function setup(complete: boolean) {
+  vi.mocked(recreationApi.models).mockResolvedValue({ provider: "uniart", source: "live",
+    defaults: { image_model: "", video_model: "" }, image_models: [], video_models: [],
+    vision_models: [
+      { id: "uniart/qwen3-vl-plus", display_name: "Qwen3 VL Plus", capabilities: ["chat"] },
+      { id: "uniart/gpt-5.6-sol", display_name: "GPT 5.6 Sol", capabilities: ["chat"] },
+    ] });
   vi.mocked(recreationApi.getShotReview).mockResolvedValue({
     timeline_key: "timeline", review, stale: false, candidate_digest: "digest", completion_valid: complete,
     completion: { schema_version: complete ? "shot-candidate-completion.v2" : "shot-candidate-completion.v1",
@@ -51,6 +57,19 @@ function setup(complete: boolean) {
     <ShotReviewTimeline project={project} onSaved={vi.fn()} seek={vi.fn()} currentFrame={1} viewer={<div>Viewer</div>} />
   </NextIntlClientProvider>);
 }
+
+it("runs second analysis with the selected UniArt vision model", async () => {
+  setup(false);
+  vi.mocked(recreationApi.runSecondPass).mockResolvedValue({ ...project,
+    candidate_completion_run: { run_id: "run-1", status: "queued", model: "uniart/gpt-5.6-sol",
+      completed_items: 0, total_items: 2, error: "" } });
+  const select = await screen.findByRole("combobox", { name: "Second analysis model" });
+  fireEvent.change(select, { target: { value: "uniart/gpt-5.6-sol" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run second analysis (model call)" }));
+  await waitFor(() => expect(recreationApi.runSecondPass).toHaveBeenCalledWith(
+    project, "timeline", "uniart/gpt-5.6-sol"));
+  expect(await screen.findByRole("status")).toHaveTextContent("queued");
+});
 
 it("compares both analyses and saves the chosen second-pass text", async () => {
   setup(true);

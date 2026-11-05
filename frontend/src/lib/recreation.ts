@@ -18,6 +18,7 @@ export interface RecreationProject {
   timeline: { cuts: { pts: number; source: string }[]; shots: RecreationShot[] } | null;
   shot_review?: ShotReview | null;
   candidate_completion?: CandidateCompletion | null;
+  candidate_completion_run?: CandidateCompletionRun | null;
   macro_review?: MacroReview | null;
   detail_review?: DetailReview | null;
 }
@@ -45,7 +46,11 @@ export interface CandidateCompletion {
   candidate_digest: string; run_id: string; model: string; prompt_revision: string;
   items: CandidateCompletionItem[];
 }
-export interface ShotReviewEnvelope { timeline_key: string; review: ShotReview | null; completion?: CandidateCompletion | null; completion_valid?: boolean; candidate_digest?: string; stale: boolean }
+export interface CandidateCompletionRun {
+  run_id: string; status: "queued" | "running" | "completed" | "failed"; model: string;
+  completed_items: number; total_items: number; error: string;
+}
+export interface ShotReviewEnvelope { timeline_key: string; review: ShotReview | null; completion?: CandidateCompletion | null; completion_run?: CandidateCompletionRun | null; completion_valid?: boolean; candidate_digest?: string; stale: boolean }
 export interface MacroReview {
   analysis_id: string; source_fingerprint: string; timeline_key: string;
   macro_revision: number; digest: string; items: ShotReviewItem[];
@@ -317,6 +322,7 @@ export interface RecreationModelOptions {
   defaults: { image_model: string; video_model: string };
   image_models: RecreationModelOption[];
   video_models: RecreationModelOption[];
+  vision_models?: RecreationModelOption[];
 }
 
 export interface RecreationPlan {
@@ -414,6 +420,10 @@ export const recreationApi = {
   secondPassFramePack: (project: RecreationProject, timelineKey: string): Promise<Blob> =>
     axios.get(`${API_URL}/recreation/projects/${project.id}/candidate-completion/frame-pack`, {
       params: { analysis_id: project.analysis_id, timeline_key: timelineKey }, responseType: "blob",
+    }).then(r => r.data),
+  runSecondPass: (project: RecreationProject, timelineKey: string, model: string): Promise<RecreationProject> =>
+    axios.post(`${API_URL}/recreation/projects/${project.id}/candidate-completion/run`, {
+      analysis_id: project.analysis_id, timeline_key: timelineKey, model,
     }).then(r => r.data),
   importCandidateCompletion: (project: RecreationProject, timelineKey: string, completion: CandidateCompletion): Promise<RecreationProject> =>
     axios.post(`${API_URL}/recreation/projects/${project.id}/candidate-completion/import`, {

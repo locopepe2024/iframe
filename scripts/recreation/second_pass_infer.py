@@ -44,14 +44,15 @@ SYSTEM_PROMPT = (
 )
 
 
-def uniart_chat(messages, *, model, response_format, timeout_seconds, **_kwargs):
-    key = os.getenv("UNIART_API_KEY")
+def uniart_chat(messages, *, model, response_format, timeout_seconds, api_key=None,
+                base_url=None, **_kwargs):
+    key = api_key or os.getenv("UNIART_API_KEY")
     if not key:
         raise RuntimeError("UNIART_API_KEY is required for UniArt transport")
     session = requests.Session()
     session.trust_env = False
     response = session.post(
-        os.getenv("UNIART_BASE_URL", "https://uniart.fun/v1").rstrip("/") + "/chat/completions",
+        (base_url or os.getenv("UNIART_BASE_URL", "https://uniart.fun/v1")).rstrip("/") + "/chat/completions",
         headers={"Authorization": "Bearer " + key, "Accept-Encoding": "gzip, deflate"},
         json={"model": model, "messages": messages, "response_format": response_format,
               "stream": False, "temperature": 0},
@@ -61,7 +62,7 @@ def uniart_chat(messages, *, model, response_format, timeout_seconds, **_kwargs)
     return response.json()["choices"][0]["message"]["content"]
 
 
-def infer_pack(content: bytes, model: str, chat=None):
+def infer_pack(content: bytes, model: str, chat=None, on_progress=None):
     chat = chat or LLMAdapter().chat
     with ZipFile(BytesIO(content)) as archive:
         manifest = json.loads(archive.read("manifest.json"))
@@ -69,6 +70,8 @@ def infer_pack(content: bytes, model: str, chat=None):
             raise ValueError("Unsupported second-pass frame pack")
         files = {row["frame"]: row for row in manifest["frames"]}
         results = []
+        if on_progress:
+            on_progress(0, len(manifest["candidates"]))
         for candidate in manifest["candidates"]:
             reference_frames = candidate["reference_frames"]
             if not reference_frames or any(frame not in files for frame in reference_frames):
@@ -105,6 +108,8 @@ def infer_pack(content: bytes, model: str, chat=None):
             results.append({"item_id": candidate["item_id"], "status": status,
                             "prediction": prediction, "reason": reason,
                             "method": PROMPT_REVISION, "evidence_frames": evidence})
+            if on_progress:
+                on_progress(len(results), len(manifest["candidates"]))
     return {"schema_version": "shot-candidate-completion.v2", "status": "completed",
             "source_fingerprint": manifest["source_fingerprint"],
             "analysis_id": manifest["analysis_id"],

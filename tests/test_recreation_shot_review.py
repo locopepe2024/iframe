@@ -131,6 +131,46 @@ def test_second_pass_rejects_stale_timeline_and_model_evidence(service, video):
         infer_pack(pack, "test-vision", chat=model)
 
 
+def test_online_second_pass_records_progress_and_imports_only_current_review(service, video, monkeypatch):
+    project = reviewed(service, video)
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner",
+                        lambda *_: {"api_key": "test-key", "base_url": "https://example.invalid/v1"})
+    monkeypatch.setattr(service, "_live_uniart_models", lambda: [
+        {"id": "uniart/qwen3-vl-plus", "api_model_id": "qwen3-vl-plus", "capabilities": ["chat"]},
+        {"id": "uniart/gpt-5.6-sol", "api_model_id": "gpt-5.6-sol", "capabilities": ["chat"]},
+    ])
+    calls = []
+    def model(messages, **_kwargs):
+        calls.append(messages)
+        return json.dumps({"status": "predicted", "prediction": "left leg kicks",
+                           "reason": "adjacent source frames", "evidence_frames": [2]})
+    monkeypatch.setattr("scripts.recreation.second_pass_infer.uniart_chat", model)
+    record, pack, config, run_id = service.start_second_pass(
+        project["id"], project["analysis_id"], timeline_key(project), "uniart/qwen3-vl-plus")
+    assert record["candidate_completion_run"]["status"] == "queued"
+    assert "api_key" not in json.dumps(record)
+    with pytest.raises(HTTPException, match="still running"):
+        service.freeze_macro_review(project["id"], project["analysis_id"], timeline_key(project), 1)
+    with pytest.raises(HTTPException, match="already running"):
+        service.start_second_pass(project["id"], project["analysis_id"], timeline_key(project), "uniart/qwen3-vl-plus")
+    service.process_second_pass(project["id"], run_id, pack, config, "uniart/qwen3-vl-plus")
+    saved = service.get(project["id"])
+    assert saved["candidate_completion_run"]["status"] == "completed"
+    assert saved["candidate_completion_run"]["completed_items"] == len(calls) == 2
+    assert valid_completion(saved)
+
+    record, pack, config, run_id = service.start_second_pass(
+        project["id"], project["analysis_id"], timeline_key(project), "uniart/gpt-5.6-sol")
+    edited = deepcopy(record["shot_review"]["items"])
+    edited[0]["edited_text"] = "Reviewed kick phase"
+    edited[0]["decision"] = "edit"
+    service.save_shot_review(project["id"], project["analysis_id"], timeline_key(project), 1, items=edited)
+    service.process_second_pass(project["id"], run_id, pack, config, "uniart/gpt-5.6-sol")
+    saved = service.get(project["id"])
+    assert saved["candidate_completion_run"]["status"] == "failed"
+    assert "source changed" in saved["candidate_completion_run"]["error"]
+
+
 def test_import_surfaces_unknown_analysis_without_overwriting_review(service, video):
     project = reviewed(service, video)
     items = deepcopy(project["shot_review"]["items"])

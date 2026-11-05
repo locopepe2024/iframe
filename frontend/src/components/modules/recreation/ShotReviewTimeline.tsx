@@ -1,10 +1,10 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import { AlertCircle, Check, Download, FileInput, Plus, Save } from "lucide-react";
+import { AlertCircle, Check, Download, FileInput, Play, Plus, Save } from "lucide-react";
 import { useLocale } from "next-intl";
 import { API_URL } from "@/lib/api";
-import { CandidateCompletion, recreationApi, RecreationProject, RecreationShot, seconds, ShotReview, ShotReviewDecision, ShotReviewItem } from "@/lib/recreation";
+import { CandidateCompletion, CandidateCompletionRun, RecreationModelOption, recreationApi, RecreationProject, RecreationShot, seconds, ShotReview, ShotReviewDecision, ShotReviewItem } from "@/lib/recreation";
 import DetailReviewPanel from "./DetailReviewPanel";
 
 const decisions: ShotReviewDecision[] = ["pending", "accept", "edit", "reject", "unknown"];
@@ -26,14 +26,41 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [completion, setCompletion] = useState<CandidateCompletion | null>(null);
   const [completionValid, setCompletionValid] = useState(false);
+  const [completionRun, setCompletionRun] = useState<CandidateCompletionRun | null>(null);
+  const [visionModels, setVisionModels] = useState<RecreationModelOption[]>([]);
+  const [visionModel, setVisionModel] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    recreationApi.models().then(options => {
+      if (!active) return;
+      setVisionModels(options.vision_models ?? []);
+      setVisionModel(current => options.vision_models?.some(item => item.id === current) ? current
+        : options.vision_models?.find(item => item.id === "uniart/qwen3-vl-plus")?.id
+          ?? options.vision_models?.[0]?.id ?? "");
+    }).catch(() => { if (active) setMessage(locale === "zh" ? "无法获取可用多模态模型" : "Vision model catalog unavailable"); });
+    return () => { active = false; };
+  }, [project.id]);
 
   useEffect(() => {
     let active = true;
     recreationApi.getShotReview(project.id).then(result => {
-      if (active) { setReview(result.review); setKey(result.timeline_key); setStale(result.stale); setCompletion(result.completion ?? null); setCompletionValid(result.completion_valid ?? false); setSelectedId(result.review?.items.find(item => item.decision === "pending")?.id ?? result.review?.items[0]?.id ?? null); }
+      if (active) { setReview(result.review); setKey(result.timeline_key); setStale(result.stale); setCompletion(result.completion ?? null); setCompletionRun(result.completion_run ?? null); setCompletionValid(result.completion_valid ?? false); setSelectedId(result.review?.items.find(item => item.decision === "pending")?.id ?? result.review?.items[0]?.id ?? null); }
     }).catch(() => { if (active) setMessage(t.conflict); });
     return () => { active = false; };
   }, [project.id, project.timeline?.shots.map(shot => `${shot.id}:${shot.start_pts}:${shot.end_pts}`).join("|")]);
+
+  useEffect(() => {
+    if (completionRun?.status !== "queued" && completionRun?.status !== "running") return;
+    const timer = window.setInterval(() => {
+      void recreationApi.getShotReview(project.id).then(result => {
+        setCompletionRun(result.completion_run ?? null);
+        setCompletion(result.completion ?? null);
+        setCompletionValid(result.completion_valid ?? false);
+      }).catch(() => setMessage(t.conflict));
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [project.id, completionRun?.status]);
 
   const update = (id: string, field: "decision" | "edited_text" | "kind", value: string) => {
     setReview(current => current && { ...current, items: current.items.map(item => item.id === id ? { ...item, [field]: value } : item) });
@@ -130,6 +157,17 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     finally { setBusy(false); }
   }
 
+  async function runSecondPass() {
+    if (!review || !key || !visionModel) return;
+    setBusy(true); setMessage("");
+    try {
+      const record = await recreationApi.runSecondPass(project, key, visionModel);
+      setCompletionRun(record.candidate_completion_run ?? null);
+      onSaved(record);
+    } catch (error) { setMessage(error instanceof Error ? error.message : t.conflict); }
+    finally { setBusy(false); }
+  }
+
   async function freezeMacro() {
     if (!review) return;
     setBusy(true); setMessage("");
@@ -151,7 +189,8 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
   const missingShots = groups.filter(group => group.items.length === 0);
   const modelItems = review?.items.filter(item => item.source.provenance !== "human") ?? [];
   const completionById = new Map(completion?.items.map(row => [row.item_id, row]) ?? []);
-  const secondPassReady = modelItems.length === 0 || (completionValid && completionById.size === modelItems.length);
+  const runActive = completionRun?.status === "queued" || completionRun?.status === "running";
+  const secondPassReady = !runActive && (modelItems.length === 0 || (completionValid && completionById.size === modelItems.length));
   const pendingItems = review?.items.filter(item => item.decision === "pending") ?? [];
   const orderedPendingItems = [...pendingItems].sort((a, b) =>
     a.frame_span[0] - b.frame_span[0] || a.frame_span[1] - b.frame_span[1] || a.id.localeCompare(b.id));
@@ -210,8 +249,9 @@ export default function ShotReviewTimeline({ project, onSaved, seek, currentFram
     </section>}
     <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "待确认再预测" : "Candidate completion"}>
       <div className="flex flex-wrap items-center justify-between gap-2"><div><h4 className="text-sm font-medium">{locale === "zh" ? "第二轮分析" : "Second analysis"}</h4><p className="text-xs text-text-muted">{locale === "zh" ? `${completionById.size}/${modelItems.length} 项模型候选已有第二轮 · ${secondPassReady ? "可对照确认" : "需覆盖全部候选"}` : `${completionById.size}/${modelItems.length} model candidates have a second pass · ${secondPassReady ? "Ready to compare" : "Full coverage required"}`}</p></div>
-        <div className="flex flex-wrap gap-2"><button type="button" className="glass-button min-h-9 inline-flex items-center gap-2" disabled={!review || stale || busy} onClick={() => void exportCompletionRequest()}><Download size={16} />{locale === "zh" ? "导出参考帧包" : "Export frame pack"}</button>
+        <div className="flex flex-wrap gap-2"><label className="text-xs text-text-muted inline-flex items-center gap-2">{locale === "zh" ? "多模态模型" : "Vision model"}<select aria-label={locale === "zh" ? "二轮分析模型" : "Second analysis model"} className="glass-button min-h-9 text-foreground" value={visionModel} disabled={busy || completionRun?.status === "queued" || completionRun?.status === "running"} onChange={event => setVisionModel(event.target.value)}><option value="" disabled>{locale === "zh" ? "选择模型" : "Select model"}</option>{visionModels.map(model => <option key={model.id} value={model.id}>{model.display_name}</option>)}</select></label><button type="button" className="glass-button min-h-9 inline-flex items-center gap-2" disabled={!review || !visionModel || stale || busy || completionRun?.status === "queued" || completionRun?.status === "running"} onClick={() => void runSecondPass()}><Play size={16} />{locale === "zh" ? "运行第二轮分析（模型调用）" : "Run second analysis (model call)"}</button><button type="button" className="glass-button min-h-9 inline-flex items-center gap-2" disabled={!review || stale || busy} onClick={() => void exportCompletionRequest()}><Download size={16} />{locale === "zh" ? "导出参考帧包" : "Export frame pack"}</button>
           <label className="glass-button min-h-9 inline-flex cursor-pointer items-center gap-2"><FileInput size={16} />{locale === "zh" ? "导入第二轮结果" : "Import second analysis"}<input type="file" accept="application/json,.json" className="sr-only" disabled={busy || stale || !review} onChange={e => void importCompletion(e.target.files?.[0])} /></label></div></div>
+      {completionRun && <p role="status" className="mt-2 text-xs text-text-muted">{locale === "zh" ? `运行状态：${completionRun.status} · ${completionRun.completed_items}/${completionRun.total_items || "?"} 项` : `Run: ${completionRun.status} · ${completionRun.completed_items}/${completionRun.total_items || "?"} items`}{completionRun.error ? ` · ${completionRun.error}` : ""}</p>}
     </div>
     <div className="border-t border-border pt-3" aria-label={locale === "zh" ? "人工审核清单" : "Human review queue"}>
       <div className="flex items-center gap-2 text-sm font-medium"><AlertCircle size={16} aria-hidden="true" />{locale === "zh" ? "两轮对照审核" : "Compare both analyses"}</div>

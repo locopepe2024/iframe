@@ -687,10 +687,14 @@ def test_recreation_model_options_keep_unverified_video_contracts_hidden(service
         {'id': 'uniart/gpt-image-2', 'display_name': 'GPT Image 2', 'capabilities': ['t2i', 'i2i']},
         {'id': 'uniart/minimax-h3-vip', 'display_name': 'MiniMax H3', 'capabilities': ['r2v']},
         {'id': 'uniart/seedance-2.5-vip', 'display_name': 'Seedance', 'capabilities': ['r2v']},
+        {'id': 'uniart/qwen3-vl-plus', 'api_model_id': 'qwen3-vl-plus', 'display_name': 'Qwen VL', 'capabilities': ['chat']},
+        {'id': 'uniart/gpt-5.6-sol', 'api_model_id': 'gpt-5.6-sol', 'display_name': 'GPT 5.6', 'capabilities': ['chat']},
+        {'id': 'uniart/deepseek-v4', 'api_model_id': 'deepseek-v4', 'display_name': 'DeepSeek', 'capabilities': ['chat']},
     ])
     options = service.model_options()
     assert [item['id'] for item in options['image_models']] == ['uniart/gpt-image-2']
     assert [item['id'] for item in options['video_models']] == ['uniart/minimax-h3-vip']
+    assert [item['id'] for item in options['vision_models']] == ['uniart/qwen3-vl-plus', 'uniart/gpt-5.6-sol']
     assert options['defaults'] == {'image_model': 'uniart/gpt-image-2', 'video_model': 'uniart/minimax-h3-vip'}
 
 

@@ -147,6 +147,14 @@ and retryable; it must not be presented as reviewable full coverage. Importing a
 external detail JSON uses the same validation and provenance rules as an integrated
 run. Saving a review is never equivalent to starting an LLM run.
 
+The online candidate-completion action reports its state in the shot-review envelope and uses the signed-in
+owner's UniArt credential, pins the source fingerprint, analysis, timeline and candidate
+digest, and reports completed item count. It imports a result only when every candidate
+passes schema and source checks. A review edit during the run makes its result stale;
+the run fails visibly and never overwrites the current review. Starting a run is an
+explicit paid model action. The offline frame-pack and JSON import remain available
+for inspection and recovery.
+
 ## Addams revision 7 migration
 
 Treat revision 7 as a legacy macro-review draft. Preserve its existing human text and
