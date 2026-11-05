@@ -171,6 +171,55 @@ def test_online_second_pass_records_progress_and_imports_only_current_review(ser
     assert "source changed" in saved["candidate_completion_run"]["error"]
 
 
+def test_online_second_pass_resumes_only_failed_candidates(service, video, monkeypatch):
+    project = reviewed(service, video)
+    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner",
+                        lambda *_: {"api_key": "test-key", "base_url": "https://example.invalid/v1"})
+    monkeypatch.setattr(service, "_live_uniart_models", lambda: [
+        {"id": "uniart/qwen3-vl-plus", "api_model_id": "qwen3-vl-plus", "capabilities": ["chat"]},
+    ])
+    candidate_ids = [row["id"] for row in project["shot_review"]["items"]
+                     if row["source"].get("provenance") != "human"]
+    calls = []
+    fail_once = set()
+
+    def model(messages, **_kwargs):
+        item_id = json.loads(messages[1]["content"][0]["text"])["item_id"]
+        calls.append(item_id)
+        if item_id in fail_once:
+            fail_once.remove(item_id)
+            raise RuntimeError("temporary model error")
+        return json.dumps({"status": "predicted", "prediction": "left leg kicks",
+                           "reason": "adjacent source frames", "evidence_frames": [2]})
+
+    monkeypatch.setattr("scripts.recreation.second_pass_infer.uniart_chat", model)
+    baseline_pack = service.second_pass_frame_pack(project["id"], project["analysis_id"], timeline_key(project))
+    baseline = infer_pack(baseline_pack, "previous-model", chat=model)
+    service.import_candidate_completion(project["id"], project["analysis_id"], timeline_key(project), baseline)
+    calls.clear()
+    fail_once.add(candidate_ids[-1])
+    record, pack, config, run_id = service.start_second_pass(
+        project["id"], project["analysis_id"], timeline_key(project), "uniart/qwen3-vl-plus")
+    service.process_second_pass(project["id"], run_id, pack, config, "uniart/qwen3-vl-plus")
+    failed = service.get(project["id"])
+    assert failed["candidate_completion_run"]["status"] == "failed"
+    assert failed["candidate_completion_run"]["completed_items"] == len(candidate_ids) - 1
+    assert len(failed["candidate_completion_run"]["items"]) == len(candidate_ids) - 1
+    assert valid_completion(failed)
+    assert failed["candidate_completion"]["run_id"] == baseline["run_id"]
+
+    record, pack, config, retry_id = service.start_second_pass(
+        project["id"], project["analysis_id"], timeline_key(project), "uniart/qwen3-vl-plus")
+    assert retry_id != run_id
+    assert record["candidate_completion_run"]["completed_items"] == len(candidate_ids) - 1
+    service.process_second_pass(project["id"], retry_id, pack, config, "uniart/qwen3-vl-plus")
+    completed = service.get(project["id"])
+    assert completed["candidate_completion_run"]["status"] == "completed"
+    assert valid_completion(completed)
+    assert calls.count(candidate_ids[0]) == 1
+    assert calls.count(candidate_ids[-1]) == 2
+
+
 def test_import_surfaces_unknown_analysis_without_overwriting_review(service, video):
     project = reviewed(service, video)
     items = deepcopy(project["shot_review"]["items"])
