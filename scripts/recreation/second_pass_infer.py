@@ -62,17 +62,19 @@ def uniart_chat(messages, *, model, response_format, timeout_seconds, api_key=No
     return response.json()["choices"][0]["message"]["content"]
 
 
-def infer_pack(content: bytes, model: str, chat=None, on_progress=None):
+def infer_pack(content: bytes, model: str, chat=None, on_progress=None, item_ids=None):
     chat = chat or LLMAdapter().chat
     with ZipFile(BytesIO(content)) as archive:
         manifest = json.loads(archive.read("manifest.json"))
         if manifest.get("schema_version") != "shot-second-pass-frames.v1":
             raise ValueError("Unsupported second-pass frame pack")
         files = {row["frame"]: row for row in manifest["frames"]}
+        candidates = [row for row in manifest["candidates"]
+                      if item_ids is None or row["item_id"] in item_ids]
         results = []
         if on_progress:
-            on_progress(0, len(manifest["candidates"]))
-        for candidate in manifest["candidates"]:
+            on_progress(0, len(candidates))
+        for candidate in candidates:
             reference_frames = candidate["reference_frames"]
             if not reference_frames or any(frame not in files for frame in reference_frames):
                 raise ValueError("Candidate references a missing source frame")
@@ -109,7 +111,7 @@ def infer_pack(content: bytes, model: str, chat=None, on_progress=None):
                             "prediction": prediction, "reason": reason,
                             "method": PROMPT_REVISION, "evidence_frames": evidence})
             if on_progress:
-                on_progress(len(results), len(manifest["candidates"]))
+                on_progress(len(results), len(candidates))
     return {"schema_version": "shot-candidate-completion.v2", "status": "completed",
             "source_fingerprint": manifest["source_fingerprint"],
             "analysis_id": manifest["analysis_id"],

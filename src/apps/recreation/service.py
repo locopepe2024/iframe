@@ -8,9 +8,12 @@ import shutil
 import sqlite3
 import subprocess
 import threading
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import time
 import warnings
 from fractions import Fraction
+from io import BytesIO
+from zipfile import ZipFile
 
 from ...utils.system_check import resolve_media_command
 from ...utils.storage_config import media_root
@@ -26,7 +29,7 @@ from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
 from .mentions import TOKEN, compile_mentions
 from .prompt_contract import compile_h3, guidance_snapshot
 from .shot_review import import_candidates, timeline_key, validate_items
-from .candidate_completion import candidate_digest, import_completion
+from .candidate_completion import candidate_digest, import_completion, model_candidate_ids
 from .second_pass_frames import build_frame_pack
 from .staged_review import approve_detail, freeze_macro, import_detail, source_binding, validate_detail_items
 from ...utils.model_catalog import load_generated_model_catalog
@@ -1530,6 +1533,7 @@ class RecreationService:
 
     def start_second_pass(self, project_id, analysis_id, key, model):
         from ..studio_access import runtime_uniart_for_owner
+        from scripts.recreation.second_pass_infer import PROMPT_REVISION
 
         if not isinstance(model, str) or not model.startswith("uniart/"):
             raise HTTPException(422, "Select a UniArt vision model")
@@ -1542,22 +1546,42 @@ class RecreationService:
         if not (config.get("api_key") or "").strip():
             raise HTTPException(409, "Configure a UniArt API key before second analysis")
         pack = self.second_pass_frame_pack(project_id, analysis_id, key)
+        with ZipFile(BytesIO(pack)) as archive:
+            pack_manifest = json.loads(archive.read("manifest.json"))
         with self.db() as db:
             record = self._get(db, project_id)
             if (analysis_id != record.get("analysis_id") or key != timeline_key(record)
                     or (record.get("shot_review") or {}).get("timeline_key") != key):
                 raise HTTPException(409, "Second-pass source changed")
+            if (pack_manifest["source_fingerprint"] != record["source_fingerprint"]
+                    or pack_manifest["candidate_digest"] != candidate_digest(record)
+                    or pack_manifest["analysis_id"] != analysis_id
+                    or pack_manifest["timeline_key"] != key):
+                raise HTTPException(409, "Second-pass review changed while extracting frames")
             previous = record.get("candidate_completion_run") or {}
             if (previous.get("status") in {"queued", "running"} and
                     time.time() - previous.get("updated_at", 0) < _SECOND_PASS_STALE_SECONDS):
                 raise HTTPException(409, "Second analysis is already running")
+            digest = candidate_digest(record)
+            reusable = (previous.get("model") == model
+                        and previous.get("analysis_id") == analysis_id
+                        and previous.get("timeline_key") == key
+                        and previous.get("candidate_digest") == digest
+                        and previous.get("prompt_revision") == PROMPT_REVISION
+                        and previous.get("review_revision") == record["shot_review"]["review_revision"]
+                        and previous.get("status") != "completed")
+            saved_items = previous.get("items", {}) if reusable else {}
+            saved_items = {item_id: row for item_id, row in saved_items.items()
+                           if item_id in model_candidate_ids(record)}
             run_id = uuid4().hex
             record["candidate_completion_run"] = {
                 "run_id": run_id, "status": "queued", "model": model,
                 "analysis_id": analysis_id, "timeline_key": key,
-                "candidate_digest": candidate_digest(record),
+                "candidate_digest": digest,
+                "prompt_revision": PROMPT_REVISION,
                 "review_revision": record["shot_review"]["review_revision"],
-                "completed_items": 0, "total_items": 0, "error": "", "updated_at": time.time(),
+                "completed_items": len(saved_items), "total_items": len(model_candidate_ids(record)),
+                "items": saved_items, "failed_items": {}, "error": "", "updated_at": time.time(),
             }
             self._save(db, record)
         return record, pack, config, run_id
@@ -1565,7 +1589,10 @@ class RecreationService:
     def process_second_pass(self, project_id, run_id, pack, config, model):
         from scripts.recreation.second_pass_infer import infer_pack, uniart_chat
 
-        def update(status, completed=None, total=None, error=""):
+        with ZipFile(BytesIO(pack)) as archive:
+            candidate_ids = {row["item_id"] for row in json.loads(archive.read("manifest.json"))["candidates"]}
+
+        def update(status, item=None, failed_id=None, error=""):
             with self.db() as db:
                 record = self._get(db, project_id)
                 job = record.get("candidate_completion_run") or {}
@@ -1577,17 +1604,52 @@ class RecreationService:
                         job["review_revision"] != (record.get("shot_review") or {}).get("review_revision")):
                     raise RuntimeError("Second analysis source changed during the run")
                 job.update(status=status, updated_at=time.time(), error=error)
-                if completed is not None:
-                    job.update(completed_items=completed, total_items=total)
+                if item is not None:
+                    job.setdefault("items", {})[item["item_id"]] = item
+                    job.setdefault("failed_items", {}).pop(item["item_id"], None)
+                if failed_id is not None:
+                    job.setdefault("failed_items", {})[failed_id] = error[:500]
+                job["completed_items"] = len(job.get("items", {}))
                 record["candidate_completion_run"] = job
                 self._save(db, record)
+                return job
 
         try:
-            update("running")
+            job = update("running")
             chat = lambda messages, **kwargs: uniart_chat(
                 messages, api_key=config["api_key"], base_url=config.get("base_url"), **kwargs)
-            package = infer_pack(pack, model.removeprefix("uniart/"), chat=chat,
-                                 on_progress=lambda done, total: update("running", done, total))
+            model_id = model.removeprefix("uniart/")
+            remaining = iter(sorted(candidate_ids - set(job.get("items", {}))))
+            failures = {}
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                pending = {}
+
+                def submit_next():
+                    item_id = next(remaining, None)
+                    if item_id is not None:
+                        pending[pool.submit(infer_pack, pack, model_id, chat=chat,
+                                            item_ids={item_id})] = item_id
+
+                for _ in range(3):
+                    submit_next()
+                while pending:
+                    done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        item_id = pending.pop(future)
+                        try:
+                            row = future.result()["items"][0]
+                        except Exception as exc:
+                            failures[item_id] = str(exc)[:500]
+                            update("running", failed_id=item_id, error=str(exc)[:500])
+                        else:
+                            update("running", item=row)
+                        submit_next()
+            if failures:
+                update("failed", error=f"{len(failures)} candidates failed; retry the run")
+                return
+            job = update("running")
+            package = infer_pack(pack, model_id, chat=chat, item_ids=set())
+            package["items"] = list(job["items"].values())
             with self.db() as db:
                 record = self._get(db, project_id)
                 job = record.get("candidate_completion_run") or {}
@@ -1597,7 +1659,7 @@ class RecreationService:
                         or job["review_revision"] != (record.get("shot_review") or {}).get("review_revision")):
                     raise RuntimeError("Second analysis source changed during the run")
                 record["candidate_completion"] = import_completion(record, package)
-                job.update(status="completed", updated_at=time.time())
+                job.update(status="completed", error="", updated_at=time.time())
                 self._save(db, record)
         except Exception as exc:
             with self.db() as db:
