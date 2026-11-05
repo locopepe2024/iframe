@@ -107,6 +107,24 @@ it("starts each base preset from its own proportions", () => {
     expect(screen.getByLabelText(/鼻尖突出度/)).toHaveValue("100");
 });
 
+it("offers five face presets, including a distinct child shape", () => {
+    render(<WhiteFaceModel characterName="苏砚" onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    const select = screen.getByLabelText("基础脸型") as HTMLSelectElement;
+    expect(Array.from(select.options, option => option.text)).toEqual(["中性青年", "老年", "儿童", "男性", "女性"]);
+    fireEvent.change(select, { target: { value: "child" } });
+    expect(screen.getByLabelText(/脸部长度/)).toHaveValue("88");
+    expect(screen.getByLabelText(/下颌宽度/)).toHaveValue("84");
+    expect(screen.getByLabelText(/鼻尖突出度/)).toHaveValue("86");
+});
+
+it("keeps a saved middle-aged shape selectable when reopening it", () => {
+    render(<WhiteFaceModel characterName="苏砚" initialShape={{ basePreset: "middle_aged", jawWidth: 107 }} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    expect(screen.getByLabelText("基础脸型")).toHaveValue("middle_aged");
+    expect(screen.getByLabelText(/下颌宽度/)).toHaveValue("107");
+});
+
 it("deforms the mature head mesh around the nose without moving the opposite side", () => {
     const neutral = faceShellGeometry(DEFAULT_FACE_SHAPE, meshData);
     const wide = faceShellGeometry({ ...DEFAULT_FACE_SHAPE, noseBridgeWidth: 125 }, meshData);

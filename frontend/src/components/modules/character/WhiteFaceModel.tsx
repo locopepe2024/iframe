@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { api, type AssetLibraryReference } from "@/lib/api";
-import { FACE_BASE_PRESETS, faceBaseShape, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape } from "@/lib/whiteFaceShape";
+import { FACE_BASE_PRESETS, SELECTABLE_FACE_PRESETS, faceBaseShape, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape } from "@/lib/whiteFaceShape";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
 
 const CONTROL_GROUPS: Array<[string, Array<[keyof FaceShape, string, number, number]>]> = [
@@ -117,7 +117,8 @@ export default function WhiteFaceModel({ characterName, initialShape, onSaved, s
                 const preset = event.target.value as FaceBasePreset;
                 setShape(faceBaseShape(preset));
             }} className="mt-1 min-h-9 w-full rounded border border-glass-border bg-surface px-2 text-xs text-foreground">
-                {Object.entries(FACE_BASE_PRESETS).map(([key, preset]) => <option key={key} value={key}>{preset.label}</option>)}
+                {(shape.basePreset === "middle_aged" ? [...SELECTABLE_FACE_PRESETS, "middle_aged" as const] : SELECTABLE_FACE_PRESETS)
+                    .map(key => <option key={key} value={key}>{FACE_BASE_PRESETS[key].label}</option>)}
             </select>
         </label>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
