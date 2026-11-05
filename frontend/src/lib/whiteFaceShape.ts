@@ -24,14 +24,19 @@ export type FaceShape = {
     mouthCornerTilt: number;
 };
 
-export type FaceBasePreset = "neutral_young" | "masculine_young" | "feminine_young" | "middle_aged" | "older";
+export type FaceBasePreset = "neutral_young" | "older" | "child" | "masculine_young" | "feminine_young" | "middle_aged";
+
+export const SELECTABLE_FACE_PRESETS: FaceBasePreset[] = [
+    "neutral_young", "older", "child", "masculine_young", "feminine_young",
+];
 
 export const FACE_BASE_PRESETS: Record<FaceBasePreset, { label: string; values: Partial<FaceShape> }> = {
     neutral_young: { label: "中性青年", values: {} },
-    masculine_young: { label: "男性青年", values: { faceWidth: 106, cheekWidth: 108, jawWidth: 112, chinWidth: 106, noseBridgeWidth: 106, noseProjection: 106, browEyeDistance: 96 } },
-    feminine_young: { label: "女性青年", values: { faceLength: 98, faceWidth: 96, foreheadWidth: 104, cheekWidth: 96, jawWidth: 88, chinWidth: 92, eyeSize: 106, noseProjection: 94, mouthWidth: 96 } },
-    middle_aged: { label: "中年", values: { faceLength: 102, faceWidth: 104, jawWidth: 104, chinProjection: 104, eyeSize: 96, eyeDepth: 108, browEyeDistance: 104, philtrumLength: 106 } },
     older: { label: "老年", values: { faceLength: 104, faceWidth: 106, foreheadWidth: 96, cheekWidth: 102, jawWidth: 98, chinWidth: 94, eyeSize: 92, eyeDepth: 112, browEyeDistance: 108, mouthCornerTilt: 96, philtrumLength: 110 } },
+    child: { label: "儿童", values: { faceLength: 88, faceWidth: 104, foreheadWidth: 108, cheekWidth: 102, jawWidth: 84, chinWidth: 86, chinProjection: 90, noseBridgeHeight: 88, noseBridgeWidth: 94, noseProjection: 86, noseTipWidth: 92, eyeSize: 112, browEyeDistance: 104, mouthWidth: 92, philtrumLength: 90 } },
+    masculine_young: { label: "男性", values: { faceWidth: 106, cheekWidth: 108, jawWidth: 112, chinWidth: 106, noseBridgeWidth: 106, noseProjection: 106, browEyeDistance: 96 } },
+    feminine_young: { label: "女性", values: { faceLength: 98, faceWidth: 96, foreheadWidth: 104, cheekWidth: 96, jawWidth: 88, chinWidth: 92, eyeSize: 106, noseProjection: 94, mouthWidth: 96 } },
+    middle_aged: { label: "中年", values: { faceLength: 102, faceWidth: 104, jawWidth: 104, chinProjection: 104, eyeSize: 96, eyeDepth: 108, browEyeDistance: 104, philtrumLength: 106 } },
 };
 
 export const DEFAULT_FACE_SHAPE: FaceShape = {
