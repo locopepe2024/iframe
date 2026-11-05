@@ -9,12 +9,13 @@ import headMesh from "../../../../public/models/character/makehuman-face-v1/head
 
 const meshData = headMesh as WhiteFaceMeshData;
 
-const { uploadLibraryImage, createLibraryAsset, authenticatedFetch } = vi.hoisted(() => ({
-    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(),
+const { uploadLibraryImage, createLibraryAsset, authenticatedFetch, autoMarkThreeView } = vi.hoisted(() => ({
+    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), autoMarkThreeView: vi.fn(),
 }));
 
 vi.mock("@react-three/fiber", () => ({ Canvas: () => <canvas /> }));
 vi.mock("@/lib/api", () => ({ API_URL: "http://test", authenticatedFetch, api: { uploadLibraryImage, createLibraryAsset } }));
+vi.mock("@/lib/whiteFaceAutoLandmarks", () => ({ autoMarkThreeView }));
 
 beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => meshData }));
@@ -23,11 +24,40 @@ beforeEach(() => {
         id: "face-prop", image_asset: { variants: [{ id: "face-v1" }] },
     });
     authenticatedFetch.mockReset().mockResolvedValue({ ok: true, blob: async () => new Blob(["reference"], { type: "image/png" }) });
+    autoMarkThreeView.mockReset();
     URL.createObjectURL = vi.fn(() => "blob:three-view");
     URL.revokeObjectURL = vi.fn();
     HTMLCanvasElement.prototype.toBlob = function (callback) {
         callback(new Blob(["white-face"], { type: "image/png" }));
     };
+});
+
+it("shows automatic face marks and lets the user correct one point", async () => {
+    const points = {
+        frontLeftCheek: { x: .19, y: .16 }, frontRightCheek: { x: .31, y: .16 },
+        frontLeftJaw: { x: .21, y: .21 }, frontRightJaw: { x: .29, y: .21 },
+        frontLeftEye: { x: .22, y: .12 }, frontRightEye: { x: .28, y: .12 },
+        frontChin: { x: .25, y: .25 }, sideEye: { x: .55, y: .12 },
+        sideNose: { x: .51, y: .16 }, sideChin: { x: .53, y: .25 },
+    };
+    autoMarkThreeView.mockResolvedValue(points);
+    render(<WhiteFaceModel characterName="苏砚" fitSource={{
+        scope: "series", containerId: "series-1", assetId: "su-yan", variantId: "three-view-1",
+    }} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    const image = await screen.findByAltText("苏砚三视图拟合参考");
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue({
+        left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => {},
+    });
+    fireEvent.load(image);
+    await waitFor(() => expect(screen.getByText(/已自动标记正面和侧面/)).toBeInTheDocument());
+    expect(autoMarkThreeView).toHaveBeenCalledWith(image);
+    expect(screen.getByText("已标记 10/10 · 可以拟合")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /正面画面左颧部/ }));
+    fireEvent.click(image, { clientX: 17, clientY: 18 });
+    expect(screen.getByRole("button", { name: /正面画面左颧部/ })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTitle("正面画面左颧部")).toHaveStyle({ left: "17%", top: "18%" });
+    expect(screen.getByTitle("正面画面右颧部")).toHaveStyle({ left: "31%", top: "16%" });
 });
 
 it("fits a selected three-view source and saves the reviewed shape as its 100% baseline", async () => {
@@ -37,6 +67,9 @@ it("fits a selected three-view source and saves the reviewed shape as its 100% b
     }} onSaved={onSaved} />);
     fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
     const image = await screen.findByAltText("苏砚三视图拟合参考");
+    fireEvent.click(screen.getByRole("button", { name: "拟合白模" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("请先在三视图上标记 正面画面左颧部（1/10）");
+    expect(screen.getByRole("status")).toHaveTextContent("已标记 0/10 · 下一点：正面画面左颧部");
     Object.defineProperty(image, "naturalWidth", { configurable: true, value: 1223 });
     Object.defineProperty(image, "naturalHeight", { configurable: true, value: 1286 });
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue({
@@ -44,7 +77,7 @@ it("fits a selected three-view source and saves the reviewed shape as its 100% b
     });
     const points = [[19, 16], [31, 16], [21, 21], [29, 21], [22, 12], [28, 12], [25, 25], [55, 12], [51, 16], [53, 25]];
     for (const [clientX, clientY] of points) fireEvent.click(image, { clientX, clientY });
-    await waitFor(() => expect(screen.getByRole("button", { name: "拟合白模" })).toBeEnabled());
+    expect(screen.getByRole("status")).toHaveTextContent("已标记 10/10 · 可以拟合");
     fireEvent.click(screen.getByRole("button", { name: "拟合白模" }));
     expect(screen.getByText(/拟合初稿/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();

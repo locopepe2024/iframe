@@ -6,6 +6,7 @@ import { Undo2 } from "lucide-react";
 import { API_URL, api, authenticatedFetch, type AssetLibraryReference } from "@/lib/api";
 import { DEFAULT_FACE_SHAPE, FACE_BASE_PRESETS, SELECTABLE_FACE_PRESETS, faceBaseShape, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape, type FaceShapeNumbers } from "@/lib/whiteFaceShape";
 import { FACE_FIT_MARKS, fitFaceToLandmarks, type FaceFitLandmarks, type FaceFitPoint } from "@/lib/whiteFaceFit";
+import { autoMarkThreeView } from "@/lib/whiteFaceAutoLandmarks";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
 
 const CONTROL_GROUPS: Array<[string, Array<[keyof FaceShapeNumbers, string, number, number]>]> = [
@@ -74,6 +75,9 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     const [fitImageUrl, setFitImageUrl] = useState("");
     const [fitPoints, setFitPoints] = useState<Partial<FaceFitLandmarks>>({});
     const [fitReviewed, setFitReviewed] = useState(false);
+    const [detecting, setDetecting] = useState(false);
+    const [selectedMark, setSelectedMark] = useState<keyof FaceFitLandmarks | null>(null);
+    const [autoMarkMessage, setAutoMarkMessage] = useState("");
     const stageRef = useRef<HTMLDivElement>(null);
     const fitImageRef = useRef<HTMLImageElement>(null);
 
@@ -95,6 +99,8 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             asset_type: "character", asset_id: fitSource.assetId, variant_id: fitSource.variantId,
         });
         setFitImageUrl("");
+        setDetecting(false);
+        setAutoMarkMessage("");
         authenticatedFetch(`${API_URL}/asset-index/preview?${params}`, { signal: controller.signal })
             .then(async response => {
                 if (!response.ok) throw new Error("三视图加载失败");
@@ -127,19 +133,44 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     }, [open, meshData]);
 
     const nextMark = FACE_FIT_MARKS.find(([key]) => !fitPoints[key]);
+    const markedCount = nextMark ? FACE_FIT_MARKS.findIndex(([key]) => key === nextMark[0]) : FACE_FIT_MARKS.length;
+    const detect = async (image: HTMLImageElement) => {
+        const imageSource = image.currentSrc || image.src;
+        setDetecting(true);
+        setAutoMarkMessage("正在识别人脸标记…");
+        try {
+            const points = await autoMarkThreeView(image);
+            if (fitImageRef.current !== image || (image.currentSrc || image.src) !== imageSource) return;
+            setFitPoints(points);
+            setSelectedMark(null);
+            setFitReviewed(false);
+            setAutoMarkMessage("已自动标记正面和侧面，请核对点位；点击标记名称可重新定位。");
+            setError("");
+        } catch (cause) {
+            if (fitImageRef.current === image && (image.currentSrc || image.src) === imageSource) setAutoMarkMessage(cause instanceof Error ? cause.message : "自动标记失败，请手动标记");
+        } finally {
+            if (fitImageRef.current === image && (image.currentSrc || image.src) === imageSource) setDetecting(false);
+        }
+    };
     const markImage = (event: React.MouseEvent<HTMLImageElement>) => {
-        if (!nextMark) return;
+        if (detecting) return;
+        const mark = selectedMark || nextMark?.[0];
+        if (!mark) return;
         const rect = event.currentTarget.getBoundingClientRect();
         const point: FaceFitPoint = {
             x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
             y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
         };
-        setFitPoints(current => ({ ...current, [nextMark[0]]: point }));
+        setFitPoints(current => ({ ...current, [mark]: point }));
+        setSelectedMark(null);
+        setFitReviewed(false);
         setError("");
     };
 
     const fit = () => {
-        if (!meshData || !fitSource || !fitImageRef.current || nextMark) return;
+        if (!fitImageUrl || !fitImageRef.current || !fitSource) { setError("三视图尚未加载完成。"); return; }
+        if (!meshData) { setError("面部白模尚未加载完成。"); return; }
+        if (nextMark) { setError(`请先在三视图上标记 ${nextMark[1]}（${markedCount + 1}/${FACE_FIT_MARKS.length}）。`); return; }
         try {
             const image = fitImageRef.current;
             const { shape: baselineShape, residual } = fitFaceToLandmarks(
@@ -206,24 +237,35 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
         </label>
         {fitSource && <div className="space-y-2">
             <div className="text-xs text-text-secondary">拟合参考 · 三视图</div>
+            <p className="text-xs text-text-secondary">自动标记后请核对正面与侧面点位。可选择标记名称，再点击图像校正位置。</p>
             {fitImageUrl ? <div className="max-h-[600px] w-full overflow-auto rounded border border-glass-border">
                 <div className="relative w-full min-w-[760px] max-w-[1223px]">
-                <img ref={fitImageRef} src={fitImageUrl} alt={`${characterName}三视图拟合参考`} className="block h-auto w-full cursor-crosshair" onClick={markImage} />
+                <img ref={fitImageRef} src={fitImageUrl} alt={`${characterName}三视图拟合参考`} className="block h-auto w-full cursor-crosshair" onLoad={event => {
+                    if (!Object.keys(fitPoints).length) void detect(event.currentTarget);
+                }} onClick={markImage} />
                 {FACE_FIT_MARKS.map(([key, label]) => {
                     const point = fitPoints[key];
                     return point ? <span key={key} title={label} className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black bg-lime-300" style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }} /> : null;
                 })}
                 </div>
             </div> : <div className="text-xs text-text-muted">三视图加载中</div>}
+            {autoMarkMessage && <p role="status" className="text-xs text-text-secondary">{autoMarkMessage}</p>}
+            <div className="flex flex-wrap gap-1">
+                {FACE_FIT_MARKS.map(([key, label]) => <button key={key} type="button" aria-pressed={selectedMark === key}
+                    onClick={() => setSelectedMark(key)} className={`min-h-8 rounded border px-2 text-xs ${selectedMark === key ? "border-lime-300 text-lime-200" : "border-glass-border text-text-secondary"}`}>
+                    {fitPoints[key] ? "✓ " : "○ "}{label}
+                </button>)}
+            </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-                <span>{nextMark ? `${FACE_FIT_MARKS.findIndex(([key]) => key === nextMark[0]) + 1}/${FACE_FIT_MARKS.length} · ${nextMark[1]}` : "标记已完成"}</span>
+                <span role="status">{nextMark ? `已标记 ${markedCount}/${FACE_FIT_MARKS.length} · 下一点：${nextMark[1]}` : `已标记 ${FACE_FIT_MARKS.length}/${FACE_FIT_MARKS.length} · 可以拟合`}</span>
                 <button type="button" title="撤回上一个标记" aria-label="撤回上一个标记" disabled={Object.keys(fitPoints).length === 0} onClick={() => setFitPoints(current => {
                     const last = [...FACE_FIT_MARKS].reverse().find(([key]) => current[key]);
                     if (!last) return current;
                     const next = { ...current }; delete next[last[0]]; return next;
                 })} className="flex size-9 items-center justify-center rounded border border-glass-border text-foreground disabled:opacity-50"><Undo2 size={15} /></button>
                 <button type="button" onClick={() => { setFitPoints({}); setError(""); }} className="min-h-9 rounded border border-glass-border px-2 text-foreground">重置标记</button>
-                <button type="button" disabled={!!nextMark || !meshData || !fitImageUrl} onClick={fit} className="min-h-9 rounded border border-glass-border px-2 text-foreground disabled:opacity-50">拟合白模</button>
+                <button type="button" disabled={detecting || !fitImageUrl} onClick={() => { if (fitImageRef.current) void detect(fitImageRef.current); }} className="min-h-9 rounded border border-glass-border px-2 text-foreground disabled:opacity-50">{detecting ? "识别中…" : "重新自动标记"}</button>
+                <button type="button" onClick={fit} className="min-h-9 rounded border border-glass-border px-2 text-foreground hover:bg-hover-bg">拟合白模</button>
             </div>
             {shape.calibration?.source.variant_id === fitSource.variantId &&
                 <div className="space-y-1 text-xs text-text-secondary">

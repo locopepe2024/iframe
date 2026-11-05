@@ -16,6 +16,7 @@
     "verify:playground": "npm run typecheck && npm run check:playground-ratio && npm run test -- --run src/__tests__/playground-mediaDisplay.test.ts && npm run test:ui -- src/components/modules/playground/ResultCard.test.tsx"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "0.10.8",
     "@react-three/drei": "^9.108.0",
     "@react-three/fiber": "^8.16.8",
     "@tauri-apps/api": "^2.11.1",
