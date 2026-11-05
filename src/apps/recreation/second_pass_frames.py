@@ -29,6 +29,39 @@ def mentioned_frames(text, available):
     return selected & available
 
 
+def review_text(item):
+    if item["decision"] in {"edit", "unknown"} and (item.get("edited_text") or "").strip():
+        return item["edited_text"].strip()
+    if item["source"].get("provenance") == "human":
+        return (item.get("edited_text") or "").strip()
+    return item["candidate"].strip()
+
+
+def semantic_pool(items, shot_id):
+    pool = []
+    for item in items:
+        if item["shot_id"] != shot_id:
+            continue
+        decision = item["decision"]
+        if decision == "reject":
+            continue
+        pool.append({"item_id": item["id"], "kind": item["kind"],
+                     "frame_span": item["frame_span"], "decision": decision,
+                     "text": review_text(item),
+                     "provenance": item["source"].get("provenance", "model_candidate")})
+    return pool
+
+
+def contiguous_clips(selected):
+    clips = []
+    for frame in sorted(selected):
+        if clips and frame == clips[-1][-1] + 1:
+            clips[-1].append(frame)
+        else:
+            clips.append([frame])
+    return clips
+
+
 def frame_windows(record):
     frames = record["analysis"]["frame_pts"]
     items = (record.get("shot_review") or {}).get("items", [])
@@ -45,7 +78,7 @@ def frame_windows(record):
         anchors = {first, last, (first + last) // 2}
         if evidence:
             anchors.update((evidence[0], evidence[len(evidence) // 2], evidence[-1]))
-        explicit = mentioned_frames(item["candidate"], shot_frames)
+        explicit = mentioned_frames(review_text(item), shot_frames)
         anchors.update(explicit)
         if item["kind"] == "uncertainty" and last - first >= 20 and not explicit:
             anchors.update(row["frame_span"][0] for row in items
@@ -53,18 +86,38 @@ def frame_windows(record):
                            and first <= row["frame_span"][0] <= last)
         selected = {n for anchor in anchors for n in (anchor - 1, anchor, anchor + 1)
                     if n in shot_frames}
+        if item["kind"] == "action" and last - first <= 12:
+            selected.update(n for n in range(first, last + 1) if n in shot_frames)
+        # Keep neighboring action phases together at their shared boundary.
+        if item["kind"] in {"action", "uncertainty"}:
+            for row in items:
+                if row["shot_id"] != item["shot_id"] or row["kind"] != "action":
+                    continue
+                boundary = row["frame_span"][0]
+                if first - 2 <= boundary <= last + 2:
+                    selected.update(n for n in range(boundary - 2, boundary + 2)
+                                    if n in shot_frames)
         windows.append({"item_id": item["id"], "shot_id": item["shot_id"],
                         "kind": item["kind"], "frame_span": item["frame_span"],
-                        "first_analysis": item["candidate"], "first_analysis_source": item["source"],
+                        "first_analysis": review_text(item),
+                        "first_analysis_source": (item["source"] if not (
+                            item["decision"] in {"edit", "unknown"} and
+                            (item.get("edited_text") or "").strip()) else
+                                                  {"provenance": item["source"].get("provenance"),
+                                                   "field": item["source"].get("field")}),
                         "context": [{"item_id": row["id"], "kind": row["kind"],
-                                     "frame_span": row["frame_span"], "first_analysis": row["candidate"]}
+                                     "frame_span": row["frame_span"], "first_analysis": review_text(row),
+                                     "decision": row["decision"]}
                                     for row in items if row["id"] != item["id"]
                                     and row["shot_id"] == item["shot_id"]
+                                    and row["decision"] != "reject"
                                     and row["source"].get("provenance") != "human"
                                     and row["frame_span"][0] <= last + 1
                                     and row["frame_span"][1] >= first - 1],
                         "review_priority": item["decision"] == "pending",
-                        "reference_frames": sorted(selected)})
+                        "reference_frames": sorted(selected),
+                        "reference_clips": contiguous_clips(selected),
+                        "shot_semantics": semantic_pool(items, item["shot_id"])})
     return sorted(windows, key=lambda row: not row["review_priority"])
 
 
