@@ -7,6 +7,7 @@ import { API_URL, api, authenticatedFetch, type AssetLibraryReference } from "@/
 import { DEFAULT_FACE_SHAPE, FACE_BASE_PRESETS, SELECTABLE_FACE_PRESETS, faceBaseShape, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape, type FaceShapeNumbers } from "@/lib/whiteFaceShape";
 import { FACE_FIT_MARKS, fitFaceToLandmarks, type FaceFitLandmarks, type FaceFitPoint } from "@/lib/whiteFaceFit";
 import { autoMarkThreeView } from "@/lib/whiteFaceAutoLandmarks";
+import { resolveAssetVariantDelivery } from "@/lib/mediaDelivery";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
 
 const CONTROL_GROUPS: Array<[string, Array<[keyof FaceShapeNumbers, string, number, number]>]> = [
@@ -94,17 +95,20 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
         if (!open || !fitSource) return;
         const controller = new AbortController();
         let objectUrl = "";
-        const params = new URLSearchParams({
-            scope: fitSource.scope, container_id: fitSource.containerId,
-            asset_type: "character", asset_id: fitSource.assetId, variant_id: fitSource.variantId,
-        });
         setFitImageUrl("");
         setDetecting(false);
         setAutoMarkMessage("");
-        authenticatedFetch(`${API_URL}/asset-index/preview?${params}`, { signal: controller.signal })
-            .then(async response => {
+        resolveAssetVariantDelivery({
+            scope: fitSource.scope, containerId: fitSource.containerId,
+            assetType: "character", assetId: fitSource.assetId, variantId: fitSource.variantId,
+        }).then(async sourceUrl => {
+                if (controller.signal.aborted) return;
+                const sourceOrigin = new URL(sourceUrl, window.location.href).origin;
+                const apiOrigin = new URL(API_URL, window.location.href).origin;
+                const response = await (sourceOrigin === apiOrigin ? authenticatedFetch : fetch)(sourceUrl, { signal: controller.signal });
                 if (!response.ok) throw new Error("三视图加载失败");
                 const blob = await response.blob();
+                if (!blob.type.startsWith("image/")) throw new Error("三视图源素材不是图像");
                 if (!controller.signal.aborted) {
                     objectUrl = URL.createObjectURL(blob);
                     setFitImageUrl(objectUrl);
@@ -133,7 +137,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     }, [open, meshData]);
 
     const nextMark = FACE_FIT_MARKS.find(([key]) => !fitPoints[key]);
-    const markedCount = nextMark ? FACE_FIT_MARKS.findIndex(([key]) => key === nextMark[0]) : FACE_FIT_MARKS.length;
+    const markedCount = FACE_FIT_MARKS.filter(([key]) => !!fitPoints[key]).length;
     const detect = async (image: HTMLImageElement) => {
         const imageSource = image.currentSrc || image.src;
         setDetecting(true);
@@ -144,7 +148,9 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             setFitPoints(points);
             setSelectedMark(null);
             setFitReviewed(false);
-            setAutoMarkMessage("已自动标记正面和侧面，请核对点位；点击标记名称可重新定位。");
+            setAutoMarkMessage(points.frontLeftCheek && points.sideEye
+                ? "已自动标记正面和侧面，请核对点位；点击标记名称可重新定位。"
+                : points.frontLeftCheek ? "已自动标记正面，请手动补齐侧面点位。" : "已自动标记侧面，请手动补齐正面点位。");
             setError("");
         } catch (cause) {
             if (fitImageRef.current === image && (image.currentSrc || image.src) === imageSource) setAutoMarkMessage(cause instanceof Error ? cause.message : "自动标记失败，请手动标记");

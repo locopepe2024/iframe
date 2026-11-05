@@ -9,13 +9,14 @@ import headMesh from "../../../../public/models/character/makehuman-face-v1/head
 
 const meshData = headMesh as WhiteFaceMeshData;
 
-const { uploadLibraryImage, createLibraryAsset, authenticatedFetch, autoMarkThreeView } = vi.hoisted(() => ({
-    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), autoMarkThreeView: vi.fn(),
+const { uploadLibraryImage, createLibraryAsset, authenticatedFetch, autoMarkThreeView, resolveAssetVariantDelivery } = vi.hoisted(() => ({
+    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), autoMarkThreeView: vi.fn(), resolveAssetVariantDelivery: vi.fn(),
 }));
 
 vi.mock("@react-three/fiber", () => ({ Canvas: () => <canvas /> }));
 vi.mock("@/lib/api", () => ({ API_URL: "http://test", authenticatedFetch, api: { uploadLibraryImage, createLibraryAsset } }));
 vi.mock("@/lib/whiteFaceAutoLandmarks", () => ({ autoMarkThreeView }));
+vi.mock("@/lib/mediaDelivery", () => ({ resolveAssetVariantDelivery }));
 
 beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => meshData }));
@@ -24,6 +25,7 @@ beforeEach(() => {
         id: "face-prop", image_asset: { variants: [{ id: "face-v1" }] },
     });
     authenticatedFetch.mockReset().mockResolvedValue({ ok: true, blob: async () => new Blob(["reference"], { type: "image/png" }) });
+    resolveAssetVariantDelivery.mockReset().mockResolvedValue("http://test/studio/owned-media/owner/three-view.png");
     autoMarkThreeView.mockReset();
     URL.createObjectURL = vi.fn(() => "blob:three-view");
     URL.revokeObjectURL = vi.fn();
@@ -46,6 +48,10 @@ it("shows automatic face marks and lets the user correct one point", async () =>
     }} onSaved={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
     const image = await screen.findByAltText("苏砚三视图拟合参考");
+    await waitFor(() => expect(resolveAssetVariantDelivery).toHaveBeenCalledWith({
+        scope: "series", containerId: "series-1", assetType: "character", assetId: "su-yan", variantId: "three-view-1",
+    }));
+    expect(authenticatedFetch).toHaveBeenCalledWith("http://test/studio/owned-media/owner/three-view.png", expect.objectContaining({ signal: expect.any(AbortSignal) }));
     vi.spyOn(image, "getBoundingClientRect").mockReturnValue({
         left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => {},
     });
@@ -58,6 +64,24 @@ it("shows automatic face marks and lets the user correct one point", async () =>
     expect(screen.getByRole("button", { name: /正面画面左颧部/ })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByTitle("正面画面左颧部")).toHaveStyle({ left: "17%", top: "18%" });
     expect(screen.getByTitle("正面画面右颧部")).toHaveStyle({ left: "31%", top: "16%" });
+});
+
+it("keeps front marks when profile detection needs manual completion", async () => {
+    autoMarkThreeView.mockResolvedValue({
+        frontLeftCheek: { x: .19, y: .16 }, frontRightCheek: { x: .31, y: .16 },
+        frontLeftJaw: { x: .21, y: .21 }, frontRightJaw: { x: .29, y: .21 },
+        frontLeftEye: { x: .22, y: .12 }, frontRightEye: { x: .28, y: .12 },
+        frontChin: { x: .25, y: .25 },
+    });
+    render(<WhiteFaceModel characterName="苏砚" fitSource={{
+        scope: "series", containerId: "series-1", assetId: "su-yan", variantId: "three-view-1",
+    }} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    const image = await screen.findByAltText("苏砚三视图拟合参考");
+    fireEvent.load(image);
+    expect(await screen.findByText("已自动标记正面，请手动补齐侧面点位。")).toBeInTheDocument();
+    expect(screen.getByText("已标记 7/10 · 下一点：侧面眼中心")).toBeInTheDocument();
+    expect(screen.getByTitle("正面画面左颧部")).toHaveStyle({ left: "19%", top: "16%" });
 });
 
 it("fits a selected three-view source and saves the reviewed shape as its 100% baseline", async () => {
