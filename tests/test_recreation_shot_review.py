@@ -41,6 +41,37 @@ def test_long_uncertainties_include_named_frames_and_action_boundaries():
     assert set(range(3, 7)) | set(range(43, 50)) <= set(windows["blur"])
 
 
+def test_second_pass_uses_reviewed_text_and_stays_inside_shot():
+    items = [
+        {"id": "edited", "kind": "action", "shot_id": "first", "frame_span": [3, 5],
+         "evidence_frames": [4], "candidate": "old leg direction", "edited_text": "left leg kicks",
+         "decision": "edit", "source": {"provenance": "model_candidate", "action": "old leg direction"}},
+        {"id": "manual", "kind": "camera", "shot_id": "first", "frame_span": [1, 5],
+         "evidence_frames": [], "candidate": "", "edited_text": "fixed camera",
+         "decision": "accept", "source": {"provenance": "human"}},
+        {"id": "unknown", "kind": "uncertainty", "shot_id": "first", "frame_span": [4, 5],
+         "evidence_frames": [4], "candidate": "old unknown claim", "edited_text": "heel is occluded",
+         "decision": "unknown", "source": {"provenance": "model_candidate", "field": "contact",
+                                             "uncertainty": "old unknown claim"}},
+        {"id": "next", "kind": "action", "shot_id": "second", "frame_span": [6, 8],
+         "evidence_frames": [6], "candidate": "walks", "edited_text": "",
+         "decision": "pending", "source": {"provenance": "model_candidate"}},
+    ]
+    record = {"analysis": {"frame_pts": list(range(8))},
+              "timeline": {"shots": [{"id": "first", "start_pts": 0, "end_pts": 5},
+                                      {"id": "second", "start_pts": 5, "end_pts": 8}]},
+              "shot_review": {"items": items}}
+    windows = {row["item_id"]: row for row in frame_windows(record)}
+    edited = windows["edited"]
+    assert edited["first_analysis"] == "left leg kicks"
+    assert "old leg direction" not in json.dumps(edited)
+    assert [row["text"] for row in edited["shot_semantics"]] == [
+        "left leg kicks", "fixed camera", "heel is occluded"]
+    assert edited["reference_clips"] == [[1, 2, 3, 4, 5]]
+    assert "old unknown claim" not in json.dumps(windows["unknown"])
+    assert all(frame >= 6 for frame in windows["next"]["reference_frames"])
+
+
 def reviewed(service, video):
     project = completed(service, video)
     cut = project["analysis"]["frame_pts"][5]
@@ -61,7 +92,9 @@ def test_second_pass_uses_adjacent_source_frames_and_imports_model_result(servic
         assert manifest["source_fingerprint"] == project["source_fingerprint"]
         first = manifest["candidates"][0]
         assert first["frame_span"] == [2, 3]
-        assert first["reference_frames"] == [1, 2, 3, 4]
+        assert first["reference_frames"] == [1, 2, 3, 4, 5]
+        assert first["reference_clips"] == [[1, 2, 3, 4, 5]]
+        assert {row["item_id"] for row in first["shot_semantics"]} == {"action:kick-1", "action:kick-2"}
         assert first["first_analysis_source"]["action"] == "first kick"
         assert first["context"][0]["first_analysis"] == "second kick"
         assert all(archive.read(frame["file"]) for frame in manifest["frames"])
@@ -77,7 +110,10 @@ def test_second_pass_uses_adjacent_source_frames_and_imports_model_result(servic
 
     result = infer_pack(pack, "test-vision", chat=model)
     assert len(calls) == len(manifest["candidates"])
-    assert sum(part["type"] == "image_url" for part in calls[0]) == 4
+    assert sum(part["type"] == "image_url" for part in calls[0]) == 5
+    first_input = json.loads(calls[0][0]["text"])
+    assert first_input["reference_clips"] == [[1, 2, 3, 4, 5]]
+    assert len(first_input["shot_semantics"]) == 2
     saved = service.import_candidate_completion(project["id"], project["analysis_id"],
                                                 timeline_key(project), result)
     assert valid_completion(saved)
