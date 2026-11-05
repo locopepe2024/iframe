@@ -22,25 +22,28 @@ function mapped(face: FaceResult, index: number, start: number, end: number): Fa
     return { x: start + point.x * (end - start), y: point.y };
 }
 
-export function mapDetectedFaces(front: FaceResult, side: FaceResult, frontRange: [number, number],
-    sideRange: [number, number], aspect: number): FaceFitLandmarks {
-    const frontLeftCheek = mapped(front, 234, ...frontRange);
-    const frontRightCheek = mapped(front, 454, ...frontRange);
-    const frontLeftJaw = mapped(front, 172, ...frontRange);
-    const frontRightJaw = mapped(front, 397, ...frontRange);
-    const frontLeftEye = mapped(front, 133, ...frontRange);
-    const frontRightEye = mapped(front, 362, ...frontRange);
-    const sideEye = mapped(side, 362, ...sideRange);
-    const points = {
-        frontLeftCheek, frontRightCheek, frontLeftJaw, frontRightJaw, frontLeftEye, frontRightEye,
-        frontChin: mapped(front, 152, ...frontRange), sideEye,
-        sideNose: mapped(side, 1, ...sideRange), sideChin: mapped(side, 152, ...sideRange),
-    };
-    imageFaceMetrics(points, aspect);
+export function mapDetectedFaces(front: FaceResult | undefined, side: FaceResult | undefined, frontRange: [number, number],
+    sideRange: [number, number], aspect: number): Partial<FaceFitLandmarks> {
+    const points: Partial<FaceFitLandmarks> = {};
+    if (front) Object.assign(points, {
+        frontLeftCheek: mapped(front, 234, ...frontRange),
+        frontRightCheek: mapped(front, 454, ...frontRange),
+        frontLeftJaw: mapped(front, 172, ...frontRange),
+        frontRightJaw: mapped(front, 397, ...frontRange),
+        frontLeftEye: mapped(front, 133, ...frontRange),
+        frontRightEye: mapped(front, 362, ...frontRange),
+        frontChin: mapped(front, 152, ...frontRange),
+    });
+    if (side) Object.assign(points, {
+        sideEye: mapped(side, 362, ...sideRange),
+        sideNose: mapped(side, 1, ...sideRange),
+        sideChin: mapped(side, 152, ...sideRange),
+    });
+    if (front && side) imageFaceMetrics(points as FaceFitLandmarks, aspect);
     return points;
 }
 
-export async function autoMarkThreeView(image: HTMLImageElement): Promise<FaceFitLandmarks> {
+export async function autoMarkThreeView(image: HTMLImageElement): Promise<Partial<FaceFitLandmarks>> {
     if (!image.naturalWidth || !image.naturalHeight) throw new Error("三视图尚未加载完成");
     const vision = await FilesetResolver.forVisionTasks(MODEL_ROOT);
     const landmarker = await FaceLandmarker.createFromOptions(vision, {
@@ -53,7 +56,7 @@ export async function autoMarkThreeView(image: HTMLImageElement): Promise<FaceFi
         const sideRange: [number, number] = [0.35, 0.66];
         const front = detect(crop(image, ...frontRange));
         const side = detect(crop(image, ...sideRange));
-        if (!front || !side) throw new Error("未能同时识别正面和侧面，请手动补齐标记");
+        if (!front && !side) throw new Error("未识别到正面或侧面人脸，请手动标记");
         return mapDetectedFaces(front, side, frontRange, sideRange, image.naturalWidth / image.naturalHeight);
     } finally {
         landmarker.close();
