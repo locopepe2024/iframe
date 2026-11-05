@@ -7,8 +7,10 @@ import {
     buildCharacterVideoPrompt,
     DEFAULT_CHARACTER_NEGATIVE_PROMPT,
 } from "@/lib/characterPrompts";
+import { DEFAULT_FACE_SHAPE } from "@/lib/whiteFaceShape";
 
 const apiMocks = vi.hoisted(() => ({
+    authenticatedFetch: vi.fn().mockResolvedValue({ ok: false }),
     getVoices: vi.fn().mockResolvedValue([{ id: 'uniart:speech-2.8-hd:male-qn-qingse', name: '清朗男声', gender: 'Male', family: 'minimax', model: 'speech-2.8-hd', origin: 'system' }]),
     listCustomVoices: vi.fn().mockResolvedValue([]),
     getAssetReferenceIndex: vi.fn(),
@@ -66,7 +68,7 @@ vi.mock("../common/VideoVariantSelector", () => ({
 }));
 vi.mock("@/components/shared/AssetIndexPreview", () => ({ AssetIndexPreview: () => <span data-testid="asset-preview" /> }));
 vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks, agentRequest: apiMocks.agentRequest,
-    authenticatedFetch: vi.fn().mockResolvedValue({ ok: false }) }));
+    authenticatedFetch: apiMocks.authenticatedFetch }));
 vi.mock("@/store/projectStore", () => ({
     useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
 }));
@@ -84,6 +86,28 @@ const baseProps = {
     isGenerating: false,
     description: "Character reference",
 };
+
+it("loads the selected three-view from the series when no episode is active", async () => {
+    const previous = projectStoreMocks.currentProject;
+    projectStoreMocks.currentProject = null as any;
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
+    apiMocks.authenticatedFetch.mockClear();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    try {
+        render(<CharacterWorkbench asset={{ id: "su-yan", name: "苏砚", description: "雪痕客",
+            three_view_asset: { selected_id: "three-view-1", variants: [{ id: "three-view-1", url: "three-view.png" }] },
+        }} seriesId="series-1" onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+        fireEvent.click(screen.getByRole("tab", { name: "面容白模" }));
+        fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+        await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
+            expect.stringContaining("scope=series&container_id=series-1&asset_type=character&asset_id=su-yan&variant_id=three-view-1"),
+            expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        ));
+    } finally {
+        projectStoreMocks.currentProject = previous;
+        vi.unstubAllGlobals();
+    }
+});
 
 it('binds a voice from the character workbench without saving visual design or generating images', async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValueOnce({ assets: [] });
@@ -872,6 +896,55 @@ it('includes saved white face proportions and new geometry once in a panel image
     expect(prompt.match(/额头宽 108%/g)).toHaveLength(1);
     expect(prompt.match(/嘴角倾斜 115%/g)).toHaveLength(1);
     expect(prompt).toContain('最终画面只呈现目标角色');
+});
+
+it('does not send superseded neutral-base percentages after a three-view fit', () => {
+    const { basePreset: ignored, ...baseline } = DEFAULT_FACE_SHAPE;
+    void ignored;
+    const shape = { ...DEFAULT_FACE_SHAPE, calibration: {
+        schema: 'iframe.white-face-fit.v1', source: { asset_type: 'character', asset_id: 'simple-role', variant_id: 'three-view-1' },
+        baseline, landmarks: {}, residual: 0.08, reviewed: true,
+    } };
+    const saved = {
+        confirmed: true, active_design_source: 'panel',
+        identity: { editor_mode: 'fields', features: {
+            face: '下颌轮廓清晰',
+            facial_proportions: '脸长 90%，脸宽 120%（中性基准 100%）',
+            eye_spacing: '眼距 80%（中性基准 100%）',
+            jaw: '下颌宽 75%（中性基准 100%）',
+        } },
+        white_face_shape: shape,
+    };
+    mountSimpleDesign({
+        three_view_asset: { selected_id: 'three-view-1', variants: [{ id: 'three-view-1', url: 'three-view.png' }] },
+        character_design: { design_draft: saved, design_revisions: [{ revision: 1, design: saved }] },
+    });
+    const prompt = imagePromptInput().textContent || '';
+    expect(prompt).toContain('下颌轮廓清晰');
+    expect(prompt).not.toContain('中性基准 100%');
+    expect(prompt).toContain('骨相');
+});
+
+it('submits the master image followed by the fitted three-view as ordered references', async () => {
+    const { basePreset: ignored, ...baseline } = DEFAULT_FACE_SHAPE;
+    void ignored;
+    const shape = { ...DEFAULT_FACE_SHAPE, calibration: {
+        schema: 'iframe.white-face-fit.v1', source: { asset_type: 'character', asset_id: 'simple-role',
+            variant_id: 'three-view-1', source_scope: 'series', source_container_id: 'series-1' },
+        baseline, landmarks: {}, residual: 0.08, reviewed: true,
+    } };
+    const saved = { confirmed: true, active_design_source: 'panel', white_face_shape: shape };
+    mountSimpleDesign({
+        full_body_asset: { selected_id: 'master-1', variants: [{ id: 'master-1', url: 'master.png' }] },
+        three_view_asset: { selected_id: 'three-view-1', variants: [{ id: 'three-view-1', url: 'three-view.png' }] },
+        character_design: { design_draft: saved, design_revisions: [{ revision: 1, design: saved }] },
+    });
+    fireEvent.click(screen.getAllByTestId('variant-generate')[0]);
+    await waitFor(() => expect(apiMocks.previewAssetImageSubmission).toHaveBeenCalled());
+    const request = apiMocks.previewAssetImageSubmission.mock.lastCall?.[1];
+    expect(request.image_generation_mode).toBe('reference');
+    expect(request.references.map((reference: { variant_id: string }) => reference.variant_id)).toEqual(['master-1', 'three-view-1']);
+    expect(request.prompt).toContain('最后一张参考图是该角色的正面、侧面和背面三视图');
 });
 
 it('submits face proportions without including the white model image in a full-body generation', async () => {

@@ -1,5 +1,4 @@
-export type FaceShape = {
-    basePreset: FaceBasePreset;
+export type FaceShapeNumbers = {
     faceLength: number;
     faceWidth: number;
     cheekWidth: number;
@@ -22,6 +21,20 @@ export type FaceShape = {
     lowerLipThickness: number;
     philtrumLength: number;
     mouthCornerTilt: number;
+};
+
+export type FaceShapeCalibration = {
+    schema: "iframe.white-face-fit.v1";
+    source: { asset_type: "character"; asset_id: string; variant_id: string; source_scope?: "series" | "project"; source_container_id?: string };
+    baseline: FaceShapeNumbers;
+    landmarks: Record<string, { x: number; y: number }>;
+    residual: number;
+    reviewed?: boolean;
+};
+
+export type FaceShape = FaceShapeNumbers & {
+    basePreset: FaceBasePreset;
+    calibration?: FaceShapeCalibration;
 };
 
 export type FaceBasePreset = "neutral_young" | "older" | "child" | "masculine_young" | "feminine_young" | "middle_aged";
@@ -58,17 +71,32 @@ export function normalizeFaceShape(shape?: Partial<FaceShape> | null): FaceShape
     return merged;
 }
 
+export function effectiveFaceShape(shape: FaceShape): FaceShape {
+    const value = normalizeFaceShape(shape);
+    if (!value.calibration) return value;
+    const effective = { ...value };
+    for (const key of Object.keys(DEFAULT_FACE_SHAPE) as Array<keyof FaceShape>) {
+        if (key === "basePreset" || key === "calibration") continue;
+        const numericKey = key as keyof FaceShapeNumbers;
+        effective[numericKey] = value.calibration.baseline[numericKey] * value[numericKey] / 100;
+    }
+    delete effective.calibration;
+    return effective;
+}
+
 export function faceBaseShape(preset: FaceBasePreset): FaceShape {
     return { ...DEFAULT_FACE_SHAPE, ...FACE_BASE_PRESETS[preset].values, basePreset: preset };
 }
 
 export function faceShapePrompt(shape: FaceShape): string {
     const value = normalizeFaceShape(shape);
+    if (value.calibration) return calibratedFacePrompt(value);
     return `${FACE_SHAPE_REFERENCE_PROMPT} 基础脸型：${FACE_BASE_PRESETS[value.basePreset]?.label || FACE_BASE_PRESETS.neutral_young.label}；头部轮廓：脸长 ${value.faceLength}%，脸宽 ${value.faceWidth}%，额头宽 ${value.foreheadWidth}%，颧部宽 ${value.cheekWidth}%，下颌宽 ${value.jawWidth}%，下巴宽 ${value.chinWidth}%，下巴前突 ${value.chinProjection}%；鼻部：鼻梁高度 ${value.noseBridgeHeight}%，鼻梁宽度 ${value.noseBridgeWidth}%，鼻尖突出度 ${value.noseProjection}%，鼻尖宽度 ${value.noseTipWidth}%，鼻翼宽度 ${value.nostrilWidth}%；眼眉：眼距 ${value.eyeSpacing}%，眼睛大小 ${value.eyeSize}%，眼窝深度 ${value.eyeDepth}%，眼尾倾斜 ${value.eyeTilt}%，眉眼距离 ${value.browEyeDistance}%；嘴唇：嘴宽 ${value.mouthWidth}%，上唇厚度 ${value.upperLipThickness}%，下唇厚度 ${value.lowerLipThickness}%，人中长度 ${value.philtrumLength}%，嘴角倾斜 ${value.mouthCornerTilt}%；100% 为中性基准。`;
 }
 
 export function faceShapePanelPrompt(shape: FaceShape): string {
     const value = normalizeFaceShape(shape);
+    if (value.calibration) return calibratedFacePrompt(value);
     const details: Array<[keyof FaceShape, string]> = [
         ["foreheadWidth", "额头宽"], ["chinWidth", "下巴宽"], ["chinProjection", "下巴前突"],
         ["noseBridgeHeight", "鼻梁高度"], ["noseBridgeWidth", "鼻梁宽度"],
@@ -81,4 +109,22 @@ export function faceShapePanelPrompt(shape: FaceShape): string {
     const changed = details.filter(([key]) => value[key] !== 100)
         .map(([key, label]) => `${label} ${value[key]}%`);
     return [FACE_SHAPE_REFERENCE_PROMPT, changed.length ? `补充骨相参数：${changed.join("，")}；100% 为中性基准。` : ""].filter(Boolean).join(" ");
+}
+
+function calibratedFacePrompt(shape: FaceShape): string {
+    const changes: Array<[keyof FaceShapeNumbers, string]> = [
+        ["faceLength", "脸部长度"], ["faceWidth", "脸部宽度"], ["cheekWidth", "颧部宽度"],
+        ["jawWidth", "下颌宽度"], ["eyeSpacing", "眼距"], ["noseProjection", "鼻尖突出度"],
+        ["chinProjection", "下巴前突"], ["noseBridgeHeight", "鼻梁高度"],
+        ["noseBridgeWidth", "鼻梁宽度"], ["noseTipWidth", "鼻尖宽度"],
+        ["nostrilWidth", "鼻翼宽度"], ["eyeSize", "眼睛大小"], ["eyeDepth", "眼窝深度"],
+        ["mouthWidth", "嘴宽"], ["upperLipThickness", "上唇厚度"],
+        ["lowerLipThickness", "下唇厚度"],
+    ];
+    const adjusted = changes.filter(([key]) => Math.abs(shape[key] - 100) >= 5)
+        .map(([key, label]) => `${label}${shape[key] > 100 ? "略增" : "略减"}`);
+    return [FACE_SHAPE_REFERENCE_PROMPT,
+        "角色面部轮廓和五官空间关系以已确认的角色形象为准。",
+        adjusted.length ? `骨相微调：${adjusted.join("、")}。` : "",
+    ].filter(Boolean).join(" ");
 }
