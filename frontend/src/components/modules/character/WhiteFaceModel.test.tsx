@@ -46,6 +46,25 @@ it("saves the edited geometry as a stable reference and matching prompt", async 
     expect(createLibraryAsset.mock.calls[0][1].description).toContain("嘴角倾斜 115%");
 });
 
+it("compares the base face with the edit and exports only the edited preview", async () => {
+    const onSaved = vi.fn();
+    render(<WhiteFaceModel characterName="苏砚" onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    expect(screen.getByLabelText("基础脸型正面与侧面预览")).toBeInTheDocument();
+    expect(screen.getByLabelText("当前调整正面与侧面预览")).toBeInTheDocument();
+    const canvases = document.querySelectorAll("canvas");
+    expect(canvases).toHaveLength(2);
+    const exported: HTMLCanvasElement[] = [];
+    HTMLCanvasElement.prototype.toBlob = function (callback) {
+        exported.push(this);
+        callback(new Blob(["edited-face"], { type: "image/png" }));
+    };
+    fireEvent.change(screen.getByLabelText(/脸部长度/), { target: { value: "112" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(exported).toEqual([screen.getByLabelText("当前调整正面与侧面预览").querySelector("canvas")]);
+});
+
 it("restores saved proportions when the workbench reopens its design", () => {
     const { rerender } = render(<WhiteFaceModel characterName="探子首领" onSaved={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
@@ -85,19 +104,27 @@ it("starts each base preset from its own proportions", () => {
 it("builds one closed facial shell with nose and eye-socket relief", () => {
     const neutral = faceShellGeometry(DEFAULT_FACE_SHAPE);
     const longNose = faceShellGeometry({ ...DEFAULT_FACE_SHAPE, noseProjection: 125 });
+    const wideBridge = faceShellGeometry({ ...DEFAULT_FACE_SHAPE, noseBridgeWidth: 125 });
+    const highBridge = faceShellGeometry({ ...DEFAULT_FACE_SHAPE, noseBridgeHeight: 125 });
     const deepEyes = faceShellGeometry({ ...DEFAULT_FACE_SHAPE, eyeDepth: 125 });
     const positions = neutral.getAttribute("position");
     const nosePositions = longNose.getAttribute("position");
     const indices = neutral.getIndex();
-    expect(positions.count).toBe(18 * 40);
-    expect(indices?.count).toBe(17 * 40 * 6);
+    expect(positions.count).toBe(18 * 64);
+    expect(indices?.count).toBe(17 * 64 * 6);
     expect(Math.max(...Array.from({ length: indices!.count }, (_, i) => indices!.getX(i)))).toBeLessThan(positions.count);
-    const tip = 8 * 40 + 10;
+    const tip = 8 * 64 + 16;
     expect(nosePositions.getZ(tip)).toBeGreaterThan(positions.getZ(tip));
     expect(neutral.getAttribute("normal").getZ(tip)).toBeGreaterThan(0);
-    const eye = 9 * 40 + 7;
+    const bridgeEdge = 11 * 64 + 13;
+    expect(wideBridge.getAttribute("position").getZ(bridgeEdge)).toBeGreaterThan(positions.getZ(bridgeEdge));
+    const bridgeCenter = 11 * 64 + 16;
+    expect(highBridge.getAttribute("position").getZ(bridgeCenter)).toBeGreaterThan(positions.getZ(bridgeCenter));
+    const eye = 9 * 64 + 11;
     expect(deepEyes.getAttribute("position").getZ(eye)).toBeLessThan(positions.getZ(eye));
     neutral.dispose();
     longNose.dispose();
+    wideBridge.dispose();
+    highBridge.dispose();
     deepEyes.dispose();
 });
