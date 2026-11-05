@@ -26,7 +26,7 @@ from .analysis import MAX_BYTES, analyze, extract_pair, fingerprint
 from .mentions import TOKEN, compile_mentions
 from .prompt_contract import compile_h3, guidance_snapshot
 from .shot_review import import_candidates, timeline_key, validate_items
-from .candidate_completion import import_completion
+from .candidate_completion import candidate_digest, import_completion
 from .second_pass_frames import build_frame_pack
 from .staged_review import approve_detail, freeze_macro, import_detail, source_binding, validate_detail_items
 from ...utils.model_catalog import load_generated_model_catalog
@@ -36,6 +36,7 @@ from ...utils.uniart_catalog import fetch_uniart_catalog
 _RECOVERY_LOCK = threading.RLock()
 _RECOVERY_TASKS: set[str] = set()
 _MEDIA_COMMAND_TIMEOUT_SECONDS = 600
+_SECOND_PASS_STALE_SECONDS = 900
 
 # These defaults are part of the recreation contract, rather than a provider
 # fallback.  They are kept in one place so the API, persisted tasks, and UI
@@ -62,6 +63,14 @@ def _model_option(model):
         for key in ("id", "display_name", "description", "family", "capabilities", "duration", "params", "inputs")
         if key in model
     }
+
+
+def _vision_chat_candidate(model):
+    if "chat" not in (model.get("capabilities") or []):
+        return False
+    name = str(model.get("api_model_id") or model.get("id") or "").removeprefix("uniart/").lower()
+    return (name.startswith("gpt-") and not name.startswith("gpt-image-")) or name.startswith(
+        ("chatgpt-", "gemini-", "claude-")) or (name.startswith("qwen") and "vl" in name)
 
 class RecreationService:
     def __init__(self, user: UserContext, *, output_root: str | None = None):
@@ -146,6 +155,7 @@ class RecreationService:
             if item.get("id") in VERIFIED_RECREATION_VIDEO_MODELS
             and "r2v" in (item.get("capabilities") or [])
         ]
+        vision_models = [_model_option(item) for item in candidates if _vision_chat_candidate(item)]
         image_default = (
             DEFAULT_KEYFRAME_IMAGE_MODEL
             if any(item["id"] == DEFAULT_KEYFRAME_IMAGE_MODEL for item in image_models)
@@ -165,6 +175,7 @@ class RecreationService:
             },
             "image_models": image_models,
             "video_models": video_models,
+            "vision_models": vision_models,
         }
 
     @contextmanager
@@ -1490,6 +1501,10 @@ class RecreationService:
             record = self._get(db, project_id)
             if analysis_id != record.get("analysis_id") or key != timeline_key(record):
                 raise HTTPException(409, "Macro review source changed")
+            job = record.get("candidate_completion_run") or {}
+            if (job.get("status") in {"queued", "running"} and
+                    time.time() - job.get("updated_at", 0) < _SECOND_PASS_STALE_SECONDS):
+                raise HTTPException(409, "Second analysis is still running")
             record["macro_review"] = freeze_macro(record, review_revision)
             self._save(db, record)
             return record
@@ -1512,6 +1527,85 @@ class RecreationService:
         if (record.get("shot_review") or {}).get("timeline_key") != key:
             raise HTTPException(409, "First analysis is stale for this timeline")
         return build_frame_pack(record, self._verified_source_path(record))
+
+    def start_second_pass(self, project_id, analysis_id, key, model):
+        from ..studio_access import runtime_uniart_for_owner
+
+        if not isinstance(model, str) or not model.startswith("uniart/"):
+            raise HTTPException(422, "Select a UniArt vision model")
+        candidates = self._live_uniart_models()
+        if candidates is None:
+            raise HTTPException(503, "UniArt model catalog is unavailable")
+        if model not in {item["id"] for item in candidates if _vision_chat_candidate(item)}:
+            raise HTTPException(422, "Selected model is not an available vision-chat candidate")
+        config = runtime_uniart_for_owner(self.user.user_id, self.user.owner_profile_id)
+        if not (config.get("api_key") or "").strip():
+            raise HTTPException(409, "Configure a UniArt API key before second analysis")
+        pack = self.second_pass_frame_pack(project_id, analysis_id, key)
+        with self.db() as db:
+            record = self._get(db, project_id)
+            if (analysis_id != record.get("analysis_id") or key != timeline_key(record)
+                    or (record.get("shot_review") or {}).get("timeline_key") != key):
+                raise HTTPException(409, "Second-pass source changed")
+            previous = record.get("candidate_completion_run") or {}
+            if (previous.get("status") in {"queued", "running"} and
+                    time.time() - previous.get("updated_at", 0) < _SECOND_PASS_STALE_SECONDS):
+                raise HTTPException(409, "Second analysis is already running")
+            run_id = uuid4().hex
+            record["candidate_completion_run"] = {
+                "run_id": run_id, "status": "queued", "model": model,
+                "analysis_id": analysis_id, "timeline_key": key,
+                "candidate_digest": candidate_digest(record),
+                "review_revision": record["shot_review"]["review_revision"],
+                "completed_items": 0, "total_items": 0, "error": "", "updated_at": time.time(),
+            }
+            self._save(db, record)
+        return record, pack, config, run_id
+
+    def process_second_pass(self, project_id, run_id, pack, config, model):
+        from scripts.recreation.second_pass_infer import infer_pack, uniart_chat
+
+        def update(status, completed=None, total=None, error=""):
+            with self.db() as db:
+                record = self._get(db, project_id)
+                job = record.get("candidate_completion_run") or {}
+                if job.get("run_id") != run_id:
+                    raise RuntimeError("Second analysis run was replaced")
+                if (job["analysis_id"] != record.get("analysis_id") or
+                        job["timeline_key"] != timeline_key(record) or
+                        job["candidate_digest"] != candidate_digest(record) or
+                        job["review_revision"] != (record.get("shot_review") or {}).get("review_revision")):
+                    raise RuntimeError("Second analysis source changed during the run")
+                job.update(status=status, updated_at=time.time(), error=error)
+                if completed is not None:
+                    job.update(completed_items=completed, total_items=total)
+                record["candidate_completion_run"] = job
+                self._save(db, record)
+
+        try:
+            update("running")
+            chat = lambda messages, **kwargs: uniart_chat(
+                messages, api_key=config["api_key"], base_url=config.get("base_url"), **kwargs)
+            package = infer_pack(pack, model.removeprefix("uniart/"), chat=chat,
+                                 on_progress=lambda done, total: update("running", done, total))
+            with self.db() as db:
+                record = self._get(db, project_id)
+                job = record.get("candidate_completion_run") or {}
+                if (job.get("run_id") != run_id or job["analysis_id"] != record.get("analysis_id")
+                        or job["timeline_key"] != timeline_key(record)
+                        or job["candidate_digest"] != candidate_digest(record)
+                        or job["review_revision"] != (record.get("shot_review") or {}).get("review_revision")):
+                    raise RuntimeError("Second analysis source changed during the run")
+                record["candidate_completion"] = import_completion(record, package)
+                job.update(status="completed", updated_at=time.time())
+                self._save(db, record)
+        except Exception as exc:
+            with self.db() as db:
+                record = self._get(db, project_id)
+                job = record.get("candidate_completion_run") or {}
+                if job.get("run_id") == run_id:
+                    job.update(status="failed", error=str(exc)[:500], updated_at=time.time())
+                    self._save(db, record)
 
     def import_detail_review(self, project_id, analysis_id, key, candidate):
         with self.db() as db:
