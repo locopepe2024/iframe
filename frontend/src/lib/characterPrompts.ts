@@ -51,12 +51,12 @@ export function buildCharacterImagePrompt(
         );
     }
 
-    return sentence(
-        preserveReference && "严格保持参考图中的角色面孔、发型、肤色和五官",
-        `角色${characterName}的近景肖像`,
-        characterDescription,
-        "聚焦面部和肩部，刻画清晰的面部细节，未指定表情时采用中性表情，未指定视线时正面看向镜头",
-    );
+    return [
+        sentence(`主体：角色${characterName}的近景肖像`),
+        preserveReference && "参考基准：以输入的参考图作为角色身份依据，保持发型和肤色；五官与轮廓仅按下述明确要求调整，其余特征沿用参考图。",
+        characterDescription && `面部与外观要求：\n${sentence(characterDescription)}`,
+        "构图与表现：聚焦面部和肩部，刻画清晰的面部细节，未指定表情时采用中性表情，未指定视线时正面看向镜头。",
+    ].filter(Boolean).join("\n\n");
 }
 
 export function buildCharacterMotionPrompt(
@@ -97,5 +97,5 @@ export function buildCharacterVideoPrompt(name: string, description: string): st
 
 /** Existing generated prompts may use the old English scaffold. */
 export function hasCharacterReferenceConstraint(prompt: string): boolean {
-    return /严格保持参考图|STRICTLY MAINTAIN/i.test(prompt || "");
+    return /严格保持参考图|以输入的参考图作为角色身份依据|STRICTLY MAINTAIN/i.test(prompt || "");
 }
