@@ -41,13 +41,15 @@ it("previews without writes and requires visual review before uploading and appl
     expect(onApplied).toHaveBeenCalledWith(expect.objectContaining({ asset_id: "guide", variant_id: "guide-v1" }), JSON.stringify(changedShape));
 });
 
-it("invalidates preview and review when the saved shape or region changes", async () => {
+it("invalidates preview and review when the saved shape or source changes", async () => {
     const props = { characterName: "苏砚", shape: changedShape, source, onApplied: vi.fn() };
     const view = render(<FaceGeometryGuide {...props} />); await preview(); fireEvent.click(screen.getByRole("checkbox"));
     view.rerender(<FaceGeometryGuide {...props} shape={{ ...DEFAULT_FACE_SHAPE, cheekWidth: 117 }} />);
     expect(screen.queryByAltText("局部变形后的骨相引导图")).toBeNull();
-    await preview(); fireEvent.change(screen.getByLabelText("引导图正脸区域"), { target: { value: "left" } });
+    await preview(); view.rerender(<FaceGeometryGuide {...props} source={{ ...source, variantId: "replacement" }} />);
     expect(screen.queryByAltText("局部变形后的骨相引导图")).toBeNull();
+    expect(screen.queryByLabelText("引导图正脸区域")).toBeNull();
+    expect(mocks.preview).toHaveBeenLastCalledWith(expect.anything(), expect.anything(), "whole", expect.any(Function));
     expect(mocks.upload).not.toHaveBeenCalled();
 });
 

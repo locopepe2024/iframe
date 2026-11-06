@@ -1,6 +1,8 @@
 import { FaceLandmarker, FilesetResolver, type NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { imageFaceMetrics, type FaceFitLandmarks, type FaceFitPoint } from "./whiteFaceFit";
 import { facePointInSource, frontReferenceBounds, renderFaceCrop, squareCropBounds, squareFaceCrop, type FrontReferenceRegion, type PreparedFaceImage } from "./whiteFaceImage";
+import { FACE_FIT_IMAGE_SPEC } from "./whiteFaceImage";
+import { validateFacePhotoView } from "./faceReferencePair";
 
 const MODEL_ROOT = "/models/character/face-landmarker-v1";
 type FaceResult = NormalizedLandmark[];
@@ -152,10 +154,47 @@ export async function detectFrontFaceGuide(image: HTMLImageElement, region: Fron
             return faces;
         }, items => { prepared = items[0]; });
         if (!face || !prepared) throw new Error("正脸识别不完整");
-        return { marks, prepared, face: face.map(point => ({ ...point,
+        const original = face.map(point => ({ ...point,
             ...facePointInSource(point, prepared!.crop, image.naturalWidth, image.naturalHeight),
-        })) };
+        }));
+        validateFacePhotoView(original, "front", image.naturalWidth, image.naturalHeight);
+        return { marks, prepared, face: original };
     } finally {
         landmarker.close();
     }
+}
+
+/** Whole-image single-view input. Both locating and cropped detection reject multiple faces. */
+export function prepareAndMarkFacePhoto(image: HTMLImageElement, view: "front" | "side",
+    detect: (canvas: HTMLCanvasElement) => FaceResult[]) {
+    const width = image.naturalWidth, height = image.naturalHeight;
+    const bounds = frontReferenceBounds(width, height, "whole");
+    const one = (canvas: HTMLCanvasElement) => {
+        const faces = detect(canvas);
+        if (faces.length !== 1) throw new Error(faces.length > 1 ? "每张参考图只能有一个人，请勿使用拼图或三视图排版" : "未识别到清晰人脸，请更换原图");
+        return faces[0];
+    };
+    const located = one(renderFaceCrop(image, bounds));
+    const original = located.map(p => ({ ...p, ...facePointInSource(p, squareCropBounds(bounds), width, height) }));
+    const oval = Array.from(new Set(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL.flatMap(edge => [edge.start, edge.end])));
+    const { crop, sourceFaceHeight } = squareFaceCrop(oval.map(i => original[i]), width, height);
+    if (sourceFaceHeight < FACE_FIT_IMAGE_SPEC.minimumFaceHeight) throw new Error(`原始人脸高约${Math.round(sourceFaceHeight)}像素，低于128像素，请更换清晰头像`);
+    const canvas = renderFaceCrop(image, crop);
+    const final = one(canvas).map(p => ({ ...p, ...facePointInSource(p, crop, width, height) }));
+    validateFacePhotoView(final, view, width, height);
+    const points = mapDetectedFaces(view === "front" ? final : undefined, view === "side" ? final : undefined, [0, 1], [0, 1], width / height);
+    const clipped = Object.values(points).some(p => p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1);
+    if (clipped) throw new Error("脸部被裁掉，请使用眼睛、鼻尖和下巴完整的原图");
+    return { points, prepared: { view, crop, sourceFaceHeight, canvas, detected: true } };
+}
+
+export async function autoMarkFacePhoto(image: HTMLImageElement, view: "front" | "side") {
+    const vision = await FilesetResolver.forVisionTasks(MODEL_ROOT);
+    const landmarker = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: `${MODEL_ROOT}/face_landmarker.task`, delegate: "CPU" },
+        // A stricter detector suppresses an observed ear false positive on cropped profiles.
+        runningMode: "IMAGE", numFaces: 2, minFaceDetectionConfidence: 0.7,
+    });
+    try { return prepareAndMarkFacePhoto(image, view, canvas => landmarker.detect(canvas).faceLandmarks); }
+    finally { landmarker.close(); }
 }

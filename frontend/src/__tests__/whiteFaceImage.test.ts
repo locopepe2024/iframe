@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { facePointInSource, renderFaceCrop, squareCropBounds, squareFaceCrop, frontReferenceBounds } from "@/lib/whiteFaceImage";
-import { prepareAndMarkThreeView, prepareAndMarkFrontReference } from "@/lib/whiteFaceAutoLandmarks";
+import { prepareAndMarkThreeView, prepareAndMarkFrontReference, prepareAndMarkFacePhoto } from "@/lib/whiteFaceAutoLandmarks";
 import { imageFaceMetrics, type FaceFitLandmarks } from "@/lib/whiteFaceFit";
 
 const drawImage = vi.fn();
@@ -15,7 +15,7 @@ afterEach(() => vi.restoreAllMocks());
 
 function sourceImage() {
     const result = image();
-    Object.defineProperties(result, { naturalWidth: { value: 1600 }, naturalHeight: { value: 1000 } });
+    Object.defineProperties(result, { naturalWidth: { value: 1600, configurable: true }, naturalHeight: { value: 1000, configurable: true } });
     return result;
 }
 
@@ -129,4 +129,19 @@ it("detects only profile points when an independent portrait supplies the front"
     expect(points.frontLeftCheek).toBeUndefined();
     expect(detect).toHaveBeenCalledTimes(2);
     expect(prepared.mock.calls[0][0].map((face: { view: string }) => face.view)).toEqual(["side"]);
+});
+
+
+it("requires one sufficiently detailed face of the correct view at both detection stages", () => {
+    const front = detectedFace(); front[1].x = .5;
+    const detect = vi.fn().mockReturnValue([front]);
+    const result = prepareAndMarkFacePhoto(sourceImage(), "front", detect);
+    expect(Object.keys(result.points)).toHaveLength(7);
+    expect(result.points.frontLeftCheek?.x).toBeCloseTo(facePointInSource(front[234], result.prepared.crop, 1600, 1000).x);
+    expect(() => prepareAndMarkFacePhoto(sourceImage(), "side", detect)).toThrow(/90/);
+    expect(() => prepareAndMarkFacePhoto(sourceImage(), "front", () => [])).toThrow(/未识别/);
+    expect(() => prepareAndMarkFacePhoto(sourceImage(), "front", () => [front, front])).toThrow(/只能有一个人/);
+    expect(() => prepareAndMarkFacePhoto(sourceImage(), "front", vi.fn().mockReturnValueOnce([front]).mockReturnValueOnce([]))).toThrow(/未识别/);
+    const small = sourceImage(); Object.defineProperties(small, { naturalWidth: { value: 100 }, naturalHeight: { value: 100 } });
+    expect(() => prepareAndMarkFacePhoto(small, "front", detect)).toThrow(/低于128/);
 });

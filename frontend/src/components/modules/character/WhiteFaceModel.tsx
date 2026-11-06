@@ -2,16 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
-import { Undo2 } from "lucide-react";
-import { API_URL, api, authenticatedFetch, type AssetLibraryReference } from "@/lib/api";
+import { api, type AssetLibraryReference } from "@/lib/api";
 import { DEFAULT_FACE_SHAPE, FACE_BASE_PRESETS, SELECTABLE_FACE_PRESETS, faceBaseShape, faceShapePrompt, faceShapeMeasurements, normalizeFaceShape, type FaceBasePreset, type FaceShape, type FaceShapeNumbers } from "@/lib/whiteFaceShape";
 import { faceMeasurementTargetText } from "@/lib/whiteFaceMeasurements";
-import { FACE_FIT_MARKS, FACE_FIT_LANDMARK_CONVENTION, FACE_FIT_OBJECTIVE, FIT_METRIC_LABELS, fitFaceToLandmarks, type FaceFitLandmarks, type FaceFitPoint } from "@/lib/whiteFaceFit";
-import { autoMarkThreeView } from "@/lib/whiteFaceAutoLandmarks";
-import { FACE_FIT_IMAGE_SPEC, type FaceImagePreparation, type PreparedFaceInfo, type FaceFitSource, type FrontFaceReference as FrontReference, type FrontReferenceRegion } from "@/lib/whiteFaceImage";
-import { resolveAssetVariantDelivery } from "@/lib/mediaDelivery";
+import { FACE_FIT_MARKS, FACE_FIT_LANDMARK_CONVENTION, FACE_FIT_OBJECTIVE, FIT_METRIC_LABELS, fitFaceToLandmarks, type FaceFitLandmarks } from "@/lib/whiteFaceFit";
+import { type FacePhotoReference, type FaceFitSource } from "@/lib/whiteFaceImage";
+import { validateFaceReferencePair } from "@/lib/faceReferencePair";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
-import FrontFaceReference from "./FrontFaceReference";
+import FacePhotoInput from "./FacePhotoInput";
 
 const CONTROL_GROUPS: Array<[string, Array<[keyof FaceShapeNumbers, string, number, number]>]> = [
     ["头部轮廓", [["faceLength", "脸部长度", 80, 120], ["faceWidth", "脸部宽度", 80, 120], ["foreheadWidth", "额头宽度", 80, 120], ["cheekWidth", "颧部宽度", 80, 120], ["cheekHeight", "颧部高度", 75, 125], ["jawWidth", "下颌宽度", 75, 125], ["jawHeight", "下颌高度", 75, 125], ["chinWidth", "下巴宽度", 75, 125], ["chinProjection", "下巴前突", 75, 125]]],
@@ -81,16 +79,10 @@ function NosePreview({ shape, data, side }: { shape: FaceShape; data: WhiteFaceM
     </Canvas>;
 }
 
-function matchesSource(stored: NonNullable<FaceShape["calibration"]>["source"] | undefined, source: FaceFitSource | undefined): boolean {
-    return !!(stored && source && stored.asset_id === source.assetId && stored.variant_id === source.variantId
-        && (!stored.source_scope || stored.source_scope === source.scope)
-        && (!stored.source_container_id || stored.source_container_id === source.containerId));
-}
-
-export default function WhiteFaceModel({ characterName, initialShape, fitSource, portraitSource, onSaved, onDirtyChange, standalone = false }: {
+export default function WhiteFaceModel({ characterName, initialShape, portraitSource, onSaved, onDirtyChange, standalone = false }: {
     characterName: string;
     initialShape?: Partial<FaceShape>;
-    fitSource?: FaceFitSource;
+    fitSource?: FaceFitSource; // Legacy callers may supply it; the sheet is never used for new fitting.
     portraitSource?: FaceFitSource;
     onSaved: (reference: AssetLibraryReference, prompt: string, shape: FaceShape) => void | Promise<void>;
     onDirtyChange?: (dirty: boolean) => void;
@@ -98,7 +90,6 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
 }) {
     const [shape, setShape] = useState<FaceShape>(normalizeFaceShape(initialShape));
     const shapeKey = JSON.stringify(shape), initialShapeKey = JSON.stringify(normalizeFaceShape(initialShape));
-    useEffect(() => { onDirtyChange?.(shapeKey !== initialShapeKey); }, [shapeKey, initialShapeKey, onDirtyChange]);
     const [open, setOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [savedShape, setSavedShape] = useState<string>("");
@@ -106,89 +97,37 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     const measurements = useMemo(() => faceShapeMeasurements(shape), [shape]);
     const [error, setError] = useState("");
     const [meshData, setMeshData] = useState<WhiteFaceMeshData | null>(null);
-    const [fitImageUrl, setFitImageUrl] = useState("");
-    const [fitPoints, setFitPoints] = useState<Partial<FaceFitLandmarks>>({});
-    const [fitReviewed, setFitReviewed] = useState(false);
-    const [sheetDetecting, setSheetDetecting] = useState(false);
-    const [portraitDetecting, setPortraitDetecting] = useState(false);
-    const detecting = sheetDetecting || portraitDetecting;
-    const [usePortrait, setUsePortrait] = useState(!!initialShape?.calibration?.frontReference);
-    const [frontRegion, setFrontRegion] = useState<FrontReferenceRegion>(initialShape?.calibration?.frontReference?.region || "whole");
-    const [frontReference, setFrontReference] = useState<FrontReference>();
-    const [selectedMark, setSelectedMark] = useState<keyof FaceFitLandmarks | null>(null);
-    const [autoMarkMessage, setAutoMarkMessage] = useState("");
-    const [preparedFaces, setPreparedFaces] = useState<Array<PreparedFaceInfo & { preview: string }>>([]);
-    const [imagePreparation, setImagePreparation] = useState<FaceImagePreparation>();
+    const [fitPoints, setFitPoints] = useState<Partial<FaceFitLandmarks>>(initialShape?.calibration?.referencePair ? initialShape.calibration.landmarks : {});
+    const [fitReviewed, setFitReviewed] = useState(!!initialShape?.calibration?.referencePair && !!initialShape.calibration.reviewed);
+    const [front, setFront] = useState<FacePhotoReference | undefined>(initialShape?.calibration?.referencePair?.front);
+    const [side, setSide] = useState<FacePhotoReference | undefined>(initialShape?.calibration?.referencePair?.side);
+    const [frontBusy, setFrontBusy] = useState(false), [sideBusy, setSideBusy] = useState(false);
+    const detecting = frontBusy || sideBusy;
     const stageRef = useRef<HTMLDivElement>(null);
-    const fitImageRef = useRef<HTMLImageElement>(null);
-    const sheetGeneration = useRef(0);
-    const sourceKey = JSON.stringify([fitSource?.scope, fitSource?.containerId, fitSource?.assetId, fitSource?.variantId,
-        portraitSource?.scope, portraitSource?.containerId, portraitSource?.assetId, portraitSource?.variantId]);
-    const previousSourceKey = useRef(sourceKey);
-
-    useEffect(() => {
-        setShape(normalizeFaceShape(initialShape));
-        const front = initialShape?.calibration?.frontReference;
-        setUsePortrait(!!front);
-        setFrontRegion(front?.region || "whole");
-        setFrontReference(front && matchesSource(front.source, portraitSource) ? front : undefined);
-        const sourcesMatch = matchesSource(initialShape?.calibration?.source, fitSource)
-            && (!front || matchesSource(front.source, portraitSource));
-        setFitPoints(sourcesMatch && initialShape?.calibration?.landmarkConvention === FACE_FIT_LANDMARK_CONVENTION
-            ? initialShape?.calibration?.landmarks as Partial<FaceFitLandmarks> : {});
-        setFitReviewed(!!(sourcesMatch && initialShape?.calibration?.landmarkConvention === FACE_FIT_LANDMARK_CONVENTION
-            && initialShape.calibration.fitObjective === FACE_FIT_OBJECTIVE
-            && initialShape.calibration.reviewed));
-    }, [initialShape]);
-
-    const clearReferences = () => {
-        sheetGeneration.current++;
-        setSheetDetecting(false);
-        setFitPoints({});
+    const initialPair = initialShape?.calibration?.referencePair;
+    const pair = front && side ? { schema: "iframe.face-reference-pair.v1" as const, front, side } : undefined;
+    const pairKey = JSON.stringify(pair);
+    const calibrationCurrent = !!(shape.calibration?.referencePair && pair
+        && JSON.stringify(shape.calibration.referencePair) === pairKey
+        && FACE_FIT_MARKS.every(([key]) => fitPoints[key]
+            && fitPoints[key]?.x === shape.calibration?.landmarks[key]?.x
+            && fitPoints[key]?.y === shape.calibration?.landmarks[key]?.y));
+    const referenceDraft = !!(front || side) && (!initialPair || JSON.stringify(initialPair) !== pairKey
+        || FACE_FIT_MARKS.some(([key]) => fitPoints[key]?.x !== initialShape?.calibration?.landmarks[key]?.x
+            || fitPoints[key]?.y !== initialShape?.calibration?.landmarks[key]?.y));
+    useEffect(() => { onDirtyChange?.(shapeKey !== initialShapeKey || referenceDraft || detecting); }, [shapeKey, initialShapeKey, referenceDraft, detecting, onDirtyChange]);
+    const referenceChange = (view: "front" | "side", reference?: FacePhotoReference, points?: Partial<FaceFitLandmarks>) => {
+        if (view === "front") setFront(reference); else setSide(reference);
         setFitReviewed(false);
-        setSelectedMark(null);
-        setPreparedFaces([]);
-        setImagePreparation(undefined);
-        setFrontReference(undefined);
-        setAutoMarkMessage("");
+        setFitPoints(current => ({ ...Object.fromEntries(Object.entries(current).filter(([key]) => !key.startsWith(view))), ...points }));
     };
     useEffect(() => {
-        if (previousSourceKey.current !== sourceKey) {
-            previousSourceKey.current = sourceKey;
-            clearReferences();
-        }
-    }, [sourceKey]);
-
-    useEffect(() => {
-        if (!open || !fitSource) return;
-        const controller = new AbortController();
-        let objectUrl = "";
-        setFitImageUrl("");
-        sheetGeneration.current++;
-        setSheetDetecting(false);
-        setAutoMarkMessage("");
-        setPreparedFaces([]);
-        setImagePreparation(undefined);
-        resolveAssetVariantDelivery({
-            scope: fitSource.scope, containerId: fitSource.containerId,
-            assetType: "character", assetId: fitSource.assetId, variantId: fitSource.variantId,
-        }).then(async sourceUrl => {
-                if (controller.signal.aborted) return;
-                const sourceOrigin = new URL(sourceUrl, window.location.href).origin;
-                const apiOrigin = new URL(API_URL, window.location.href).origin;
-                const response = await (sourceOrigin === apiOrigin ? authenticatedFetch : fetch)(sourceUrl, { signal: controller.signal });
-                if (!response.ok) throw new Error("三视图加载失败");
-                const blob = await response.blob();
-                if (!blob.type.startsWith("image/")) throw new Error("三视图源素材不是图像");
-                if (!controller.signal.aborted) {
-                    objectUrl = URL.createObjectURL(blob);
-                    setFitImageUrl(objectUrl);
-                }
-            })
-            .catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "三视图加载失败"); });
-        return () => { controller.abort(); sheetGeneration.current++; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-    }, [open, fitSource?.scope, fitSource?.containerId, fitSource?.assetId, fitSource?.variantId]);
-
+        setShape(normalizeFaceShape(initialShape));
+        setFitReviewed(!!initialShape?.calibration?.referencePair && !!initialShape.calibration.reviewed);
+        setFront(initialShape?.calibration?.referencePair?.front);
+        setSide(initialShape?.calibration?.referencePair?.side);
+        setFitPoints(initialShape?.calibration?.referencePair ? initialShape.calibration.landmarks : {});
+    }, [initialShape]);
     useEffect(() => {
         if (!open || meshData) return;
         const controller = new AbortController();
@@ -201,119 +140,33 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                 if (data.schema !== "makehuman-head.v1") throw new Error("面部白模格式无效");
                 setMeshData(data);
             })
-            .catch(cause => {
-                if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "面部白模加载失败");
-            });
+            .catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "面部白模加载失败"); });
         return () => controller.abort();
     }, [open, meshData]);
-
-    const nextMark = FACE_FIT_MARKS.find(([key]) => !fitPoints[key]);
-    const markedCount = FACE_FIT_MARKS.filter(([key]) => !!fitPoints[key]).length;
-    const calibrationCurrent = !!(shape.calibration && fitSource
-        && shape.calibration.landmarkConvention === FACE_FIT_LANDMARK_CONVENTION
-        && shape.calibration.fitObjective === FACE_FIT_OBJECTIVE
-        && matchesSource(shape.calibration.source, fitSource)
-        && (usePortrait ? !!(frontReference && matchesSource(frontReference.source, portraitSource)
-            && frontReference.region === frontRegion && matchesSource(shape.calibration.frontReference?.source, portraitSource)
-            && shape.calibration.frontReference?.region === frontRegion
-            && shape.calibration.frontReference.sourceWidth === frontReference.sourceWidth
-            && shape.calibration.frontReference.sourceHeight === frontReference.sourceHeight)
-            : !shape.calibration.frontReference)
-        && FACE_FIT_MARKS.every(([key]) => fitPoints[key]
-            && fitPoints[key]?.x === shape.calibration?.landmarks[key]?.x
-            && fitPoints[key]?.y === shape.calibration?.landmarks[key]?.y));
-    const detect = async (image: HTMLImageElement) => {
-        const request = ++sheetGeneration.current;
-        const imageSource = image.currentSrc || image.src;
-        const current = () => sheetGeneration.current === request && fitImageRef.current === image && (image.currentSrc || image.src) === imageSource;
-        setSheetDetecting(true);
-        setFitPoints(points => usePortrait ? Object.fromEntries(Object.entries(points).filter(([key]) => key.startsWith("front"))) : {});
-        setFitReviewed(false);
-        setPreparedFaces(faces => usePortrait ? faces.filter(face => face.view === "front") : []);
-        setImagePreparation(undefined);
-        setAutoMarkMessage("正在裁剪和标准化人脸，再识别标记…");
-        try {
-            const points = await autoMarkThreeView(image, { onPrepared: images => {
-                if (!current()) return;
-                const previews = images.map(({ canvas, ...info }) => ({ ...info, preview: canvas.toDataURL("image/png") }));
-                setPreparedFaces(faces => [...(usePortrait ? faces.filter(face => face.view === "front") : []), ...previews]);
-                setImagePreparation({
-                    version: FACE_FIT_IMAGE_SPEC.version, size: FACE_FIT_IMAGE_SPEC.size,
-                    sourceWidth: image.naturalWidth, sourceHeight: image.naturalHeight,
-                    views: images.map(({ canvas: ignored, ...info }) => { void ignored; return info; }),
-                });
-            }, ...(usePortrait ? { views: ["side"] as const } : {}) });
-            if (!current()) return;
-            setFitPoints(existing => ({ ...(usePortrait ? existing : {}), ...points }));
-            setSelectedMark(null);
-            setFitReviewed(false);
-            setAutoMarkMessage(usePortrait ? "侧面点位来自三视图；正面点位请在头像原图核对。" : points.frontLeftCheek && points.sideEye
-                ? "已自动标记正面和侧面，请核对点位；点击标记名称可重新定位。"
-                : points.frontLeftCheek ? "已自动标记正面，请手动补齐侧面点位。" : "已自动标记侧面，请手动补齐正面点位。");
-            setError("");
-        } catch (cause) {
-            if (current()) setAutoMarkMessage(cause instanceof Error ? cause.message : "自动标记失败，请手动标记");
-        } finally {
-            if (current()) setSheetDetecting(false);
-        }
-    };
-    const markImage = (event: React.MouseEvent<HTMLImageElement>, view?: "front" | "side") => {
-        if (detecting) return;
-        const mark = selectedMark || FACE_FIT_MARKS.find(([key]) => !fitPoints[key] && (!view || key.startsWith(view)))?.[0];
-        if (!mark) return;
-        if (view && !mark.startsWith(view)) { setError(`请在${view === "front" ? "三视图" : "头像正脸图"}上标记所选点位。`); return; }
-        const rect = event.currentTarget.getBoundingClientRect();
-        const point: FaceFitPoint = {
-            x: Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width)),
-            y: Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height)),
-        };
-        setFitPoints(current => ({ ...current, [mark]: point }));
-        setSelectedMark(null);
-        setFitReviewed(false);
-        setError("");
-    };
-
-    useEffect(() => {
-        const image = fitImageRef.current;
-        if (open && image?.naturalWidth && !Object.keys(fitPoints).length) void detect(image);
-    }, [usePortrait, frontRegion]);
-
     const fit = () => {
         if (detecting) return;
-        if (!fitImageUrl || !fitImageRef.current || !fitSource) { setError("三视图尚未加载完成。"); return; }
-        if (usePortrait && (!frontReference || !matchesSource(frontReference.source, portraitSource)
-            || frontReference.region !== frontRegion)) { setError("头像正脸原图尚未加载完成。"); return; }
-        if (!meshData) { setError("面部白模尚未加载完成。"); return; }
-        if (nextMark) { setError(`请先在三视图上标记 ${nextMark[1]}（${markedCount + 1}/${FACE_FIT_MARKS.length}）。`); return; }
         try {
-            const image = fitImageRef.current;
-            const { shape: baselineShape, residual, diagnostics } = fitFaceToLandmarks(
-                fitPoints as FaceFitLandmarks, meshData, shape.basePreset, usePortrait && frontReference
-                    ? { front: frontReference.sourceWidth / frontReference.sourceHeight, side: image.naturalWidth / image.naturalHeight }
-                    : image.naturalWidth / image.naturalHeight,
-            );
-            const { basePreset, calibration: ignored, ...baseline } = baselineShape;
-            void ignored;
+            const references = validateFaceReferencePair(front, side);
+            if (!meshData) throw new Error("面部白模尚未加载完成");
+            if (FACE_FIT_MARKS.some(([key]) => !fitPoints[key])) throw new Error("请先核对正面与侧脸的全部点位");
+            const { shape: baselineShape, residual, diagnostics } = fitFaceToLandmarks(fitPoints as FaceFitLandmarks, meshData,
+                shape.basePreset, { front: references.front.sourceWidth / references.front.sourceHeight,
+                    side: references.side.sourceWidth / references.side.sourceHeight });
+            const { basePreset, calibration: ignored, ...baseline } = baselineShape; void ignored;
             setShape({ ...DEFAULT_FACE_SHAPE, basePreset, calibration: {
-                schema: "iframe.white-face-fit.v1",
-                landmarkConvention: FACE_FIT_LANDMARK_CONVENTION,
-                fitObjective: FACE_FIT_OBJECTIVE,
-                fitDiagnostics: diagnostics,
-                imagePreparation,
-                ...(usePortrait ? { frontReference } : {}),
-                source: { asset_type: "character", asset_id: fitSource.assetId, variant_id: fitSource.variantId,
-                    source_scope: fitSource.scope, source_container_id: fitSource.containerId },
+                schema: "iframe.white-face-fit.v1", landmarkConvention: FACE_FIT_LANDMARK_CONVENTION,
+                fitObjective: FACE_FIT_OBJECTIVE, fitDiagnostics: diagnostics,
+                source: references.side.source, referencePair: references,
+                frontReference: { source: references.front.source, region: "whole", sourceWidth: references.front.sourceWidth,
+                    sourceHeight: references.front.sourceHeight, preparation: references.front.preparation },
                 baseline, landmarks: fitPoints as FaceFitLandmarks, residual,
             } });
-            setFitReviewed(false);
-            setError("");
-        } catch (cause) {
-            setError(cause instanceof Error ? cause.message : "三视图拟合失败");
-        }
+            setFitReviewed(false); setError("");
+        } catch (cause) { setError(cause instanceof Error ? cause.message : "正面与侧脸拟合失败"); }
     };
 
     const save = async () => {
-        if (detecting || (usePortrait && !shape.calibration) || (shape.calibration && (!calibrationCurrent || !fitReviewed))) {
+        if (detecting || ((front || side || shape.calibration) && (!calibrationCurrent || !fitReviewed))) {
             setError("骨相基准或标记点已变更，请重新拟合并核对。");
             return;
         }
@@ -351,121 +204,41 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             <select aria-label="基础脸型" value={shape.basePreset} onChange={event => {
                 const preset = event.target.value as FaceBasePreset;
                 setShape(faceBaseShape(preset));
-                setFitPoints({});
+                setFitReviewed(false);
             }} className="mt-1 min-h-9 w-full rounded border border-glass-border bg-surface px-2 text-xs text-foreground">
                 {(shape.basePreset === "middle_aged" ? [...SELECTABLE_FACE_PRESETS, "middle_aged" as const] : SELECTABLE_FACE_PRESETS)
                     .map(key => <option key={key} value={key}>{FACE_BASE_PRESETS[key].label}</option>)}
             </select>
         </label>
-        {fitSource && <div className="space-y-2">
-            <div className="text-xs text-text-secondary">拟合参考 · {usePortrait ? "头像正脸 + 三视图侧面" : "三视图"}</div>
-            {(portraitSource || usePortrait) && <div className="flex flex-wrap gap-3 text-xs text-text-secondary">
-                <label>正面参考
-                    <select aria-label="正面参考" value={usePortrait ? "portrait" : "sheet"} onChange={event => {
-                        clearReferences(); setUsePortrait(event.target.value === "portrait"); setError("");
-                    }} className="ml-2 min-h-9 rounded border border-glass-border bg-surface px-2">
-                        <option value="sheet">三视图正面</option>
-                        <option value="portrait" disabled={!portraitSource}>当前选中头像</option>
-                    </select>
-                </label>
-                {usePortrait && <label>正脸所在区域
-                    <select aria-label="正脸所在区域" value={frontRegion} onChange={event => {
-                        clearReferences(); setFrontRegion(event.target.value as FrontReferenceRegion); setError("");
-                    }} className="ml-2 min-h-9 rounded border border-glass-border bg-surface px-2">
-                        <option value="whole">整张图（单张正脸）</option>
-                        <option value="left">左半图</option>
-                        <option value="right">右半图</option>
-                    </select>
-                </label>}
-            </div>}
-            {usePortrait && (portraitSource ? <FrontFaceReference key={`${sourceKey}:${frontRegion}`} source={portraitSource}
-                region={frontRegion} characterName={characterName} points={fitPoints} onReady={setFrontReference}
-                onBusy={setPortraitDetecting} onMark={event => markImage(event, "front")}
-                onPoints={(points, reference) => {
-                    setFitPoints(existing => ({ ...Object.fromEntries(Object.entries(existing).filter(([key]) => !key.startsWith("front"))), ...points }));
-                    setFrontReference(reference); setFitReviewed(false);
-                    if (!Object.keys(points).length) setPreparedFaces(faces => faces.filter(face => face.view !== "front"));
-                }} onPrepared={images => setPreparedFaces(faces => [...faces.filter(face => face.view !== "front"),
-                    ...images.map(({ canvas, ...info }) => ({ ...info, preview: canvas.toDataURL("image/png") }))])}
-            /> : <p role="status" className="text-xs text-amber-300">已保存的头像来源不可用，请重新选择正面参考并拟合。</p>)}
-            <p className="text-xs text-text-secondary">自动标记后请核对正面与侧面点位。可选择标记名称，再点击图像校正位置。</p>
-            <p className="text-xs text-text-muted">眼中心取内外眼角中点；侧面下巴取前端，正面下巴取最低点。</p>
-            <details className="text-xs text-text-secondary">
-                <summary className="cursor-pointer">人脸参考图规范 · 先处理，再拟合</summary>
-                <p className="mt-1">三视图按正面、侧面、背面从左到右排列。使用同一角色的清晰正脸和正侧脸，保持自然表情、头部水平，露出眼睛、鼻尖和下巴。</p>
-                <p className="mt-1">推荐提供头部三视图 3072 × 1024，每个视图 1024 × 1024。现有全身三视图也可处理，以原始人脸清晰度为准。</p>
-                <p className="mt-1">原图中每张脸从额头到下巴建议至少 {FACE_FIT_IMAGE_SPEC.recommendedFaceHeight} 像素。系统裁出人脸并保留边距，等比缩放为 {FACE_FIT_IMAGE_SPEC.size} × {FACE_FIT_IMAGE_SPEC.size}；放大不会增加原图细节。</p>
-            </details>
-            {preparedFaces.length > 0 && <div className="grid grid-cols-2 gap-2" aria-label="标准化人脸预览">
-                {preparedFaces.map(face => <div key={face.view} className="min-w-0 space-y-1 text-xs text-text-secondary">
-                    <img src={face.preview} alt={`${face.view === "front" ? "正面" : "侧面"}标准化人脸`} width={512} height={512} className="aspect-square w-full max-w-[256px] rounded" />
-                    <div>{face.view === "front" ? "正面" : "侧面"} · 512 × 512 · 原始脸高约 {Math.round(face.sourceFaceHeight)} 像素</div>
-                    {face.sourceFaceHeight < FACE_FIT_IMAGE_SPEC.minimumFaceHeight
-                        ? <p role="status" className="text-amber-300">原始人脸小于 128 像素，细节不足，建议更换清晰原图后再拟合。</p>
-                        : face.sourceFaceHeight < FACE_FIT_IMAGE_SPEC.recommendedFaceHeight
-                            ? <p className="text-text-muted">建议使用原始脸高至少 256 像素的参考图。</p> : null}
-                    {!face.detected && <p role="status" className="text-amber-300">处理后识别未成功，请核对裁剪图并手动补齐点位。</p>}
-                </div>)}
-            </div>}
-            {fitImageUrl ? <div className="max-h-[600px] w-full overflow-auto rounded border border-glass-border">
-                <div className="relative w-full min-w-[760px] max-w-[1223px]">
-                <img ref={fitImageRef} src={fitImageUrl} alt={`${characterName}三视图拟合参考`} className="block h-auto w-full cursor-crosshair" onLoad={event => {
-                    if (usePortrait ? !fitPoints.sideEye : !Object.keys(fitPoints).length) void detect(event.currentTarget);
-                }} onClick={event => markImage(event, usePortrait ? "side" : undefined)} />
-                {FACE_FIT_MARKS.filter(([key]) => !usePortrait || key.startsWith("side")).map(([key, label]) => {
-                    const point = fitPoints[key];
-                    return point ? <span key={key} title={label} className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black bg-lime-300" style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }} /> : null;
-                })}
-                </div>
-            </div> : <div className="text-xs text-text-muted">三视图加载中</div>}
-            {autoMarkMessage && <p role="status" className="text-xs text-text-secondary">{autoMarkMessage}</p>}
-            <div className="flex flex-wrap gap-1">
-                {FACE_FIT_MARKS.map(([key, label]) => <button key={key} type="button" aria-pressed={selectedMark === key}
-                    onClick={() => setSelectedMark(key)} className={`min-h-8 rounded border px-2 text-xs ${selectedMark === key ? "border-lime-300 text-lime-200" : "border-glass-border text-text-secondary"}`}>
-                    {fitPoints[key] ? "✓ " : "○ "}{label}
-                </button>)}
+        <section aria-label="正面与侧脸参考规范" className="space-y-3">
+            <p className="text-sm text-text-secondary">拟合需要同一角色的两张独立原图：一张正面照、一张约90°侧脸照。自然表情、头部水平，五官和下巴完整；不接受拼图或多人排版。</p>
+            <p className="text-xs text-text-muted">PNG、JPG或WebP，每张不超过20MB。推荐1024×1024头肩照，原始脸高至少128像素，建议256像素以上。系统等比裁剪至512×512；放大不会增加细节。</p>
+            <p className="text-xs text-text-muted">上传后先在本地检查，通过才保存到素材库。视角识别是近似检查，仍需人工确认同一角色及侧脸角度。图片上传不等于骨相参数已保存。</p>
+            {shape.calibration && !shape.calibration.referencePair && <p role="status" className="text-xs text-amber-400">旧骨相数值已保留。重新拟合时请提供独立正面照和侧脸照各一张。</p>}
+            <div className="grid gap-3 md:grid-cols-2">
+                <FacePhotoInput view="front" characterName={characterName} initial={initialPair?.front}
+                    portrait={portraitSource ? { asset_type: "character", asset_id: portraitSource.assetId, variant_id: portraitSource.variantId,
+                        source_scope: portraitSource.scope, source_container_id: portraitSource.containerId } : undefined}
+                    points={fitPoints} onBusy={setFrontBusy} onChange={(reference, points) => referenceChange("front", reference, points)}
+                    onMark={(key, point) => { setFitPoints(current => ({ ...current, [key]: point })); setFitReviewed(false); }} />
+                <FacePhotoInput view="side" characterName={characterName} initial={initialPair?.side} points={fitPoints}
+                    onBusy={setSideBusy} onChange={(reference, points) => referenceChange("side", reference, points)}
+                    onMark={(key, point) => { setFitPoints(current => ({ ...current, [key]: point })); setFitReviewed(false); }} />
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-                <span role="status">{nextMark ? `已标记 ${markedCount}/${FACE_FIT_MARKS.length} · 下一点：${nextMark[1]}` : `已标记 ${FACE_FIT_MARKS.length}/${FACE_FIT_MARKS.length} · 可以拟合`}</span>
-                <button type="button" title="撤回上一个标记" aria-label="撤回上一个标记" disabled={Object.keys(fitPoints).length === 0} onClick={() => setFitPoints(current => {
-                    const last = [...FACE_FIT_MARKS].reverse().find(([key]) => current[key]);
-                    if (!last) return current;
-                    const next = { ...current }; delete next[last[0]]; return next;
-                })} className="flex size-9 items-center justify-center rounded border border-glass-border text-foreground disabled:opacity-50"><Undo2 size={15} /></button>
-                <button type="button" onClick={() => { setFitPoints({}); setError(""); }} className="min-h-9 rounded border border-glass-border px-2 text-foreground">重置标记</button>
-                <button type="button" disabled={detecting || !fitImageUrl} onClick={() => { if (fitImageRef.current) void detect(fitImageRef.current); }} className="min-h-9 rounded border border-glass-border px-2 text-foreground disabled:opacity-50">{detecting ? "识别中…" : usePortrait ? "重新标记侧面" : "重新自动标记"}</button>
-                <button type="button" disabled={detecting} onClick={fit} className="min-h-9 rounded border border-glass-border px-2 text-foreground hover:bg-hover-bg disabled:opacity-50">拟合白模</button>
-            </div>
-            {shape.calibration?.source.variant_id === fitSource.variantId &&
-                <div className="space-y-1 text-xs text-text-secondary">
-                    <div>拟合初稿 · 归一化残差 {shape.calibration.residual.toFixed(3)} · 当前滑杆以此脸型为 100%</div>
-                    {shape.calibration.fitDiagnostics && <>
-                        <details>
-                            <summary className="cursor-pointer">查看初稿各部位比例</summary>
-                            <p className="mt-1 text-text-muted">高度以对应视角的眼至下巴距离为 1。请同时核对点位和轮廓，比例接近不代表整体面容相似。</p>
-                            <dl className="mt-1 space-y-1">
-                                {shape.calibration.fitDiagnostics.metrics.map(metric => <div key={metric.key} className="flex flex-wrap justify-between gap-x-3">
-                                    <dt>{FIT_METRIC_LABELS[metric.key]}</dt>
-                                    <dd>参考 {metric.target.toFixed(3)} · 白模 {metric.actual.toFixed(3)}</dd>
-                                </div>)}
-                            </dl>
-                        </details>
-                        {shape.calibration.fitDiagnostics.metrics.some(metric => Math.abs(metric.error) > 0.15) &&
-                            <div role="status" className="text-amber-300">局部比例仍有偏差：{shape.calibration.fitDiagnostics.metrics
-                                .filter(metric => Math.abs(metric.error) > 0.15).map(metric => FIT_METRIC_LABELS[metric.key]).join("、")}。</div>}
-                        {shape.calibration.fitDiagnostics.atLimits.length > 0 && <div role="status" className="text-amber-300">
-                            拟合参数已达调节边界：{shape.calibration.fitDiagnostics.atLimits.map(key =>
-                                CONTROL_GROUPS.flatMap(([, controls]) => controls).find(([control]) => control === key)?.[1] || key).join("、")}。请核对对应轮廓。
-                        </div>}
-                    </>}
-                    {shape.calibration.residual > 0.15 && <div role="status" className="text-amber-300">拟合偏差较大，请检查标记点和白模轮廓。</div>}
-                    {!calibrationCurrent && <div role="status" className="text-amber-300">拟合方法或标记点已变更，请重新拟合并核对。</div>}
-                    <label className="flex items-center gap-2"><input type="checkbox" disabled={detecting || !calibrationCurrent} checked={fitReviewed && calibrationCurrent} onChange={event => setFitReviewed(event.target.checked)} />已核对正面与侧面白模</label>
-                </div>}
-        </div>}
+            <button type="button" disabled={detecting || !front || !side || !meshData} onClick={fit} className="min-h-11 rounded border border-glass-border px-3 text-xs disabled:opacity-50">拟合白模</button>
+            {shape.calibration && <div className="space-y-2 text-xs text-text-secondary">
+                <p>拟合残差 {shape.calibration.residual.toFixed(3)} · 当前滑杆以拟合基准为100。</p>
+                {shape.calibration.fitDiagnostics && <details><summary className="min-h-11 cursor-pointer">查看拟合比例</summary>
+                    <p>请同时核对点位和轮廓，比例接近不代表整体面容相似。</p>
+                    {shape.calibration.fitDiagnostics.metrics.map(metric => <p key={metric.key}>{FIT_METRIC_LABELS[metric.key]}：参考{metric.target.toFixed(3)} · 白模{metric.actual.toFixed(3)}</p>)}
+                </details>}
+                {!calibrationCurrent && <p role="status" className="text-amber-400">参考图或点位与当前拟合不一致，请重新拟合并核对。</p>}
+                <label className="flex min-h-11 items-center gap-2"><input type="checkbox" disabled={detecting || !calibrationCurrent} checked={fitReviewed && calibrationCurrent} onChange={event => setFitReviewed(event.target.checked)} />已核对正面与侧面白模及同一角色身份</label>
+            </div>}
+        </section>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="min-w-0">
-                <div className="mb-1 text-xs text-text-secondary">{shape.calibration ? "三视图基准" : "基础脸型"} · 正面 / 侧面</div>
+                <div className="mb-1 text-xs text-text-secondary">{shape.calibration ? "双图拟合基准" : "基础脸型"} · 正面 / 侧面</div>
                 <div className="aspect-[2/1] w-full overflow-hidden rounded bg-[#28302f]" aria-label="基础脸型正面与侧面预览">
                     {meshData ? <FacePreview shape={shape.calibration ? { ...DEFAULT_FACE_SHAPE, basePreset: shape.basePreset, calibration: shape.calibration } : faceBaseShape(shape.basePreset)} data={meshData} /> : null}
                 </div>
@@ -521,10 +294,8 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                 </table>
             </div>
         </details>
-        <button type="button" disabled={saving || detecting || !meshData || (usePortrait && !shape.calibration) || !!(shape.calibration && (!fitReviewed || !calibrationCurrent))} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
+        <button type="button" disabled={saving || detecting || !meshData || !!((front || side || shape.calibration) && (!fitReviewed || !calibrationCurrent))} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
         {savedShape === JSON.stringify(shape) && <p role="status" className="text-xs text-green-400">骨相参数已保存到角色</p>}
-        {shape.calibration && (!fitSource || shape.calibration.source.asset_id !== fitSource.assetId || shape.calibration.source.variant_id !== fitSource.variantId) &&
-            <p role="status" className="text-xs text-amber-300">骨相基准的三视图已变更，请重新拟合。</p>}
         {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
         </fieldset>}
     </section>;
