@@ -205,42 +205,25 @@ it('surfaces character face-save failures and retains the adjusted controls for 
     } finally { vi.unstubAllGlobals(); }
 });
 
-it("loads selected three-view and optional portrait originals from the series when no episode is active", async () => {
-    const previous = projectStoreMocks.currentProject;
-    projectStoreMocks.currentProject = null as any;
-    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
-    apiMocks.authenticatedFetch.mockClear();
-    apiMocks.authenticatedFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ url: "/studio/owned-media/0123456789abcdef01234567/original-three-view.png" }) });
-    apiMocks.authenticatedFetch.mockResolvedValueOnce({ ok: false });
+it("uses a single portrait original for the guide and requires two independent fitting inputs without an episode", async () => {
+    const previous = projectStoreMocks.currentProject; projectStoreMocks.currentProject = null as any;
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] }); apiMocks.authenticatedFetch.mockClear();
+    apiMocks.authenticatedFetch.mockResolvedValue({ ok: false });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
     try {
         render(<CharacterWorkbench asset={{ id: "su-yan", name: "苏砚", description: "雪痕客",
-            three_view_asset: { selected_id: "three-view-1", variants: [{ id: "three-view-1", url: "three-view.png" }] },
-            headshot_asset: { selected_id: "avatar-1", variants: [{ id: "avatar-old", url: "old.png" }, { id: "avatar-1", url: "avatar.png" }] },
+            three_view_asset: { selected_id: "sheet", variants: [{ id: "sheet", url: "sheet.png" }] },
+            headshot_asset: { selected_id: "avatar", variants: [{ id: "avatar", url: "avatar.png" }] },
         }} seriesId="series-1" onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
         fireEvent.click(screen.getByRole("tab", { name: "面容白模" }));
         fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
         await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
-            expect.stringContaining("scope=series&container_id=series-1&asset_type=character&asset_id=su-yan&variant_id=three-view-1"),
-            { cache: "no-store" },
-        ));
-        await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
-            "/studio/owned-media/0123456789abcdef01234567/original-three-view.png",
-            expect.objectContaining({ signal: expect.any(AbortSignal) }),
-        ));
-        apiMocks.authenticatedFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ url: "/studio/owned-media/0123456789abcdef01234567/original-avatar.png" }) });
-        apiMocks.authenticatedFetch.mockResolvedValueOnce({ ok: false });
-        fireEvent.change(screen.getByLabelText("正面参考"), { target: { value: "portrait" } });
-        await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
-            expect.stringContaining("variant_id=avatar-1"), { cache: "no-store" },
-        ));
-        await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
-            "/studio/owned-media/0123456789abcdef01234567/original-avatar.png", expect.objectContaining({ signal: expect.any(AbortSignal) }),
-        ));
-    } finally {
-        projectStoreMocks.currentProject = previous;
-        vi.unstubAllGlobals();
-    }
+            expect.stringContaining("scope=series&container_id=series-1&asset_type=character&asset_id=su-yan&variant_id=avatar"), { cache: "no-store" }));
+        expect(apiMocks.authenticatedFetch.mock.calls.some(([url]) => String(url).includes("variant_id=sheet"))).toBe(false);
+        expect(screen.getByLabelText("上传正面照")).toBeVisible(); expect(screen.getByLabelText("上传侧脸照")).toBeVisible();
+        expect(screen.getByRole("button", { name: "拟合白模" })).toBeDisabled();
+        expect(screen.queryByLabelText("正脸所在区域")).toBeNull(); expect(screen.queryByLabelText("引导图正脸区域")).toBeNull();
+    } finally { projectStoreMocks.currentProject = previous; vi.unstubAllGlobals(); }
 });
 
 it("does not offer an unregistered selected portrait as a face fitting source", () => {
@@ -1122,6 +1105,32 @@ it('submits the master image followed by the fitted three-view as ordered refere
     expect(request.prompt).toContain('两眼中心连线到下巴最低点的垂直距离');
     expect(request.prompt).toContain('参考图该距离为100，目标96');
     expect(request.prompt).not.toContain('调节值90%');
+});
+
+it('uses the saved front and profile originals even after the gallery portrait changes', async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] }); apiMocks.previewAssetImageSubmission.mockClear();
+    const { basePreset, ...baseline } = DEFAULT_FACE_SHAPE;
+    const photo = (view: string) => ({ view, sourceWidth: 1024, sourceHeight: 1024,
+        source: { asset_type: 'prop', asset_id: `${view}-original`, variant_id: `${view}-v1`, source_scope: 'global' },
+        preparation: { view, crop: { x: 0, y: 0, width: 512, height: 512 }, sourceFaceHeight: 350, detected: true } });
+    const front = photo('front'), side = photo('side');
+    const saved = { confirmed: true, active_design_source: 'panel', white_face_shape: { ...DEFAULT_FACE_SHAPE,
+        calibration: { schema: 'iframe.white-face-fit.v1', baseline, landmarks: {}, residual: .01, reviewed: true,
+            source: side.source, referencePair: { schema: 'iframe.face-reference-pair.v1', front, side },
+            frontReference: { ...front, region: 'whole' } } } };
+    mountSimpleDesign({ full_body_asset: { selected_id: 'master-1', variants: [{ id: 'master-1', url: 'master.png' }] },
+        headshot_asset: { selected_id: 'new-avatar', variants: [{ id: 'new-avatar', url: 'new.png' }] },
+        character_design: { design_draft: saved, design_revisions: [{ revision: 1, design: saved }] } });
+    fireEvent.click(screen.getAllByTestId('variant-generate')[0]);
+    await waitFor(() => expect(apiMocks.previewAssetImageSubmission).toHaveBeenCalled());
+    const request = apiMocks.previewAssetImageSubmission.mock.lastCall?.[1];
+    expect(request.references.map((r: any) => r.variant_id)).toEqual(['master-1', 'front-v1', 'side-v1']);
+    expect(request.references.slice(-2).every((r: any) => r.source_scope === 'shared')).toBe(true);
+    expect(request.prompt).toContain('最后两张参考图分别是该角色的独立正面照和侧脸照');
+    expect(request.prompt).not.toContain('背面三视图');
+    fireEvent.click(screen.getByRole('tab', { name: '面容白模' }));
+    await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
+        expect.stringContaining('scope=global&container_id=&asset_type=prop&asset_id=front-original&variant_id=front-v1'), { cache: 'no-store' }));
 });
 
 it('requires refitting before generating with a replaced independent portrait source', () => {

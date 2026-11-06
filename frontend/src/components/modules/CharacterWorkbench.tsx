@@ -220,22 +220,33 @@ function imageGenerationReferences(references: AssetLibraryReference[]): AssetLi
 
 const FULL_BODY_REFERENCE_INTENT = "附带的全身参考图是同一角色的外观参考，用于保持面容、发型、肤色、身形比例和服装细节；最终只生成一个目标角色，不显示参考图、白模、参考图边框或对照排版。";
 const FITTED_FACE_REFERENCE_INTENT = "最后一张参考图是该角色的正面、侧面和背面三视图，用于确认面容身份并作为骨相测量基准；按提示词中的目标比例调整五官与轮廓。其他参考图用于保持角色身份与外观。最终只生成一个目标角色，不呈现三视图、白模、参考图或对照排版。";
+const PAIRED_FACE_REFERENCE_INTENT = "最后两张参考图分别是该角色的独立正面照和侧脸照，用于保持角色面容身份，并作为对应视角的骨相测量基准；按目标比例调整。其他参考图保持发型、肤色和服装。只生成一个目标角色，不呈现白模、参考图或对照排版。";
 const DERIVED_REFERENCE_INTENT = "附带的角色主图是同一角色的身份与外观参考；只生成目标视图，不把参考图作为画面中的第二个人物，不显示参考图或对照排版。";
 
-function addReferenceIntent(type: "full_body" | "three_view" | "headshot", prompt: string, mode: "text" | "reference", references: AssetLibraryReference[], fittedFace = false): string {
+function addReferenceIntent(type: "full_body" | "three_view" | "headshot", prompt: string, mode: "text" | "reference", references: AssetLibraryReference[], fittedFace = false, pairedFace = false): string {
     if (mode !== "reference" || references.length === 0) return prompt;
-    const intent = type === "full_body" ? fittedFace ? FITTED_FACE_REFERENCE_INTENT : FULL_BODY_REFERENCE_INTENT : DERIVED_REFERENCE_INTENT;
+    const faceIntent = pairedFace ? PAIRED_FACE_REFERENCE_INTENT : FITTED_FACE_REFERENCE_INTENT;
+    const intent = type === "full_body" ? (fittedFace ? faceIntent : FULL_BODY_REFERENCE_INTENT) : DERIVED_REFERENCE_INTENT;
     return prompt.includes(intent) ? prompt : [prompt, intent].filter(Boolean).join("\n");
 }
 
 function fittedFullBodyReferences(shape: FaceShape | undefined, assetId: string, mode: "text" | "reference",
     selected: AssetLibraryReference[], master?: AssetLibraryReference): AssetLibraryReference[] {
     const references = imageGenerationReferences(selected);
-    const source = shape?.calibration?.reviewed ? shape.calibration.source : undefined;
+    const calibration = shape?.calibration?.reviewed ? shape.calibration : undefined;
+    if (mode === "reference" && calibration?.referencePair) {
+        const pairReferences: AssetLibraryReference[] = [calibration.referencePair.front, calibration.referencePair.side].map(photo => ({
+            asset_type: photo.source.asset_type, asset_id: photo.source.asset_id, variant_id: photo.source.variant_id,
+            source_scope: photo.source.source_scope === "global" ? "shared" : photo.source.source_scope, application_mode: "reference_only",
+        }));
+        const appearance = master ? [master, ...references] : references;
+        return imageGenerationReferences([...appearance.filter(reference => !pairReferences.some(photo => referenceKey(photo) === referenceKey(reference))), ...pairReferences]);
+    }
+    const source = calibration?.source;
     if (mode !== "reference" || !source || source.asset_id !== assetId) return references;
     const geometry: AssetLibraryReference = {
-        asset_type: "character", asset_id: source.asset_id, variant_id: source.variant_id,
-        source_scope: source.source_scope,
+        asset_type: source.asset_type, asset_id: source.asset_id, variant_id: source.variant_id,
+        source_scope: source.source_scope === "global" ? "shared" : source.source_scope,
         application_mode: "reference_only",
     };
     const appearance = master ? [master, ...references] : references;
@@ -245,7 +256,7 @@ function fittedFullBodyReferences(shape: FaceShape | undefined, assetId: string,
 function includesFittedFaceReference(shape: FaceShape | undefined, references: AssetLibraryReference[]): boolean {
     const source = shape?.calibration?.source;
     const last = references.at(-1);
-    return !!(shape?.calibration?.reviewed && source && last && last.asset_type === "character"
+    return !!(shape?.calibration?.reviewed && source && last && last.asset_type === source.asset_type
         && last.asset_id === source.asset_id && last.variant_id === source.variant_id);
 }
 
@@ -789,11 +800,14 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         variantId: selectedThreeViewId,
     } : undefined;
     const selectedPortraitId = asset.headshot_asset?.selected_id || asset.headshot_asset?.variants?.[0]?.id;
-    const whiteFacePortraitSource = selectedPortraitId && fitContainerId
+    const selectedPortraitSource = selectedPortraitId && fitContainerId
         && asset.headshot_asset?.variants?.some((variant: { id: string }) => variant.id === selectedPortraitId) ? {
             scope: (fitSeriesId ? "series" : "project") as "series" | "project",
             containerId: fitContainerId, assetId: asset.id, variantId: selectedPortraitId,
         } : undefined;
+    const savedFront = whiteFaceShape?.calibration?.referencePair?.front.source;
+    const whiteFacePortraitSource = savedFront ? { scope: savedFront.source_scope, containerId: savedFront.source_container_id || "",
+        assetType: savedFront.asset_type, assetId: savedFront.asset_id, variantId: savedFront.variant_id } : selectedPortraitSource;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
     const masterVariantId = masterAsset?.selected_id || masterAsset?.variants?.[0]?.id;
@@ -1284,13 +1298,13 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         else if (type === "headshot") prompt = headshotPrompt;
 
         const promptType = type === "reference_sheet" ? "full_body" : type;
-        if (promptType === "full_body" && whiteFaceShape?.calibration?.reviewed
+        if (promptType === "full_body" && whiteFaceShape?.calibration?.reviewed && !whiteFaceShape.calibration.referencePair
             && !asset.three_view_asset?.variants?.some((variant: { id: string }) => variant.id === whiteFaceShape.calibration?.source.variant_id)) {
             setDesignError("骨相基准的三视图已不可用，请重新拟合。");
             return;
         }
         const calibratedFront = whiteFaceShape?.calibration?.frontReference;
-        if (promptType === "full_body" && whiteFaceShape?.calibration?.reviewed && calibratedFront
+        if (promptType === "full_body" && whiteFaceShape?.calibration?.reviewed && !whiteFaceShape.calibration.referencePair && calibratedFront
             && (!whiteFacePortraitSource || calibratedFront.source.asset_id !== whiteFacePortraitSource.assetId
                 || calibratedFront.source.variant_id !== whiteFacePortraitSource.variantId
                 || calibratedFront.source.source_scope !== whiteFacePortraitSource.scope
@@ -1313,7 +1327,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const derivedReference = imageGenerationReferences([...promptReferences[promptType], ...promptPickerReferences[promptType], ...(masterReference ? [masterReference] : [])])[0];
         const effectiveDerivedReference = isDerived && imageGenerationMode === "reference" ? derivedReference : undefined;
         prompt = addReferenceIntent(promptType, prompt, imageGenerationMode, effectiveDerivedReference ? [effectiveDerivedReference] : references,
-            promptType === "full_body" && includesFittedFaceReference(whiteFaceShape, references));
+            promptType === "full_body" && includesFittedFaceReference(whiteFaceShape, references), !!whiteFaceShape?.calibration?.referencePair);
         if (!seriesId && !currentProject?.id) return;
         setPendingImageReview({
             asset_id: asset.id,
@@ -1359,7 +1373,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         const effectiveDerivedReference = isDerived && imageGenerationMode === "reference" ? derivedReference : undefined;
         return {
             ...pendingImageReview, prompt: addReferenceIntent(type, prompt, imageGenerationMode, effectiveDerivedReference ? [effectiveDerivedReference] : references,
-                type === "full_body" && includesFittedFaceReference(whiteFaceShape, references)), negative_prompt: negativePrompt,
+                type === "full_body" && includesFittedFaceReference(whiteFaceShape, references), !!whiteFaceShape?.calibration?.referencePair), negative_prompt: negativePrompt,
             image_generation_mode: imageGenerationMode,
             reference: effectiveDerivedReference,
             references: isDerived ? [] : references,
@@ -1724,7 +1738,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                                 <h2 className="text-lg font-semibold text-foreground">面容白模</h2>
                                 <p className="mt-1 text-xs text-text-muted">独立调整脸型、鼻部、眼眉和嘴唇/下巴参数。参数会保存到当前角色，并作为骨相提示传递。</p>
                             </div>
-                            <WhiteFaceModel characterName={asset.name || "角色"} initialShape={whiteFaceShape} fitSource={whiteFaceFitSource} portraitSource={whiteFacePortraitSource} onSaved={handleWhiteFaceSaved} onDirtyChange={setWhiteFaceDirty} standalone />
+                            <WhiteFaceModel characterName={asset.name || "角色"} initialShape={whiteFaceShape} fitSource={whiteFaceFitSource} portraitSource={selectedPortraitSource} onSaved={handleWhiteFaceSaved} onDirtyChange={setWhiteFaceDirty} standalone />
                             <FaceGeometryGuide characterName={asset.name || "角色"} shape={whiteFaceShape} source={whiteFacePortraitSource} editingPending={whiteFaceDirty}
                                 onApplied={(reference, shapeKey) => {
                                     setAppliedFaceGuide({ reference, shapeKey, sourceKey: JSON.stringify(whiteFacePortraitSource) });

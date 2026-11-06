@@ -13,7 +13,7 @@ export default function FaceGeometryGuide({ characterName, shape, source, onAppl
     editingPending?: boolean;
     onApplied: (reference: AssetLibraryReference, shapeKey: string) => void;
 }) {
-    const [region, setRegion] = useState<FrontReferenceRegion>("whole");
+    const region: FrontReferenceRegion = "whole";
     const [originalUrl, setOriginalUrl] = useState("");
     const [guideUrl, setGuideUrl] = useState("");
     const [noseUrls, setNoseUrls] = useState<string[]>([]);
@@ -39,7 +39,7 @@ export default function FaceGeometryGuide({ characterName, shape, source, onAppl
         const controller = new AbortController(); let objectUrl = "";
         setOriginalUrl(""); setGuide(null); setError(""); setMessage("");
         if (source) void resolveAssetVariantDelivery({ scope: source.scope, containerId: source.containerId,
-            assetType: "character", assetId: source.assetId, variantId: source.variantId }).then(async url => {
+            assetType: source.assetType || "character", assetId: source.assetId, variantId: source.variantId }).then(async url => {
             if (controller.signal.aborted) return;
             const sameOrigin = new URL(url, window.location.href).origin === new URL(API_URL, window.location.href).origin;
             const response = await (sameOrigin ? authenticatedFetch : fetch)(url, { signal: controller.signal });
@@ -115,12 +115,7 @@ export default function FaceGeometryGuide({ characterName, shape, source, onAppl
         {unsupported.length > 0 && <p className="text-xs text-amber-400">本次未应用：{unsupported.map(item => item.label).join("、")}。</p>}
         {shape && !supported && <p className="text-xs text-text-muted">当前没有可应用的正面调整，无法制作新的变形引导图。</p>}
         {!shape ? <p className="text-xs text-text-muted">请先保存骨相参数。</p> : !source ? <p className="text-xs text-text-muted">请先在头像中选择一张清晰的正面原图，再回到这里制作引导图。</p> : <>
-            <label className="block text-xs text-text-secondary">原图中的正脸区域
-                <select aria-label="引导图正脸区域" value={region} disabled={busy || saving} onChange={event => setRegion(event.target.value as FrontReferenceRegion)} className="ml-2 min-h-10 rounded border border-glass-border bg-surface px-2">
-                    <option value="whole">整张图（单人正脸）</option><option value="left">左半图</option><option value="right">右半图</option>
-                </select>
-            </label>
-            {region !== "whole" && <p role="status" className="text-xs text-amber-400">已选择{region === "left" ? "左" : "右"}半图。只有多视图或多人排版才需要选择半图；单人正脸头像请选“整张图”，避免截掉半张脸。</p>}
+            <p className="text-xs text-text-muted">引导图固定使用独立正面原图，请勿使用拼图、斜侧脸或多人照片。</p>
             <div className="grid gap-3 sm:grid-cols-2">
                 <figure>{originalUrl && <img ref={image} src={originalUrl} alt="骨相引导原始头像" className="max-h-96 w-full rounded object-contain" />}<figcaption className="mt-1 text-xs text-text-muted">原始头像</figcaption></figure>
                 {guideUrl && <figure><img src={guideUrl} alt="局部变形后的骨相引导图" className="max-h-96 w-full rounded object-contain" /><figcaption className="mt-1 text-xs text-text-muted">局部变形结果 · 未调用图像模型</figcaption></figure>}
