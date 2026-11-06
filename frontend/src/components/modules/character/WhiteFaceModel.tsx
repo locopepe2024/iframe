@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { Undo2 } from "lucide-react";
 import { API_URL, api, authenticatedFetch, type AssetLibraryReference } from "@/lib/api";
-import { DEFAULT_FACE_SHAPE, FACE_BASE_PRESETS, SELECTABLE_FACE_PRESETS, faceBaseShape, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape, type FaceShapeNumbers } from "@/lib/whiteFaceShape";
+import { DEFAULT_FACE_SHAPE, FACE_BASE_PRESETS, SELECTABLE_FACE_PRESETS, faceBaseShape, faceShapePrompt, faceShapeMeasurements, normalizeFaceShape, type FaceBasePreset, type FaceShape, type FaceShapeNumbers } from "@/lib/whiteFaceShape";
+import { faceMeasurementTargetText } from "@/lib/whiteFaceMeasurements";
 import { FACE_FIT_MARKS, FACE_FIT_LANDMARK_CONVENTION, FACE_FIT_OBJECTIVE, FIT_METRIC_LABELS, fitFaceToLandmarks, type FaceFitLandmarks, type FaceFitPoint } from "@/lib/whiteFaceFit";
 import { autoMarkThreeView } from "@/lib/whiteFaceAutoLandmarks";
 import { FACE_FIT_IMAGE_SPEC, type FaceImagePreparation, type PreparedFaceInfo, type FaceFitSource, type FrontFaceReference as FrontReference, type FrontReferenceRegion } from "@/lib/whiteFaceImage";
@@ -99,6 +100,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     const [saving, setSaving] = useState(false);
     const [savedShape, setSavedShape] = useState<string>("");
     const [showNose, setShowNose] = useState(false);
+    const measurements = useMemo(() => faceShapeMeasurements(shape), [shape]);
     const [error, setError] = useState("");
     const [meshData, setMeshData] = useState<WhiteFaceMeshData | null>(null);
     const [fitImageUrl, setFitImageUrl] = useState("");
@@ -491,16 +493,31 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             </div>
         </section>}
         <div className="space-y-2">
+            <p className="text-xs text-text-secondary">滑杆显示白模控制值；参考图的测量基准和出图目标见下方测量表。</p>
             {CONTROL_GROUPS.map(([group, controls]) => <details key={group} open={group === "头部轮廓"} className="rounded border border-glass-border/60 p-2">
                 <summary className="cursor-pointer text-xs font-medium text-text-secondary">{group}</summary>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {controls.map(([key, label, min, max]) => <label key={key} className="text-xs text-text-secondary">
-                        <span className="flex justify-between"><span>{label}</span><span>{shape[key]}%</span></span>
+                        <span className="flex justify-between"><span>{label}{key === "faceLength" ? "（眼线至下巴）" : key === "noseBridgeHeight" ? "（向前隆起）" : key === "eyeSize" ? "（睁开高度）" : ""}</span><span>控制值 {shape[key]}</span></span>
                         <input aria-label={label} type="range" min={shape.calibration ? Math.max(min, 90) : min} max={shape.calibration ? Math.min(max, 110) : max} value={shape[key]} onChange={event => { setShape(current => ({ ...current, [key]: Number(event.target.value) })); setFitReviewed(false); }} className="w-full" />
                     </label>)}
                 </div>
             </details>)}
         </div>
+        <details className="rounded border border-glass-border p-3">
+            <summary className="min-h-8 cursor-pointer text-xs font-medium text-foreground">查看出图测量定义、参考基准与目标值</summary>
+            <p className="mt-2 text-xs text-text-secondary">当前长度指标是眼线至下巴，不是发际线至下巴。滑杆数值是变形输入，下表目标由{shape.calibration ? "拟合基准" : "所选基础脸型"}与当前白模的同一点位测量换算，用作参考图的相对编辑目标。</p>
+            <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-left text-xs text-text-secondary">
+                    <caption className="sr-only">出图测量目标</caption>
+                    <thead><tr><th scope="col" className="p-2">项目与测量定义</th><th scope="col" className="p-2">参考基准与目标</th></tr></thead>
+                    <tbody>{measurements.map(item => <tr key={item.key} className="border-t border-glass-border">
+                        <th scope="row" className="p-2 font-normal">{item.label} · {item.view}<br />{item.definition}</th>
+                        <td className="p-2">{faceMeasurementTargetText(item)}</td>
+                    </tr>)}</tbody>
+                </table>
+            </div>
+        </details>
         <button type="button" disabled={saving || detecting || !meshData || (usePortrait && !shape.calibration) || !!(shape.calibration && (!fitReviewed || !calibrationCurrent))} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
         {savedShape === JSON.stringify(shape) && <p role="status" className="text-xs text-green-400">骨相参数已保存到角色</p>}
         {shape.calibration && (!fitSource || shape.calibration.source.asset_id !== fitSource.assetId || shape.calibration.source.variant_id !== fitSource.variantId) &&

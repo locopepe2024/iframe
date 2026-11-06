@@ -1,3 +1,4 @@
+import { measureFaceTargets, faceMeasurementTargetText } from "./whiteFaceMeasurements";
 import type { FaceFitDiagnostics } from "./whiteFaceFit";
 import type { FaceImagePreparation, FrontFaceReference } from "./whiteFaceImage";
 
@@ -105,47 +106,23 @@ export function faceBaseShape(preset: FaceBasePreset): FaceShape {
     return { ...DEFAULT_FACE_SHAPE, ...FACE_BASE_PRESETS[preset].values, basePreset: preset };
 }
 
-const FACE_PROMPT_CONTROLS: Array<[keyof FaceShapeNumbers, string, string, string]> = [
-    ["faceLength", "脸部长度", "脸部纵向轮廓拉长", "脸部纵向轮廓缩短"],
-    ["faceWidth", "脸部宽度", "面部横向宽度加宽", "面部横向宽度收窄"],
-    ["foreheadWidth", "额头宽度", "额头横向加宽", "额头横向收窄"],
-    ["cheekWidth", "颧部宽度", "颧部横向加宽", "颧部横向收窄"],
-    ["cheekHeight", "颧部高度", "颧部位置上移", "颧部位置下移"],
-    ["jawWidth", "下颌宽度", "下颌横向加宽", "下颌横向收窄"],
-    ["jawHeight", "下颌高度", "下颌位置上移", "下颌位置下移"],
-    ["chinWidth", "下巴宽度", "下巴加宽", "下巴收窄"],
-    ["chinProjection", "下巴前突", "下巴前突增强", "下巴前突减弱"],
-    ["noseBridgeHeight", "鼻梁高度", "鼻梁向前隆起增加", "鼻梁向前隆起减少"],
-    ["noseBridgeWidth", "鼻梁宽度", "鼻梁加宽", "鼻梁收窄"],
-    ["noseProjection", "鼻尖突出度", "鼻尖突出度增强", "鼻尖突出度减弱"],
-    ["noseTipHeight", "鼻尖高度", "鼻尖位置上移", "鼻尖位置下移"],
-    ["noseTipWidth", "鼻尖宽度", "鼻尖加宽", "鼻尖收窄"],
-    ["nostrilWidth", "鼻翼宽度", "鼻翼加宽", "鼻翼收窄"],
-    ["eyeSpacing", "眼距", "眼距加宽", "眼距收窄"],
-    ["eyeSize", "眼睛大小", "眼睛增大", "眼睛缩小"],
-    ["eyeDepth", "眼窝深度", "眼窝加深", "眼窝变浅"],
-    ["eyeTilt", "眼尾倾斜", "眼尾倾斜程度增加", "眼尾倾斜程度减少"],
-    ["browEyeDistance", "眉眼距离", "眉眼距离增加", "眉眼距离减少"],
-    ["mouthWidth", "嘴宽", "嘴部横向加宽", "嘴部横向收窄"],
-    ["upperLipThickness", "上唇厚度", "上唇增厚", "上唇变薄"],
-    ["lowerLipThickness", "下唇厚度", "下唇增厚", "下唇变薄"],
-    ["philtrumLength", "人中长度", "人中拉长", "人中缩短"],
-    ["mouthCornerTilt", "嘴角倾斜", "嘴角上提", "嘴角下移"],
-];
+export function faceShapeMeasurements(shape: FaceShape) {
+    const value = normalizeFaceShape(shape);
+    const baseline = value.calibration
+        ? { ...DEFAULT_FACE_SHAPE, basePreset: value.basePreset, calibration: value.calibration }
+        : faceBaseShape(value.basePreset);
+    return measureFaceTargets(effectiveFaceShape(baseline), effectiveFaceShape(value));
+}
 
 export function faceShapePrompt(shape: FaceShape): string {
-    const value = normalizeFaceShape(shape);
-    const changes = FACE_PROMPT_CONTROLS.filter(([key]) => value[key] !== 100)
-        .map(([key, label, more, less]) => `${value[key] > 100 ? more : less}（${label}调节值${value[key]}%）`);
-    const baseline = value.calibration ? "拟合基准100%" : "中性基准100%";
+    const changes = faceShapeMeasurements(shape).filter(item => item.target !== item.baseline);
     return [
-        changes.length ? `骨相调整：\n${changes.join("；\n")}。` : "",
-        !changes.length ? "骨相基准：沿用角色设定中的面部轮廓与五官关系。" : "",
-        changes.length ? `调节基准：${baseline}；数值是白模变形控制值，不是参考图实际面部尺寸的百分比。` : "",
+        changes.length ? "骨相测量目标：每项距离分别把参考图中的同一测量区间记为100；目标值表示该距离相对于参考图的比例。正面项目用正面视角，侧面项目用侧面视角测量。" : "骨相基准：沿用角色设定中的面部轮廓与五官关系。",
+        ...changes.map(item => `${item.label}：${item.view}，${item.definition}；${faceMeasurementTargetText(item)}。`),
         changes.length ? "上述骨相要求优先于参考图中的原始轮廓比例；参考图用于保持目标角色身份、发型和肤色。" : "",
         FACE_SHAPE_REFERENCE_PROMPT,
     ].filter(Boolean).join("\n");
 }
 
-// The panel and AI paths must describe the same geometry without relying on legacy identity fields.
+// The panel and AI paths must describe the same measured targets.
 export const faceShapePanelPrompt = faceShapePrompt;
