@@ -78,7 +78,7 @@ export const DEFAULT_FACE_SHAPE: FaceShape = {
     philtrumLength: 100, mouthCornerTilt: 100,
 };
 
-export const FACE_SHAPE_REFERENCE_PROMPT = "面部比例参数仅约束目标角色的骨相和轮廓，不作为肤色、面容身份或材质参考；最终画面只呈现目标角色，不呈现白模、参考图或对照视图。";
+export const FACE_SHAPE_REFERENCE_PROMPT = "画面限制：最终画面只呈现目标角色，不呈现白模、参考图或对照视图。";
 
 export function normalizeFaceShape(shape?: Partial<FaceShape> | null): FaceShape {
     const merged = { ...DEFAULT_FACE_SHAPE, ...(shape || {}) };
@@ -105,48 +105,47 @@ export function faceBaseShape(preset: FaceBasePreset): FaceShape {
     return { ...DEFAULT_FACE_SHAPE, ...FACE_BASE_PRESETS[preset].values, basePreset: preset };
 }
 
+const FACE_PROMPT_CONTROLS: Array<[keyof FaceShapeNumbers, string, string, string]> = [
+    ["faceLength", "脸部长度", "脸部纵向轮廓拉长", "脸部纵向轮廓缩短"],
+    ["faceWidth", "脸部宽度", "面部横向宽度加宽", "面部横向宽度收窄"],
+    ["foreheadWidth", "额头宽度", "额头横向加宽", "额头横向收窄"],
+    ["cheekWidth", "颧部宽度", "颧部横向加宽", "颧部横向收窄"],
+    ["cheekHeight", "颧部高度", "颧部位置上移", "颧部位置下移"],
+    ["jawWidth", "下颌宽度", "下颌横向加宽", "下颌横向收窄"],
+    ["jawHeight", "下颌高度", "下颌位置上移", "下颌位置下移"],
+    ["chinWidth", "下巴宽度", "下巴加宽", "下巴收窄"],
+    ["chinProjection", "下巴前突", "下巴前突增强", "下巴前突减弱"],
+    ["noseBridgeHeight", "鼻梁高度", "鼻梁向前隆起增加", "鼻梁向前隆起减少"],
+    ["noseBridgeWidth", "鼻梁宽度", "鼻梁加宽", "鼻梁收窄"],
+    ["noseProjection", "鼻尖突出度", "鼻尖突出度增强", "鼻尖突出度减弱"],
+    ["noseTipHeight", "鼻尖高度", "鼻尖位置上移", "鼻尖位置下移"],
+    ["noseTipWidth", "鼻尖宽度", "鼻尖加宽", "鼻尖收窄"],
+    ["nostrilWidth", "鼻翼宽度", "鼻翼加宽", "鼻翼收窄"],
+    ["eyeSpacing", "眼距", "眼距加宽", "眼距收窄"],
+    ["eyeSize", "眼睛大小", "眼睛增大", "眼睛缩小"],
+    ["eyeDepth", "眼窝深度", "眼窝加深", "眼窝变浅"],
+    ["eyeTilt", "眼尾倾斜", "眼尾倾斜程度增加", "眼尾倾斜程度减少"],
+    ["browEyeDistance", "眉眼距离", "眉眼距离增加", "眉眼距离减少"],
+    ["mouthWidth", "嘴宽", "嘴部横向加宽", "嘴部横向收窄"],
+    ["upperLipThickness", "上唇厚度", "上唇增厚", "上唇变薄"],
+    ["lowerLipThickness", "下唇厚度", "下唇增厚", "下唇变薄"],
+    ["philtrumLength", "人中长度", "人中拉长", "人中缩短"],
+    ["mouthCornerTilt", "嘴角倾斜", "嘴角上提", "嘴角下移"],
+];
+
 export function faceShapePrompt(shape: FaceShape): string {
     const value = normalizeFaceShape(shape);
-    if (value.calibration) return calibratedFacePrompt(value);
-    return `${FACE_SHAPE_REFERENCE_PROMPT} 基础脸型：${FACE_BASE_PRESETS[value.basePreset]?.label || FACE_BASE_PRESETS.neutral_young.label}；头部轮廓：脸长 ${value.faceLength}%，脸宽 ${value.faceWidth}%，额头宽 ${value.foreheadWidth}%，颧部宽 ${value.cheekWidth}%，颧部高度 ${value.cheekHeight}%，下颌宽 ${value.jawWidth}%，下颌高度 ${value.jawHeight}%，下巴宽 ${value.chinWidth}%，下巴前突 ${value.chinProjection}%；鼻部：鼻梁高度 ${value.noseBridgeHeight}%，鼻梁宽度 ${value.noseBridgeWidth}%，鼻尖突出度 ${value.noseProjection}%，鼻尖高度 ${value.noseTipHeight}%，鼻尖宽度 ${value.noseTipWidth}%，鼻翼宽度 ${value.nostrilWidth}%；眼眉：眼距 ${value.eyeSpacing}%，眼睛大小 ${value.eyeSize}%，眼窝深度 ${value.eyeDepth}%，眼尾倾斜 ${value.eyeTilt}%，眉眼距离 ${value.browEyeDistance}%；嘴唇：嘴宽 ${value.mouthWidth}%，上唇厚度 ${value.upperLipThickness}%，下唇厚度 ${value.lowerLipThickness}%，人中长度 ${value.philtrumLength}%，嘴角倾斜 ${value.mouthCornerTilt}%；100% 为中性基准。`;
+    const changes = FACE_PROMPT_CONTROLS.filter(([key]) => value[key] !== 100)
+        .map(([key, label, more, less]) => `${value[key] > 100 ? more : less}（${label}调节值${value[key]}%）`);
+    const baseline = value.calibration ? "拟合基准100%" : "中性基准100%";
+    return [
+        changes.length ? `骨相调整：\n${changes.join("；\n")}。` : "",
+        !changes.length ? "骨相基准：沿用角色设定中的面部轮廓与五官关系。" : "",
+        changes.length ? `调节基准：${baseline}；数值是白模变形控制值，不是参考图实际面部尺寸的百分比。` : "",
+        changes.length ? "上述骨相要求优先于参考图中的原始轮廓比例；参考图用于保持目标角色身份、发型和肤色。" : "",
+        FACE_SHAPE_REFERENCE_PROMPT,
+    ].filter(Boolean).join("\n");
 }
 
-export function faceShapePanelPrompt(shape: FaceShape): string {
-    const value = normalizeFaceShape(shape);
-    if (value.calibration) return calibratedFacePrompt(value);
-    const details: Array<[keyof FaceShape, string]> = [
-        ["cheekHeight", "颧部高度"], ["jawHeight", "下颌高度"], ["noseTipHeight", "鼻尖高度"],
-        ["foreheadWidth", "额头宽"], ["chinWidth", "下巴宽"], ["chinProjection", "下巴前突"],
-        ["noseBridgeHeight", "鼻梁高度"], ["noseBridgeWidth", "鼻梁宽度"],
-        ["noseTipWidth", "鼻尖宽度"], ["nostrilWidth", "鼻翼宽度"],
-        ["eyeSize", "眼睛大小"], ["eyeDepth", "眼窝深度"], ["eyeTilt", "眼尾倾斜"],
-        ["browEyeDistance", "眉眼距离"], ["mouthWidth", "嘴宽"],
-        ["upperLipThickness", "上唇厚度"], ["lowerLipThickness", "下唇厚度"],
-        ["philtrumLength", "人中长度"], ["mouthCornerTilt", "嘴角倾斜"],
-    ];
-    const changed = details.filter(([key]) => value[key] !== 100)
-        .map(([key, label]) => `${label} ${value[key]}%`);
-    return [FACE_SHAPE_REFERENCE_PROMPT, changed.length ? `补充骨相参数：${changed.join("，")}；100% 为中性基准。` : ""].filter(Boolean).join(" ");
-}
-
-function calibratedFacePrompt(shape: FaceShape): string {
-    const changes: Array<[keyof FaceShapeNumbers, string]> = [
-        ["cheekHeight", "颧部高度"], ["jawHeight", "下颌高度"], ["noseTipHeight", "鼻尖高度"],
-        ["faceLength", "脸部长度"], ["faceWidth", "脸部宽度"], ["cheekWidth", "颧部宽度"],
-        ["jawWidth", "下颌宽度"], ["eyeSpacing", "眼距"], ["noseProjection", "鼻尖突出度"],
-        ["chinProjection", "下巴前突"], ["noseBridgeHeight", "鼻梁高度"],
-        ["noseBridgeWidth", "鼻梁宽度"], ["noseTipWidth", "鼻尖宽度"],
-        ["nostrilWidth", "鼻翼宽度"], ["eyeSize", "眼睛大小"], ["eyeDepth", "眼窝深度"],
-        ["mouthWidth", "嘴宽"], ["upperLipThickness", "上唇厚度"],
-        ["lowerLipThickness", "下唇厚度"],
-        ["foreheadWidth", "额头宽度"], ["chinWidth", "下巴宽度"],
-        ["eyeTilt", "眼尾倾斜"], ["browEyeDistance", "眉眼距离"],
-        ["philtrumLength", "人中长度"], ["mouthCornerTilt", "嘴角倾斜"],
-    ];
-    const adjusted = changes.filter(([key]) => shape[key] !== 100)
-        .map(([key, label]) => `${label}调节值${shape[key]}%`);
-    return [FACE_SHAPE_REFERENCE_PROMPT,
-        "角色面部轮廓和五官空间关系以已确认的角色形象为准。",
-        adjusted.length ? `骨相调节（各项以拟合基准100%为中性值，数值表示白模调节值，不代表实际生理尺寸百分比）：${adjusted.join("、")}。` : "",
-    ].filter(Boolean).join(" ");
-}
+// The panel and AI paths must describe the same geometry without relying on legacy identity fields.
+export const faceShapePanelPrompt = faceShapePrompt;

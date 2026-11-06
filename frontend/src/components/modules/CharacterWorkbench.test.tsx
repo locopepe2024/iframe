@@ -122,6 +122,12 @@ it('persists face adjustments with one save and restores them after closing the 
         expect(saved.reference_assets.map((ref: { asset_id: string }) => ref.asset_id)).toEqual(['coat', 'face-prop']);
         await act(async () => finishSave());
         expect(screen.getByText('骨相参数已保存到角色')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: '应用角色设计到图片提示词' }));
+        fireEvent.click(screen.getByRole('tab', { name: 'masterAsset' }));
+        openImagePrompt();
+        expect(imagePromptInput()).toHaveTextContent('原有黑发');
+        expect(imagePromptInput()).toHaveTextContent('原有外衣');
+        expect(imagePromptInput()).toHaveTextContent('鼻梁向前隆起增加');
         view.unmount();
         render(<CharacterWorkbench {...props} asset={{ ...asset, character_design: { design_draft: saved } }} />);
         fireEvent.click(screen.getByRole('tab', { name: '面容白模' }));
@@ -986,11 +992,33 @@ it('includes saved white face proportions and new geometry once in a panel image
     mountSimpleDesign({ character_design: { design_draft: saved, design_revisions: [{ revision: 1, design: saved }] } });
 
     const prompt = imagePromptInput().textContent || '';
-    expect(prompt.match(/脸长 90%/g)).toHaveLength(1);
-    expect(prompt.match(/鼻部突出度 75%/g)).toHaveLength(1);
-    expect(prompt.match(/额头宽 108%/g)).toHaveLength(1);
-    expect(prompt.match(/嘴角倾斜 115%/g)).toHaveLength(1);
+    expect(prompt.match(/脸部长度调节值90%/g)).toHaveLength(1);
+    expect(prompt.match(/鼻尖突出度调节值75%/g)).toHaveLength(1);
+    expect(prompt.match(/额头宽度调节值108%/g)).toHaveLength(1);
+    expect(prompt.match(/嘴角倾斜调节值115%/g)).toHaveLength(1);
     expect(prompt).toContain('最终画面只呈现目标角色');
+});
+
+it('does not duplicate legacy percentage fields beside uncalibrated bone controls', () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
+    const saved = { confirmed: true, active_design_source: 'panel',
+        identity: { editor_mode: 'fields', features: {
+            facial_proportions: '脸长 90%，脸宽 120%（中性基准 100%）',
+            eye_spacing: '眼距 80%（中性基准 100%）',
+            cheekbones: '颧部宽 117%（中性基准 100%）',
+            jaw: '下颌宽 75%（中性基准 100%）',
+            nose: '鼻型：鼻梁自然、鼻尖圆润',
+            face: '下颌轮廓较分明，颧骨结构清晰',
+        } }, white_face_shape: { faceLength: 90, faceWidth: 120, eyeSpacing: 80,
+            cheekWidth: 117, jawWidth: 75, noseProjection: 75 } };
+    mountSimpleDesign({ character_design: { design_draft: saved, design_revisions: [{ revision: 1, design: saved }] } });
+    const prompt = imagePromptInput().textContent || '';
+    expect(prompt).toContain('下颌轮廓较分明，颧骨结构清晰');
+    expect(prompt).toContain('鼻型：鼻梁自然、鼻尖圆润');
+    expect(prompt).not.toContain('三庭五眼比例：脸长 90%');
+    expect(prompt).not.toContain('眼距与眉眼距：眼距 80%');
+    expect(prompt).toContain('脸部纵向轮廓缩短');
+    expect(prompt).toContain('眼距收窄');
 });
 
 it('does not send superseded neutral-base percentages after a three-view fit', () => {
@@ -1076,7 +1104,7 @@ it('submits face proportions without including the white model image in a full-b
     fireEvent.click(screen.getAllByTestId('variant-generate')[0]);
     await waitFor(() => expect(apiMocks.previewAssetImageSubmission).toHaveBeenCalled());
     const request = apiMocks.previewAssetImageSubmission.mock.lastCall?.[1];
-    expect(request.prompt).toContain('脸长 90%');
+    expect(request.prompt).toContain('脸部纵向轮廓缩短（脸部长度调节值90%）');
     expect(request.image_generation_mode).toBe('text');
     expect(request.references).toEqual([]);
     expect(onGenerate).not.toHaveBeenCalled();

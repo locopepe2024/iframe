@@ -163,7 +163,7 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
     // the user's confirmed value belongs in an image prompt.
     const answers = Object.values(design?.field_answers || {});
     const identity = normalizeCharacterFeatures(design?.identity?.features, IDENTITY_FIELDS.map(([key]) => key));
-    const promptIdentity = withoutSupersededFaceFields(identity, !!design?.white_face_shape?.calibration);
+    const promptIdentity = withoutSupersededFaceFields(identity, design?.white_face_shape);
     if (design?.spatial_constraints?.heightM) delete promptIdentity.height;
     if (design?.identity?.editor_mode !== "notes" && design?.look?.editor_mode !== "notes") {
         const look = normalizeCharacterFeatures(design?.look?.features, LOOK_FIELDS.map(([key]) => key));
@@ -181,11 +181,23 @@ function confirmedDesignContent(design: DesignDraft | undefined): string {
     );
 }
 
-function withoutSupersededFaceFields(features: IdentityFeatures, calibrated: boolean): IdentityFeatures {
-    if (!calibrated) return features;
+function withoutSupersededFaceFields(features: IdentityFeatures, shape?: Partial<FaceShape>): IdentityFeatures {
+    if (!shape) return features;
     const result = { ...features };
+    // Suppress only exact machine-authored legacy values; retain user prose.
+    const legacy = {
+        facial_proportions: /^脸长 \d+%，脸宽 \d+%（中性基准 100%）$/,
+        eye_spacing: /^眼距 \d+%（中性基准 100%）$/,
+        cheekbones: /^颧部宽 \d+%（中性基准 100%）$/,
+        jaw: /^下颌宽 \d+%（中性基准 100%）$/,
+        nose: /^鼻部突出度 \d+%（中性基准 100%）$/,
+    };
+    const controls: Record<keyof typeof legacy, Array<keyof FaceShape>> = {
+        facial_proportions: ["faceLength", "faceWidth"], eye_spacing: ["eyeSpacing"],
+        cheekbones: ["cheekWidth"], jaw: ["jawWidth"], nose: ["noseProjection"],
+    };
     for (const key of ["facial_proportions", "eye_spacing", "cheekbones", "jaw", "nose"] as const) {
-        if (/中性基准\s*100%/.test(result[key] || "")) delete result[key];
+        if (legacy[key].test(result[key] || "") && controls[key].every(control => Object.hasOwn(shape, control))) delete result[key];
     }
     return result;
 }
@@ -824,7 +836,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
 
     const promptIdentityFeatures = withoutSupersededFaceFields(
         metricBody.heightM.trim() ? { ...identityFeatures, height: undefined } : identityFeatures,
-        !!whiteFaceShape?.calibration,
+        whiteFaceShape,
     );
     const projectedIdentity = characterSectionText(promptIdentityFeatures, IDENTITY_FIELDS.map(([key]) => key), designNotes, identityEditorMode);
     const projectedLook = characterSectionText(lookFeatures, LOOK_FIELDS.map(([key]) => key), lookNotes, lookEditorMode);
@@ -1460,14 +1472,6 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 setDesignIdentityBasis(["verified_reference"]);
                 clearAIResultForInput();
                 setPromptModes(current => ({ ...current, full_body: "reference" }));
-            } else {
-                updateStructuredDesign({
-                    facial_proportions: `脸长 ${shape.faceLength}%，脸宽 ${shape.faceWidth}%（中性基准 100%）`,
-                    eye_spacing: `眼距 ${shape.eyeSpacing}%（中性基准 100%）`,
-                    cheekbones: `颧部宽 ${shape.cheekWidth}%（中性基准 100%）`,
-                    jaw: `下颌宽 ${shape.jawWidth}%（中性基准 100%）`,
-                    nose: `鼻部突出度 ${shape.noseProjection}%（中性基准 100%）`,
-                }, {});
             }
             refreshAssetIndex();
     };
