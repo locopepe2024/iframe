@@ -36,7 +36,12 @@ export function OutputTypeSelector({ agentActive = false, onAgentChange }: { age
             type="button"
             onClick={() => {
               onAgentChange?.(false);
-              const nextMode = getDefaultModeForOutput(output);
+              // Keep the shared Agent draft when moving into generation.
+              // Reference modes also keep selected media in the request.
+              const hasReferences = usePlaygroundStore.getState().inputMedia.length > 0;
+              const nextMode = hasReferences
+                ? output === 'image' ? 'i2i' : 'i2v'
+                : getDefaultModeForOutput(output);
               setMode(nextMode);
               if (outputType !== output) usePlaygroundStore.getState().setParameters({});
               const nextModel = usePlaygroundStore.getState().modelId;

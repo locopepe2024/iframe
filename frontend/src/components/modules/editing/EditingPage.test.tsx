@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import EditingPage, { EditingMaterials, EditingMaterialManager } from './EditingPage';
 import { editing, type EditProject, type EditMaterial } from '@/lib/editing';
@@ -6,7 +6,7 @@ import { agentRequest, agentTranscribe } from '@/lib/api';
 vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
 vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), agentRequest: vi.fn(), agentTranscribe: vi.fn() }));
 vi.mock('../cast/VoicePickerModal', () => ({ default: ({ isOpen, onApply }: { isOpen: boolean; onApply: (id: string, name: string) => void }) => isOpen ? <button type="button" onClick={() => onApply('uniart:speech-2.8-hd:male-qn-qingse', 'Qingse')}>Pick Qingse</button> : null }));
-vi.mock('@/lib/editing', () => ({ editing: { folders: vi.fn(), createFolder: vi.fn(), renameFolder: vi.fn(), deleteFolder: vi.fn(), moveMaterial: vi.fn(), deleteMaterial: vi.fn(), list: vi.fn(), create: vi.fn(), get: vi.fn(), materials: vi.fn(), material: vi.fn(), upload: vi.fn(), importMaterial: vi.fn(), save: vi.fn(), render: vi.fn(), versions: vi.fn(), restore: vi.fn(), subtitles: vi.fn(), transcriptionAudio: vi.fn(), synthesizeVoice: vi.fn(), voiceClones: vi.fn(), cloneVoice: vi.fn() } }));
+vi.mock('@/lib/editing', () => ({ editing: { folders: vi.fn(), createFolder: vi.fn(), renameFolder: vi.fn(), deleteFolder: vi.fn(), moveMaterial: vi.fn(), deleteMaterial: vi.fn(), list: vi.fn(), create: vi.fn(), delete: vi.fn(), get: vi.fn(), materials: vi.fn(), material: vi.fn(), upload: vi.fn(), importMaterial: vi.fn(), save: vi.fn(), render: vi.fn(), versions: vi.fn(), restore: vi.fn(), subtitles: vi.fn(), transcriptionAudio: vi.fn(), synthesizeVoice: vi.fn(), voiceClones: vi.fn(), cloneVoice: vi.fn() } }));
 const project: EditProject = { id: 'independent', title: 'My edit', revision: 0, plan: null, sources: {}, output: null };
 const material: EditMaterial = { id: 'core:source', name: 'Original.mp4', url: '/video.mp4', sha256: 'digest', duration_ms: 1000, video: true, audio: true, origin: 'upload', deletable: true };
 beforeEach(() => {
@@ -134,6 +134,7 @@ it('keeps a workspace import after reloading the project without inserting a cli
   expect(await screen.findByText(/Revision 1/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeInTheDocument();
   expect(editing.save).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Project actions' }));
   fireEvent.click(screen.getByRole('button', { name: 'Reload / discard changes' }));
   await waitFor(() => expect(editing.get).toHaveBeenCalledTimes(2));
   expect(screen.getByRole('button', { name: 'Add to edit Original.mp4' })).toBeInTheDocument();
@@ -257,10 +258,13 @@ it('restores a saved version with an optimistic current revision', async () => {
   render(<EditingPage />);
   await screen.findByRole('option', { name: project.title });
   fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
-  fireEvent.click(await screen.findByRole('button', { name: 'Version history' }));
+  await screen.findByText('Revision 2');
+  fireEvent.click(screen.getByRole('button', { name: 'Project actions' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Version history' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Restore v1' }));
   await waitFor(() => expect(editing.restore).toHaveBeenCalledWith(project.id, 2, 1));
   await screen.findByText(/Revision 3/);
+  expect(screen.queryByRole('dialog', { name: 'Version history' })).not.toBeInTheDocument();
 });
 
 it('creates a folder, uploads into it, moves a material and reports deletion conflicts', async () => {
@@ -368,4 +372,105 @@ it('undoes and redoes a directional trim before saving the source interval', asy
   fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
   await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
   expect(vi.mocked(editing.save).mock.calls[0][2].lanes[0].clips[0]).toMatchObject({ source_start_ms: 400, source_end_ms: 1000, timeline_start_ms: 0, timeline_end_ms: 600 });
+});
+
+it('names new projects on demand, cancels without changing the project, and retries creation errors', async () => {
+  vi.mocked(editing.create).mockRejectedValueOnce(new Error('Create failed')).mockResolvedValueOnce({ ...project, id: 'second', title: 'Second edit' });
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  await screen.findByText('Revision 0');
+  expect(screen.queryByRole('textbox', { name: 'New edit title' })).not.toBeInTheDocument();
+  const actions = screen.getByRole('button', { name: 'Project actions' });
+  actions.focus();
+  fireEvent.click(actions);
+  fireEvent.click(screen.getByRole('button', { name: 'New edit' }));
+  const title = screen.getByRole('textbox', { name: 'New edit title' });
+  expect(title).toHaveFocus();
+  fireEvent.change(title, { target: { value: 'Cancelled edit' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(actions).toHaveFocus();
+  expect(screen.getByRole('combobox', { name: 'Editing project' })).toHaveValue(project.id);
+  expect(editing.create).not.toHaveBeenCalled();
+  fireEvent.click(actions);
+  fireEvent.click(screen.getByRole('button', { name: 'New edit' }));
+  expect(screen.getByRole('textbox', { name: 'New edit title' })).toHaveValue('');
+  fireEvent.change(screen.getByRole('textbox', { name: 'New edit title' }), { target: { value: '  Second edit  ' } });
+  fireEvent.submit(screen.getByRole('textbox', { name: 'New edit title' }).closest('form')!);
+  expect(await screen.findByRole('alert')).toHaveTextContent('Create failed');
+  expect(screen.getByRole('dialog', { name: 'New edit' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Create independent project' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(editing.create).toHaveBeenNthCalledWith(2, 'Second edit');
+  expect(screen.getByRole('combobox', { name: 'Editing project' })).toHaveValue('second');
+});
+
+it('dismisses project actions with Escape, outside press and focus leaving the disclosure', async () => {
+  render(<EditingPage />);
+  const trigger = screen.getByRole('button', { name: 'Project actions' });
+  fireEvent.click(trigger);
+  within(screen.getByRole('group', { name: 'Project actions' })).getByRole('button', { name: 'New edit' }).focus();
+  fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+  expect(screen.queryByRole('group', { name: 'Project actions' })).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+  fireEvent.click(trigger);
+  fireEvent.pointerDown(document.body);
+  expect(screen.queryByRole('group', { name: 'Project actions' })).not.toBeInTheDocument();
+  fireEvent.click(trigger);
+  within(screen.getByRole('group', { name: 'Project actions' })).getByRole('button', { name: 'New edit' }).focus();
+  fireEvent.focusOut(document.activeElement!, { relatedTarget: screen.getByRole('button', { name: 'Materials' }) });
+  expect(screen.queryByRole('group', { name: 'Project actions' })).not.toBeInTheDocument();
+});
+
+it('blocks project replacement and history for an unsaved timeline while allowing discard', async () => {
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
+  expect(screen.getByRole('combobox', { name: 'Editing project' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Project actions' }));
+  for (const name of ['New edit', 'Version history', 'Delete project']) expect(screen.getByRole('button', { name })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Reload / discard changes' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Reload / discard changes' }));
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Editing project' })).toBeEnabled());
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled();
+  expect(editing.create).not.toHaveBeenCalled();
+  expect(editing.delete).not.toHaveBeenCalled();
+  expect(editing.versions).not.toHaveBeenCalled();
+});
+
+it('retains deletion confirmation and leaves source materials untouched', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+  vi.mocked(editing.delete).mockResolvedValue({ id: project.id, deleted: true });
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  await screen.findByText('Revision 0');
+  fireEvent.click(screen.getByRole('button', { name: 'Project actions' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete project' }));
+  expect(editing.delete).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Project actions' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete project' }));
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Editing project' })).toHaveValue(''));
+  expect(editing.delete).toHaveBeenCalledWith(project.id);
+  expect(editing.deleteMaterial).not.toHaveBeenCalled();
+  expect(confirm).toHaveBeenCalledTimes(2);
+  confirm.mockRestore();
+});
+
+it('shows empty history in a dismissible dialog', async () => {
+  vi.mocked(editing.versions).mockResolvedValue([]);
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  await screen.findByText('Revision 0');
+  const trigger = screen.getByRole('button', { name: 'Project actions' });
+  fireEvent.click(trigger);
+  fireEvent.click(screen.getByRole('button', { name: 'Version history' }));
+  expect(await screen.findByText('No saved versions yet')).toBeInTheDocument();
+  fireEvent(screen.getByRole('dialog', { name: 'Version history' }), new Event('cancel', { bubbles: false, cancelable: true }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
 });

@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import AgentComposer from './AgentComposer';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { installUniArtCatalog } from './playgroundModels';
+import { normalizePlaygroundSubmission } from './playgroundSubmission';
 
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('@/lib/api', () => ({ API_URL: 'https://garage.uniart.fun' }));
@@ -16,6 +17,34 @@ vi.mock('./VoiceTranscriptionButton', () => ({ default: () => <button type="butt
 beforeEach(() => {
     installUniArtCatalog([{ id: 'uniart/gpt-image-2', api_model_id: 'gpt-image-2', display_name: 'GPT Image', description: '', family: 'gpt-image', provider: 'uniart', capabilities: ['t2i', 'i2i'], duration: null, params: { size: { options: ['1k', '2k', '4k'], default: '1k' } }, inputs: {} }]);
     usePlaygroundStore.setState({ mode: 'i2i', modelId: 'uniart/gpt-image-2', parameters: {}, inputMedia: ['picture.png'], history: [], mediaNames: {}, prompt: 'hello', negativePrompt: '' });
+});
+
+it.each([
+    ['Image', 'i2i'],
+    ['Video', 'i2v'],
+] as const)('keeps Agent references and mentions when switching to %s', (output, expectedMode) => {
+    const inputMedia = ['/playground/input-media/portrait.png'];
+    const mediaNames = { [inputMedia[0]]: 'Portrait' };
+    const prompt = '@Portrait 换一个背景';
+    usePlaygroundStore.setState({ mode: 't2i', inputMedia, mediaNames, prompt, modelPreferences: {} });
+    function Composer() {
+        const [active, setActive] = useState(true);
+        return <AgentComposer canGenerate batchSize={1} onGenerate={vi.fn()} onAgentChange={setActive} agent={{
+            active, model: 'chat', models: [], setModel: vi.fn(),
+            knowledgeSearch: false, setKnowledgeSearch: vi.fn(), knowledgeQuery: '', setKnowledgeQuery: vi.fn(),
+        }} />;
+    }
+    render(<Composer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agent' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: `mode.output${output}` }));
+    const state = usePlaygroundStore.getState();
+    expect(state.mode).toBe(expectedMode);
+    expect(state.inputMedia).toEqual(inputMedia);
+    expect(state.mediaNames).toEqual(mediaNames);
+    expect(state.prompt).toBe(prompt);
+    expect(screen.getByRole('button', { name: '移除 Portrait' })).toBeInTheDocument();
+    expect(normalizePlaygroundSubmission(state.mode, state.inputMedia, state.prompt))
+        .toEqual({ mode: expectedMode, inputMedia });
 });
 
 it('keeps one add button and separates creation methods from media selection', () => {

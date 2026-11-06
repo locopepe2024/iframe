@@ -2,7 +2,7 @@
 
 import { OPEN_AI_CANVAS_PROMPTS } from "@/lib/openAiCanvasPrompts";
 import { Search, X } from "lucide-react";
-import { createContext, Fragment, useContext, useEffect, useId, useState, type MutableRefObject } from "react";
+import { createContext, Fragment, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
 import { API_URL, api, authenticatedFetch, type PlatformReferenceResource } from "@/lib/api";
 import { searchCharacterQuickPresets } from "@/lib/characterQuickActions";
@@ -57,7 +57,7 @@ function currentConfigurationSelections(configuration: DictionaryConfiguration, 
   }));
 }
 
-export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration, configurations, currentFields, metricBody, onMetricBodyChange }: {
+export default function CharacterPromptDictionary({ suggestion, onClose, onApply, keyHandler, onConfiguration, configurations, currentFields, metricBody, onMetricBodyChange, placement = "below" }: {
   suggestion: PromptSlashSuggestion;
   onClose: () => void;
   onApply: (text: string, source: Entry) => void;
@@ -65,9 +65,36 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   configurations?: DictionaryConfiguration[];
   currentFields?: { identity: IdentityFeatures; look: LookFeatures };
   metricBody?: CharacterMetricBody; onMetricBodyChange?: (key: keyof CharacterMetricBody, value: string) => void;
+  placement?: "above" | "below";
   keyHandler: MutableRefObject<((event: KeyboardEvent) => boolean) | null>;
 }) {
   const host = useContext(CharacterDictionaryHost);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [availableHeight, setAvailableHeight] = useState<number>();
+  useLayoutEffect(() => {
+    if (host || placement !== "above") return;
+    const anchor = panelRef.current?.offsetParent;
+    if (!(anchor instanceof HTMLElement)) return;
+    const update = () => {
+      let visibleTop = 0;
+      for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
+        if (/(hidden|clip|auto|scroll)/.test(getComputedStyle(parent).overflowY)) {
+          visibleTop = Math.max(visibleTop, parent.getBoundingClientRect().top);
+        }
+      }
+      setAvailableHeight(Math.max(0, Math.min(440, window.innerHeight * 0.6, anchor.getBoundingClientRect().top - visibleTop - 18)));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(anchor);
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [host, placement]);
   const id = useId();
   const [resources, setResources] = useState<PlatformReferenceResource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -256,10 +283,10 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   useEffect(() => {
     document.getElementById(`${id}-${active}`)?.scrollIntoView?.({ block: "nearest" });
   }, [id, active]);
-  const panel = <div data-prompt-discovery role="dialog" aria-label="基础面板、词典和 Prompt 模板" onMouseDown={(event) => {
+  const panel = <div ref={panelRef} style={!host && placement === "above" ? { maxHeight: availableHeight } : undefined} data-prompt-discovery role="dialog" aria-label="基础面板、词典和 Prompt 模板" onMouseDown={(event) => {
     if (!(event.target as HTMLElement).closest("input, select, textarea")) event.preventDefault();
   }}
-    className={host ? "absolute inset-0 z-30 overflow-y-auto bg-surface p-3 sm:p-5" : "absolute top-12 left-3 right-3 z-50 mb-2 max-h-[min(60vh,440px)] overflow-y-auto rounded-lg border border-glass-border bg-elevated p-3 shadow-xl"}>
+    className={host ? "absolute inset-0 z-30 overflow-y-auto bg-surface p-3 sm:p-5" : `${placement === "above" ? "bottom-[calc(100%+0.625rem)] left-0 right-0" : "top-12 left-3 right-3 mb-2"} absolute z-50 max-h-[min(60vh,440px)] overflow-y-auto rounded-lg border border-glass-border bg-elevated p-3 shadow-xl`}>
     <div className="flex items-center justify-between gap-1">
       {!suggestion.slot && <div role="tablist" aria-label="检索范围" className="flex min-w-0 gap-1">{DISCOVERY_SECTIONS.map(label => <button key={label} type="button" role="tab" aria-selected={section === label} tabIndex={section === label ? 0 : -1}
         onClick={() => { setSection(label); setSelected(null); setCategory(null); setTask(null); setBrowsing(!needle); }}
