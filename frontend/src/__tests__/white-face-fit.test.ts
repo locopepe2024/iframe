@@ -13,6 +13,22 @@ const landmarks: FaceFitLandmarks = {
 };
 
 describe("three-view face fitting", () => {
+    it("preserves exact calibrated controls, including small edits and every control group, in prompts", () => {
+        const calibration = { schema: "iframe.white-face-fit.v1" as const,
+            source: { asset_type: "character" as const, asset_id: "su-yan", variant_id: "sheet" },
+            baseline: { ...DEFAULT_FACE_SHAPE }, landmarks, residual: 0, reviewed: true };
+        const shape = { ...DEFAULT_FACE_SHAPE, calibration, noseBridgeHeight: 105,
+            noseBridgeWidth: 110, noseTipWidth: 102, foreheadWidth: 101, chinWidth: 99,
+            eyeTilt: 103, browEyeDistance: 97, philtrumLength: 101, mouthCornerTilt: 98 };
+        const prompt = faceShapePrompt(shape);
+        for (const value of ["鼻梁高度调节值105%", "鼻梁宽度调节值110%", "鼻尖宽度调节值102%",
+            "额头宽度调节值101%", "下巴宽度调节值99%", "眼尾倾斜调节值103%", "眉眼距离调节值97%",
+            "人中长度调节值101%", "嘴角倾斜调节值98%"]) expect(prompt).toContain(value);
+        expect(prompt).toContain("拟合基准100%");
+        expect(prompt).not.toContain("略增");
+        expect(faceShapePrompt({ ...shape, noseBridgeHeight: 110 })).not.toEqual(prompt);
+        expect(faceShapePrompt({ ...DEFAULT_FACE_SHAPE, calibration })).not.toContain("骨相调节");
+    });
     it("measures and fits independent original images with different aspect ratios and scales", () => {
         const known = { ...DEFAULT_FACE_SHAPE, cheekWidth: 94, cheekHeight: 114, noseTipHeight: 90 };
         const projected = meshFaceLandmarks(known, mesh as WhiteFaceMeshData);

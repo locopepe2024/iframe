@@ -139,11 +139,14 @@ function calibratedFacePrompt(shape: FaceShape): string {
         ["nostrilWidth", "鼻翼宽度"], ["eyeSize", "眼睛大小"], ["eyeDepth", "眼窝深度"],
         ["mouthWidth", "嘴宽"], ["upperLipThickness", "上唇厚度"],
         ["lowerLipThickness", "下唇厚度"],
+        ["foreheadWidth", "额头宽度"], ["chinWidth", "下巴宽度"],
+        ["eyeTilt", "眼尾倾斜"], ["browEyeDistance", "眉眼距离"],
+        ["philtrumLength", "人中长度"], ["mouthCornerTilt", "嘴角倾斜"],
     ];
-    const adjusted = changes.filter(([key]) => Math.abs(shape[key] - 100) >= 5)
-        .map(([key, label]) => `${label}${shape[key] > 100 ? "略增" : "略减"}`);
+    const adjusted = changes.filter(([key]) => shape[key] !== 100)
+        .map(([key, label]) => `${label}调节值${shape[key]}%`);
     return [FACE_SHAPE_REFERENCE_PROMPT,
         "角色面部轮廓和五官空间关系以已确认的角色形象为准。",
-        adjusted.length ? `骨相微调：${adjusted.join("、")}。` : "",
+        adjusted.length ? `骨相调节（各项以拟合基准100%为中性值，数值表示白模调节值，不代表实际生理尺寸百分比）：${adjusted.join("、")}。` : "",
     ].filter(Boolean).join(" ");
 }
