@@ -28,6 +28,10 @@ export function faceShellGeometry(shape: FaceShape, data: WhiteFaceMeshData): Bu
         const mouth = bell(x, 0, 0.29) * bell(y, -0.55, 0.1) * front;
         const upperLip = mouth * bell(y, -0.52, 0.045);
         const lowerLip = mouth * bell(y, -0.59, 0.045);
+        // Fixed source-space regions: height changes stay attached to the same anatomy.
+        const contourFront = Math.max(0, Math.min(1, (z + 0.05) / 0.25));
+        const cheekHeight = bell(Math.abs(x), 0.55, 0.18) * bell(y, -0.13, 0.2) * bell(z, 0.3, 0.22) * contourFront;
+        const jawHeight = bell(Math.abs(x), 0.43, 0.17) * bell(y, -0.58, 0.18) * bell(z, 0.33, 0.23) * contourFront;
 
         positions[i] = x * (1 + 0.11 * change("faceWidth")
             + 0.1 * change("foreheadWidth") * bell(y, 0.47, 0.3)
@@ -46,7 +50,10 @@ export function faceShellGeometry(shape: FaceShape, data: WhiteFaceMeshData): Bu
             + 0.025 * change("upperLipThickness") * upperLip
             - 0.025 * change("lowerLipThickness") * lowerLip
             - 0.035 * change("philtrumLength") * mouth
-            + 0.03 * change("mouthCornerTilt") * mouth * bell(Math.abs(x), 0.25, 0.08);
+            + 0.03 * change("mouthCornerTilt") * mouth * bell(Math.abs(x), 0.25, 0.08)
+            + 0.14 * change("cheekHeight") * cheekHeight
+            + 0.12 * change("jawHeight") * jawHeight
+            + 0.1 * change("noseTipHeight") * noseTip;
         positions[i + 2] = z
             + 0.09 * change("chinProjection") * bell(x, 0, 0.24) * bell(y, -0.74, 0.13) * front
             + 0.18 * change("noseBridgeHeight") * noseBridge

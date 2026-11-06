@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import mesh from "../../public/models/character/makehuman-face-v1/head.json";
-import { imageFaceMetrics, fitFaceToLandmarks, meshFaceLandmarks, meshFaceMetrics, type FaceFitLandmarks } from "@/lib/whiteFaceFit";
-import { DEFAULT_FACE_SHAPE, effectiveFaceShape, faceShapePrompt, type FaceShape } from "@/lib/whiteFaceShape";
+import { imageFaceMetrics, fitFaceToLandmarks, meshFaceLandmarks, meshFaceMetrics, isHeightMetric, type FaceFitLandmarks } from "@/lib/whiteFaceFit";
+import { DEFAULT_FACE_SHAPE, effectiveFaceShape, faceShapePrompt, normalizeFaceShape, type FaceShape } from "@/lib/whiteFaceShape";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
 
 const landmarks: FaceFitLandmarks = {
@@ -38,9 +38,78 @@ describe("three-view face fitting", () => {
         const target = imageFaceMetrics(points, aspect);
         expect(result.residual).toBeLessThan(.01);
         for (const key of Object.keys(target) as Array<keyof typeof target>) {
-            expect(Math.abs(actual[key] / target[key] - 1)).toBeLessThan(.02);
+            expect(Math.abs(isHeightMetric(key) ? actual[key] - target[key] : actual[key] / target[key] - 1)).toBeLessThan(.02);
         }
         expect(result.diagnostics.atLimits).toEqual([]);
+    });
+
+    it("recovers landmark heights that width and projection ratios cannot constrain", () => {
+        const known = { ...DEFAULT_FACE_SHAPE, cheekHeight: 114, jawHeight: 108, noseTipHeight: 87 };
+        const projected = meshFaceLandmarks(known, mesh as WhiteFaceMeshData);
+        const aspect = 2.3;
+        const points = Object.fromEntries(Object.entries(projected).map(([key, point]) => [key, {
+            x: (key.startsWith("side") ? .68 : .25) + point.x * .17 / aspect,
+            y: .3 + point.y * .17,
+        }])) as FaceFitLandmarks;
+        const target = imageFaceMetrics(points, aspect);
+        const before = meshFaceMetrics(DEFAULT_FACE_SHAPE, mesh as WhiteFaceMeshData);
+        expect(Math.abs(before.cheekHeight - target.cheekHeight)).toBeGreaterThan(.06);
+        expect(Math.abs(before.jawHeight - target.jawHeight)).toBeGreaterThan(.03);
+        expect(Math.abs(before.noseTipHeight - target.noseTipHeight)).toBeGreaterThan(.05);
+        const result = fitFaceToLandmarks(points, mesh as WhiteFaceMeshData, "neutral_young", aspect);
+        const after = meshFaceMetrics(result.shape, mesh as WhiteFaceMeshData);
+        for (const key of Object.keys(target) as Array<keyof typeof target>) {
+            expect(Math.abs(isHeightMetric(key) ? after[key] - target[key] : after[key] / target[key] - 1)).toBeLessThan(.02);
+        }
+        expect(result.shape.cheekHeight).toBeGreaterThan(100);
+        expect(result.shape.jawHeight).toBeGreaterThan(100);
+        expect(result.shape.noseTipHeight).toBeLessThan(100);
+        expect(result.diagnostics.atLimits).toEqual([]);
+    });
+
+    it("keeps signed and zero landmark heights finite", () => {
+        const points = { ...landmarks, frontLeftCheek: { ...landmarks.frontLeftCheek, y: .1 },
+            frontRightCheek: { ...landmarks.frontRightCheek, y: .1 }, sideNose: { ...landmarks.sideNose, y: .12 } };
+        const metrics = imageFaceMetrics(points, 1.6);
+        expect(metrics.cheekHeight).toBeLessThan(0);
+        expect(metrics.noseTipHeight).toBe(0);
+        const result = fitFaceToLandmarks(points, mesh as WhiteFaceMeshData, "neutral_young", 1.6);
+        expect(Number.isFinite(result.residual)).toBe(true);
+        expect(result.diagnostics.metrics.every(metric => Number.isFinite(metric.error))).toBe(true);
+    });
+
+    it("preserves legacy calibrated geometry when height controls are absent", () => {
+        const { basePreset, cheekHeight: ignoredCheek, jawHeight: ignoredJaw, noseTipHeight: ignoredNose, ...baseline } = DEFAULT_FACE_SHAPE;
+        void ignoredCheek; void ignoredJaw; void ignoredNose;
+        const legacy = normalizeFaceShape({ ...baseline, basePreset, calibration: {
+            schema: "iframe.white-face-fit.v1" as const, baseline: { ...baseline, cheekWidth: 112 },
+            source: { asset_type: "character" as const, asset_id: "su-yan", variant_id: "old" },
+            landmarks, residual: .1,
+        } });
+        expect(effectiveFaceShape(legacy)).toMatchObject({ cheekHeight: 100, jawHeight: 100, noseTipHeight: 100, cheekWidth: 112 });
+        const oldGeometry = faceShellGeometry(legacy, mesh as WhiteFaceMeshData);
+        const expected = faceShellGeometry({ ...DEFAULT_FACE_SHAPE, cheekWidth: 112 }, mesh as WhiteFaceMeshData);
+        expect(Array.from(oldGeometry.getAttribute("position").array)).toEqual(Array.from(expected.getAttribute("position").array));
+        oldGeometry.dispose(); expected.dispose();
+    });
+
+    it("raises fixed front regions symmetrically while leaving the back of the head unchanged", () => {
+        const original = meshFaceLandmarks(DEFAULT_FACE_SHAPE, mesh as WhiteFaceMeshData);
+        const raisedShape = { ...DEFAULT_FACE_SHAPE, cheekHeight: 120, jawHeight: 115, noseTipHeight: 110 };
+        const raised = meshFaceLandmarks(raisedShape, mesh as WhiteFaceMeshData);
+        expect(raised.frontLeftCheek.y).toBeLessThan(original.frontLeftCheek.y);
+        expect(raised.frontRightCheek.y).toBe(raised.frontLeftCheek.y);
+        expect(raised.frontLeftJaw.y).toBeLessThan(original.frontLeftJaw.y);
+        expect(raised.sideNose.y).toBeLessThan(original.sideNose.y);
+        const geometry = faceShellGeometry(raisedShape, mesh as WhiteFaceMeshData);
+        const positions = geometry.getAttribute("position");
+        const source = mesh as WhiteFaceMeshData;
+        for (let i = 0; i < source.sourceVertexIds.length; i++) {
+            if (source.positions[i * 3 + 2] < -.05) {
+                expect(positions.getY(i)).toBe(Math.fround(source.positions[i * 3 + 1]));
+            }
+        }
+        geometry.dispose();
     });
 
     it("rejects missing or reversed face landmarks", () => {

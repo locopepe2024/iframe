@@ -5,15 +5,15 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { Undo2 } from "lucide-react";
 import { API_URL, api, authenticatedFetch, type AssetLibraryReference } from "@/lib/api";
 import { DEFAULT_FACE_SHAPE, FACE_BASE_PRESETS, SELECTABLE_FACE_PRESETS, faceBaseShape, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape, type FaceShapeNumbers } from "@/lib/whiteFaceShape";
-import { FACE_FIT_MARKS, FACE_FIT_LANDMARK_CONVENTION, FIT_METRIC_LABELS, fitFaceToLandmarks, type FaceFitLandmarks, type FaceFitPoint } from "@/lib/whiteFaceFit";
+import { FACE_FIT_MARKS, FACE_FIT_LANDMARK_CONVENTION, FACE_FIT_OBJECTIVE, FIT_METRIC_LABELS, fitFaceToLandmarks, type FaceFitLandmarks, type FaceFitPoint } from "@/lib/whiteFaceFit";
 import { autoMarkThreeView } from "@/lib/whiteFaceAutoLandmarks";
 import { FACE_FIT_IMAGE_SPEC, type FaceImagePreparation, type PreparedFaceInfo } from "@/lib/whiteFaceImage";
 import { resolveAssetVariantDelivery } from "@/lib/mediaDelivery";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
 
 const CONTROL_GROUPS: Array<[string, Array<[keyof FaceShapeNumbers, string, number, number]>]> = [
-    ["头部轮廓", [["faceLength", "脸部长度", 80, 120], ["faceWidth", "脸部宽度", 80, 120], ["foreheadWidth", "额头宽度", 80, 120], ["cheekWidth", "颧部宽度", 80, 120], ["jawWidth", "下颌宽度", 75, 125], ["chinWidth", "下巴宽度", 75, 125], ["chinProjection", "下巴前突", 75, 125]]],
-    ["鼻部", [["noseBridgeHeight", "鼻梁高度", 75, 125], ["noseBridgeWidth", "鼻梁宽度", 75, 125], ["noseProjection", "鼻尖突出度", 75, 125], ["noseTipWidth", "鼻尖宽度", 75, 125], ["nostrilWidth", "鼻翼宽度", 75, 125]]],
+    ["头部轮廓", [["faceLength", "脸部长度", 80, 120], ["faceWidth", "脸部宽度", 80, 120], ["foreheadWidth", "额头宽度", 80, 120], ["cheekWidth", "颧部宽度", 80, 120], ["cheekHeight", "颧部高度", 75, 125], ["jawWidth", "下颌宽度", 75, 125], ["jawHeight", "下颌高度", 75, 125], ["chinWidth", "下巴宽度", 75, 125], ["chinProjection", "下巴前突", 75, 125]]],
+    ["鼻部", [["noseBridgeHeight", "鼻梁高度", 75, 125], ["noseBridgeWidth", "鼻梁宽度", 75, 125], ["noseProjection", "鼻尖突出度", 75, 125], ["noseTipHeight", "鼻尖高度", 75, 125], ["noseTipWidth", "鼻尖宽度", 75, 125], ["nostrilWidth", "鼻翼宽度", 75, 125]]],
     ["眼眉", [["eyeSpacing", "眼距", 80, 120], ["eyeSize", "眼睛大小", 80, 120], ["eyeDepth", "眼窝深度", 80, 120], ["eyeTilt", "眼尾倾斜", 80, 120], ["browEyeDistance", "眉眼距离", 80, 120]]],
     ["嘴唇与下巴", [["mouthWidth", "嘴宽", 80, 120], ["upperLipThickness", "上唇厚度", 75, 125], ["lowerLipThickness", "下唇厚度", 75, 125], ["philtrumLength", "人中长度", 80, 120], ["mouthCornerTilt", "嘴角倾斜", 80, 120]]],
 ];
@@ -92,6 +92,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             && initialShape.calibration.source.variant_id === fitSource.variantId
             ? initialShape?.calibration?.landmarks as Partial<FaceFitLandmarks> : {});
         setFitReviewed(!!(fitSource && initialShape?.calibration?.landmarkConvention === FACE_FIT_LANDMARK_CONVENTION
+            && initialShape.calibration.fitObjective === FACE_FIT_OBJECTIVE
             && initialShape.calibration.source.asset_id === fitSource.assetId
             && initialShape.calibration.source.variant_id === fitSource.variantId && initialShape.calibration.reviewed));
     }, [initialShape, fitSource?.assetId, fitSource?.variantId]);
@@ -147,6 +148,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     const markedCount = FACE_FIT_MARKS.filter(([key]) => !!fitPoints[key]).length;
     const calibrationCurrent = !!(shape.calibration && fitSource
         && shape.calibration.landmarkConvention === FACE_FIT_LANDMARK_CONVENTION
+        && shape.calibration.fitObjective === FACE_FIT_OBJECTIVE
         && shape.calibration.source.asset_id === fitSource.assetId
         && shape.calibration.source.variant_id === fitSource.variantId
         && FACE_FIT_MARKS.every(([key]) => fitPoints[key]
@@ -214,6 +216,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             setShape({ ...DEFAULT_FACE_SHAPE, basePreset, calibration: {
                 schema: "iframe.white-face-fit.v1",
                 landmarkConvention: FACE_FIT_LANDMARK_CONVENTION,
+                fitObjective: FACE_FIT_OBJECTIVE,
                 fitDiagnostics: diagnostics,
                 imagePreparation,
                 source: { asset_type: "character", asset_id: fitSource.assetId, variant_id: fitSource.variantId,
@@ -326,6 +329,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                     {shape.calibration.fitDiagnostics && <>
                         <details>
                             <summary className="cursor-pointer">查看初稿各部位比例</summary>
+                            <p className="mt-1 text-text-muted">高度以对应视角的眼至下巴距离为 1。请同时核对点位和轮廓，比例接近不代表整体面容相似。</p>
                             <dl className="mt-1 space-y-1">
                                 {shape.calibration.fitDiagnostics.metrics.map(metric => <div key={metric.key} className="flex flex-wrap justify-between gap-x-3">
                                     <dt>{FIT_METRIC_LABELS[metric.key]}</dt>
@@ -342,7 +346,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                         </div>}
                     </>}
                     {shape.calibration.residual > 0.15 && <div role="status" className="text-amber-300">拟合偏差较大，请检查标记点和白模轮廓。</div>}
-                    {!calibrationCurrent && <div role="status" className="text-amber-300">标记定义或点位已变更，请重新拟合并核对。</div>}
+                    {!calibrationCurrent && <div role="status" className="text-amber-300">拟合方法或标记点已变更，请重新拟合并核对。</div>}
                     <label className="flex items-center gap-2"><input type="checkbox" disabled={detecting || !calibrationCurrent} checked={fitReviewed && calibrationCurrent} onChange={event => setFitReviewed(event.target.checked)} />已核对正面与侧面白模</label>
                 </div>}
         </div>}

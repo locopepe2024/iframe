@@ -6,7 +6,7 @@ import WhiteFaceModel from "./WhiteFaceModel";
 import { DEFAULT_FACE_SHAPE } from "@/lib/whiteFaceShape";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
 import headMesh from "../../../../public/models/character/makehuman-face-v1/head.json";
-import { FACE_FIT_LANDMARK_CONVENTION } from "@/lib/whiteFaceFit";
+import { FACE_FIT_LANDMARK_CONVENTION, FACE_FIT_OBJECTIVE } from "@/lib/whiteFaceFit";
 import { FACE_FIT_IMAGE_SPEC, type PreparedFaceImage } from "@/lib/whiteFaceImage";
 
 const meshData = headMesh as WhiteFaceMeshData;
@@ -169,7 +169,7 @@ it("fits a selected three-view source and saves the reviewed shape as its 100% b
     expect(saved.calibration).toEqual(expect.objectContaining({
         source: { asset_type: "character", asset_id: "su-yan", variant_id: "three-view-1",
             source_scope: "series", source_container_id: "series-1" }, reviewed: true,
-        residual: expect.any(Number), landmarkConvention: FACE_FIT_LANDMARK_CONVENTION,
+        residual: expect.any(Number), landmarkConvention: FACE_FIT_LANDMARK_CONVENTION, fitObjective: FACE_FIT_OBJECTIVE,
         fitDiagnostics: expect.objectContaining({ metrics: expect.any(Array) }),
     }));
     expect(createLibraryAsset.mock.calls[0][1].description).not.toContain("中性基准 100%");
@@ -187,7 +187,7 @@ it("retains old calibrated geometry but requires fresh marking and fitting", asy
     fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
     await screen.findByAltText("苏砚三视图拟合参考");
     expect(screen.getByText(/已标记 0\/10/)).toBeInTheDocument();
-    expect(screen.getByText("标记定义或点位已变更，请重新拟合并核对。")).toBeInTheDocument();
+    expect(screen.getByText("拟合方法或标记点已变更，请重新拟合并核对。")).toBeInTheDocument();
     expect(screen.getByLabelText("已核对正面与侧面白模")).toBeDisabled();
     expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
     expect(screen.getByLabelText("基础脸型正面与侧面预览")).toBeInTheDocument();
@@ -205,7 +205,7 @@ it("requires refitting after a reviewed mark is moved", async () => {
     render(<WhiteFaceModel characterName="苏砚" fitSource={{
         scope: "series", containerId: "series-1", assetId: "su-yan", variantId: "three-view-1",
     }} initialShape={{ ...DEFAULT_FACE_SHAPE, basePreset, calibration: {
-        schema: "iframe.white-face-fit.v1", landmarkConvention: FACE_FIT_LANDMARK_CONVENTION, baseline,
+        schema: "iframe.white-face-fit.v1", landmarkConvention: FACE_FIT_LANDMARK_CONVENTION, fitObjective: FACE_FIT_OBJECTIVE, baseline,
         source: { asset_type: "character", asset_id: "su-yan", variant_id: "three-view-1" },
         landmarks: points, residual: .1, reviewed: true,
     } }} onSaved={vi.fn()} />);
@@ -217,6 +217,39 @@ it("requires refitting after a reviewed mark is moved", async () => {
     fireEvent.click(image, { clientX: 51, clientY: 24 });
     expect(screen.getByLabelText("已核对正面与侧面白模")).toBeDisabled();
     expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
+});
+
+it("reuses convention-compatible marks but requires refitting a reviewed result from the old objective", async () => {
+    const { basePreset, ...baseline } = DEFAULT_FACE_SHAPE;
+    const points = {
+        frontLeftCheek: { x: .19, y: .16 }, frontRightCheek: { x: .31, y: .16 },
+        frontLeftJaw: { x: .21, y: .21 }, frontRightJaw: { x: .29, y: .21 },
+        frontLeftEye: { x: .22, y: .12 }, frontRightEye: { x: .28, y: .12 },
+        frontChin: { x: .25, y: .25 }, sideEye: { x: .55, y: .12 },
+        sideNose: { x: .51, y: .16 }, sideChin: { x: .53, y: .25 },
+    };
+    const onSaved = vi.fn();
+    render(<WhiteFaceModel characterName="苏砚" fitSource={{
+        scope: "series", containerId: "series-1", assetId: "su-yan", variantId: "three-view-1",
+    }} initialShape={{ ...DEFAULT_FACE_SHAPE, basePreset, calibration: {
+        schema: "iframe.white-face-fit.v1", landmarkConvention: FACE_FIT_LANDMARK_CONVENTION, baseline,
+        source: { asset_type: "character", asset_id: "su-yan", variant_id: "three-view-1" },
+        landmarks: points, residual: .002, reviewed: true,
+    } }} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    const image = await screen.findByAltText("苏砚三视图拟合参考");
+    Object.defineProperties(image, { naturalWidth: { value: 1223 }, naturalHeight: { value: 1286 } });
+    expect(screen.getByText(/已标记 10\/10/)).toBeInTheDocument();
+    expect(screen.getByLabelText("已核对正面与侧面白模")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "拟合白模" }));
+    expect(screen.getByLabelText("已核对正面与侧面白模")).not.toBeChecked();
+    expect(screen.getByLabelText("已核对正面与侧面白模")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("已核对正面与侧面白模"));
+    fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    expect(onSaved.mock.calls[0][2].calibration).toMatchObject({ fitObjective: FACE_FIT_OBJECTIVE, reviewed: true });
 });
 
 it("saves the edited geometry as a stable reference and matching prompt", async () => {

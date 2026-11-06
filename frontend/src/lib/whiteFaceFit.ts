@@ -13,12 +13,18 @@ export type FaceFitMark = typeof FACE_FIT_MARKS[number][0];
 export type FaceFitPoint = { x: number; y: number };
 export type FaceFitLandmarks = Record<FaceFitMark, FaceFitPoint>;
 export const FACE_FIT_LANDMARK_CONVENTION = "eye-center-chin-front.v2";
-export type FitMetric = "cheekAspect" | "jawRatio" | "eyeRatio" | "noseProjection" | "chinProjection";
+export const FACE_FIT_OBJECTIVE = "ratios-and-heights.v1";
+export type FitHeightMetric = "cheekHeight" | "jawHeight" | "noseTipHeight";
+export type FitMetric = "cheekAspect" | "jawRatio" | "eyeRatio" | "noseProjection" | "chinProjection" | FitHeightMetric;
 type Metrics = Record<FitMetric, number>;
 export const FIT_METRIC_LABELS: Record<FitMetric, string> = {
     cheekAspect: "脸宽比例", jawRatio: "下颌比例", eyeRatio: "眼距比例",
     noseProjection: "鼻尖突出比例", chinProjection: "下巴前突比例",
+    cheekHeight: "颧部高度", jawHeight: "下颌高度", noseTipHeight: "鼻尖高度",
 };
+export function isHeightMetric(key: FitMetric): key is FitHeightMetric {
+    return key === "cheekHeight" || key === "jawHeight" || key === "noseTipHeight";
+}
 export type FaceFitDiagnostics = {
     metrics: Array<{ key: FitMetric; target: number; actual: number; error: number }>;
     atLimits: Array<keyof FaceShapeNumbers>;
@@ -27,6 +33,7 @@ export type FaceFitDiagnostics = {
 const FIT_CONTROLS: Array<[keyof FaceShapeNumbers, number, number]> = [
     ["cheekWidth", 80, 120], ["jawWidth", 75, 125],
     ["eyeSpacing", 80, 120], ["noseProjection", 75, 125], ["chinProjection", 75, 125],
+    ["cheekHeight", 75, 125], ["jawHeight", 75, 125], ["noseTipHeight", 75, 125],
 ];
 
 export function imageFaceMetrics(points: FaceFitLandmarks, imageAspect = 1): Metrics {
@@ -58,6 +65,9 @@ function landmarkMetrics(points: FaceFitLandmarks, imageAspect: number): Metrics
         eyeRatio: eyes / cheek,
         noseProjection: Math.abs(noseOffset) * imageAspect / sideHeight,
         chinProjection: (points.sideChin.x - points.sideEye.x) * Math.sign(noseOffset) * imageAspect / sideHeight,
+        cheekHeight: ((points.frontLeftCheek.y + points.frontRightCheek.y) / 2 - eyeY) / faceHeight,
+        jawHeight: ((points.frontLeftJaw.y + points.frontRightJaw.y) / 2 - eyeY) / faceHeight,
+        noseTipHeight: (points.sideNose.y - points.sideEye.y) / sideHeight,
     };
 }
 
@@ -97,6 +107,8 @@ export function meshFaceMetrics(shape: FaceShape, data: WhiteFaceMeshData): Metr
 }
 
 function metricError(key: FitMetric, predicted: number, target: number): number {
+    // Heights are signed coordinates normalized by the corresponding eye-to-chin height.
+    if (isHeightMetric(key)) return predicted - target;
     // A chin may sit behind the eye or cross its depth. asinh remains signed
     // and finite at zero; the other four strictly positive ratios use logs.
     return key === "chinProjection"
@@ -148,5 +160,5 @@ export function fitFaceToLandmarks(points: FaceFitLandmarks, data: WhiteFaceMesh
             if (!improved) break;
         }
     }
-    return { shape, residual: Math.sqrt(best / 5), diagnostics: faceFitDiagnostics(shape, data, points, imageAspect) };
+    return { shape, residual: Math.sqrt(best / Object.keys(target).length), diagnostics: faceFitDiagnostics(shape, data, points, imageAspect) };
 }
