@@ -9,7 +9,7 @@ Keep saved control values, geometry, reference selection, authored prose and pro
 ## Intended behavior
 
 - Default portraits use labelled subject, reference baseline, appearance and composition paragraphs. Reference images establish identity, hair and skin; explicit anatomy adjustments override the original contour ratios.
-- A single bone-adjustment block covers all non-neutral controls. Each line states anatomical direction and the exact white-model control value. Name the baseline (fitted or neutral white model); these values are deformation controls rather than measurements of the source image.
+- A single bone-adjustment block covers the measured changes. Each line defines the anatomical interval, reference baseline and measured image-editing target. The current numeric contract is defined in [face-measurement-targets](2026-11-06-face-measurement-targets.md); raw white-model controls stay in saved editor state.
 - Stop synthesizing identity fields on face save. Existing exact machine-generated percentage fields are suppressed when a white-face shape exists; preserve authored features, prose and saved source data.
 - Build the same default portrait scaffold in frontend and backend. Existing manually edited image prompts are not automatically rewritten.
 

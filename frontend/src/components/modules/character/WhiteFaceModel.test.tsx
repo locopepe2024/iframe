@@ -366,14 +366,14 @@ it("saves the edited geometry as a stable reference and matching prompt", async 
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
     expect(createLibraryAsset).toHaveBeenCalledWith("prop", expect.objectContaining({
         name: "探子首领 · 面部比例白模", image_url: "uploads/white-face.png",
-        description: expect.stringContaining("脸部纵向轮廓拉长（脸部长度调节值112%）"),
+        description: expect.stringContaining("两眼中心连线到下巴最低点的垂直距离"),
     }));
     expect(onSaved).toHaveBeenCalledWith(
         { asset_type: "prop", asset_id: "face-prop", variant_id: "face-v1", application_mode: "reference_only", applied_fields: ["face_geometry"] },
-        expect.stringContaining("鼻尖突出度增强（鼻尖突出度调节值118%）"),
+        expect.stringContaining("鼻尖到过眼中心竖直线的水平距离"),
         expect.objectContaining({ faceLength: 112, foreheadWidth: 108, mouthCornerTilt: 115 }),
     );
-    expect(createLibraryAsset.mock.calls[0][1].description).toContain("嘴角上提（嘴角倾斜调节值115%）");
+    expect(createLibraryAsset.mock.calls[0][1].description).toContain("嘴角上提为正");
 });
 
 it("compares the base face with the edit and exports only the edited preview", async () => {
@@ -396,6 +396,17 @@ it("compares the base face with the edit and exports only the edited preview", a
     fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
     expect(exported).toEqual([screen.getByLabelText("当前调整正面与侧面预览").querySelector("canvas")]);
+});
+
+it("shows the defined reference baseline and measured target independently of the slider value", () => {
+    render(<WhiteFaceModel characterName="苏砚" onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    fireEvent.change(screen.getByLabelText("脸部长度"), { target: { value: "90" } });
+    fireEvent.click(screen.getByText("查看出图测量定义、参考基准与目标值"));
+    const table = screen.getByRole("table", { name: "出图测量目标" });
+    expect(table).toHaveTextContent("两眼中心连线到下巴最低点的垂直距离");
+    expect(table).toHaveTextContent("参考图该距离为100，目标96");
+    expect(screen.getByLabelText("脸部长度")).toHaveValue("90");
 });
 
 it("restores saved proportions when the workbench reopens its design", () => {

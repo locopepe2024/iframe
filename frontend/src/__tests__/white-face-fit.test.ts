@@ -13,17 +13,18 @@ const landmarks: FaceFitLandmarks = {
 };
 
 describe("three-view face fitting", () => {
-    it("turns bone controls into explicit anatomical changes with baseline values", () => {
+    it("defines measured bone targets instead of treating controls as physical percentages", () => {
         const prompt = faceShapePrompt({ ...DEFAULT_FACE_SHAPE, faceLength: 90, faceWidth: 120,
             eyeSpacing: 80, cheekWidth: 117, jawWidth: 75, noseProjection: 75 });
-        for (const phrase of ["脸部纵向轮廓缩短", "面部横向宽度加宽", "眼距收窄",
-            "颧部横向加宽", "下颌横向收窄", "鼻尖突出度减弱"]) expect(prompt).toContain(phrase);
-        expect(prompt).toContain("中性基准100%");
+        for (const phrase of ["两眼中心连线到下巴最低点", "左右太阳穴外缘", "左右眼中心之间",
+            "左右颧骨最外侧", "左右下颌角", "鼻尖到过眼中心竖直线"]) expect(prompt).toContain(phrase);
+        expect(prompt).toContain("参考图该距离为100，目标");
+        expect(prompt).not.toContain("调节值");
         expect(prompt).not.toContain("脸长 90%（中性基准 100%）");
         expect(prompt).toContain("参考图用于保持目标角色身份、发型和肤色");
         expect(prompt).toContain("骨相要求优先于参考图中的原始轮廓比例");
     });
-    it("preserves exact calibrated controls, including small edits and every control group, in prompts", () => {
+    it("measures small calibrated edits across every control group", () => {
         const calibration = { schema: "iframe.white-face-fit.v1" as const,
             source: { asset_type: "character" as const, asset_id: "su-yan", variant_id: "sheet" },
             baseline: { ...DEFAULT_FACE_SHAPE }, landmarks, residual: 0, reviewed: true };
@@ -31,10 +32,8 @@ describe("three-view face fitting", () => {
             noseBridgeWidth: 110, noseTipWidth: 102, foreheadWidth: 101, chinWidth: 99,
             eyeTilt: 103, browEyeDistance: 97, philtrumLength: 101, mouthCornerTilt: 98 };
         const prompt = faceShapePrompt(shape);
-        for (const value of ["鼻梁高度调节值105%", "鼻梁宽度调节值110%", "鼻尖宽度调节值102%",
-            "额头宽度调节值101%", "下巴宽度调节值99%", "眼尾倾斜调节值103%", "眉眼距离调节值97%",
-            "人中长度调节值101%", "嘴角倾斜调节值98%"]) expect(prompt).toContain(value);
-        expect(prompt).toContain("拟合基准100%");
+        for (const value of ["鼻梁隆起高度", "鼻梁宽度", "鼻尖宽度", "额头宽度", "下巴宽度", "眼倾斜", "眉眼距离", "人中长度", "嘴角倾斜"]) expect(prompt).toContain(value);
+        expect(prompt).toContain("参考图该距离为100");
         expect(prompt).not.toContain("略增");
         expect(faceShapePrompt({ ...shape, noseBridgeHeight: 110 })).not.toEqual(prompt);
         expect(faceShapePrompt({ ...DEFAULT_FACE_SHAPE, calibration })).not.toContain("骨相调节");

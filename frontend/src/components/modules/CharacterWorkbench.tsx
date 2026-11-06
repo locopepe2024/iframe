@@ -217,7 +217,7 @@ function imageGenerationReferences(references: AssetLibraryReference[]): AssetLi
 }
 
 const FULL_BODY_REFERENCE_INTENT = "附带的全身参考图是同一角色的外观参考，用于保持面容、发型、肤色、身形比例和服装细节；最终只生成一个目标角色，不显示参考图、白模、参考图边框或对照排版。";
-const FITTED_FACE_REFERENCE_INTENT = "最后一张参考图是该角色的正面、侧面和背面三视图，用于保持面容身份与骨相轮廓；其他参考图用于保持角色身份与外观。最终只生成一个目标角色，不呈现三视图、白模、参考图或对照排版。";
+const FITTED_FACE_REFERENCE_INTENT = "最后一张参考图是该角色的正面、侧面和背面三视图，用于确认面容身份并作为骨相测量基准；按提示词中的目标比例调整五官与轮廓。其他参考图用于保持角色身份与外观。最终只生成一个目标角色，不呈现三视图、白模、参考图或对照排版。";
 const DERIVED_REFERENCE_INTENT = "附带的角色主图是同一角色的身份与外观参考；只生成目标视图，不把参考图作为画面中的第二个人物，不显示参考图或对照排版。";
 
 function addReferenceIntent(type: "full_body" | "three_view" | "headshot", prompt: string, mode: "text" | "reference", references: AssetLibraryReference[], fittedFace = false): string {
@@ -1352,6 +1352,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const reviewReferences = imageReviewRequest?.reference ? [imageReviewRequest.reference] : imageReviewRequest?.references || [];
     const reviewValidationError = !imageReviewRequest ? "" :
         reviewReferences.length > 9 ? "参考图最多九张。" :
+        imageReviewRequest.prompt.includes("骨相测量目标：") && (imageReviewRequest.image_generation_mode !== "reference" || reviewReferences.length === 0)
+            ? "骨相测量目标以角色参考图为基准，请选择角色参考图并切换到参考生图。" :
         imageReviewRequest.image_generation_mode === "text" && reviewReferences.length > 0
             ? "已选择参考素材，请切换到参考生图或移除素材。" :
         imageReviewRequest.image_generation_mode === "reference" && reviewReferences.length === 0
