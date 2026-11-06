@@ -87,15 +87,18 @@ function matchesSource(stored: NonNullable<FaceShape["calibration"]>["source"] |
         && (!stored.source_container_id || stored.source_container_id === source.containerId));
 }
 
-export default function WhiteFaceModel({ characterName, initialShape, fitSource, portraitSource, onSaved, standalone = false }: {
+export default function WhiteFaceModel({ characterName, initialShape, fitSource, portraitSource, onSaved, onDirtyChange, standalone = false }: {
     characterName: string;
     initialShape?: Partial<FaceShape>;
     fitSource?: FaceFitSource;
     portraitSource?: FaceFitSource;
     onSaved: (reference: AssetLibraryReference, prompt: string, shape: FaceShape) => void | Promise<void>;
+    onDirtyChange?: (dirty: boolean) => void;
     standalone?: boolean;
 }) {
     const [shape, setShape] = useState<FaceShape>(normalizeFaceShape(initialShape));
+    const shapeKey = JSON.stringify(shape), initialShapeKey = JSON.stringify(normalizeFaceShape(initialShape));
+    useEffect(() => { onDirtyChange?.(shapeKey !== initialShapeKey); }, [shapeKey, initialShapeKey, onDirtyChange]);
     const [open, setOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [savedShape, setSavedShape] = useState<string>("");

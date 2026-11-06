@@ -488,3 +488,15 @@ it("deforms the mature head mesh around the nose without moving the opposite sid
     wide.dispose();
     high.dispose();
 });
+
+it("reports unsaved sliders and clears dirty status only when the saved shape returns", async () => {
+    const onDirtyChange = vi.fn(), onSaved = vi.fn();
+    const props = { characterName: "苏砚", initialShape: DEFAULT_FACE_SHAPE, onSaved, onDirtyChange, standalone: true };
+    const view = render(<WhiteFaceModel {...props} />);
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    fireEvent.change(screen.getByLabelText("鼻梁宽度"), { target: { value: "110" } });
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
+    view.rerender(<WhiteFaceModel {...props} initialShape={{ ...DEFAULT_FACE_SHAPE, noseBridgeWidth: 110 }} />);
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(false));
+});

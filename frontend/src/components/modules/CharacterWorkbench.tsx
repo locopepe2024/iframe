@@ -565,6 +565,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const [designInput, setDesignInput] = useState(savedInput?.prompt ?? ([savedDesign.user_visual_requirements?.identity, savedDesign.user_visual_requirements?.look].filter(Boolean).join("\n") || confirmedDesignContent(savedDesign) || asset.full_body_prompt || ""));
     const [designReferenceAssets, setDesignReferenceAssets] = useState<AssetLibraryReference[]>(savedDesign.reference_assets || []);
     const [whiteFaceShape, setWhiteFaceShape] = useState<FaceShape | undefined>(savedDesign.white_face_shape);
+    const [whiteFaceDirty, setWhiteFaceDirty] = useState(false);
     const [designResult, setDesignResult] = useState<string | null>(savedResult?.source === "panel" ? null
         : savedResult?.prompt || confirmedDesignContent(savedDesign) || null);
     const [designResultSource, setDesignResultSource] = useState<DesignResultSnapshot["source"]>(savedResult?.source || (savedResult ? "ai" : "legacy"));
@@ -1723,8 +1724,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                                 <h2 className="text-lg font-semibold text-foreground">面容白模</h2>
                                 <p className="mt-1 text-xs text-text-muted">独立调整脸型、鼻部、眼眉和嘴唇/下巴参数。参数会保存到当前角色，并作为骨相提示传递。</p>
                             </div>
-                            <WhiteFaceModel characterName={asset.name || "角色"} initialShape={whiteFaceShape} fitSource={whiteFaceFitSource} portraitSource={whiteFacePortraitSource} onSaved={handleWhiteFaceSaved} standalone />
-                            <FaceGeometryGuide characterName={asset.name || "角色"} shape={whiteFaceShape} source={whiteFacePortraitSource}
+                            <WhiteFaceModel characterName={asset.name || "角色"} initialShape={whiteFaceShape} fitSource={whiteFaceFitSource} portraitSource={whiteFacePortraitSource} onSaved={handleWhiteFaceSaved} onDirtyChange={setWhiteFaceDirty} standalone />
+                            <FaceGeometryGuide characterName={asset.name || "角色"} shape={whiteFaceShape} source={whiteFacePortraitSource} editingPending={whiteFaceDirty}
                                 onApplied={(reference, shapeKey) => {
                                     setAppliedFaceGuide({ reference, shapeKey, sourceKey: JSON.stringify(whiteFacePortraitSource) });
                                     setPromptReferences(current => ({ ...current, headshot: [reference] }));
