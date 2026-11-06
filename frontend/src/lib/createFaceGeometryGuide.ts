@@ -1,7 +1,7 @@
 import { detectFrontFaceGuide } from "./whiteFaceAutoLandmarks";
 import { faceGuideControls, warpFacePixels, correctGuideControls, frontGuideRatios, GUIDE_KEYS } from "./faceGeometryGuide";
 import { faceShapeMeasurements, type FaceShape } from "./whiteFaceShape";
-import { FACE_FIT_IMAGE_SPEC, type FrontReferenceRegion } from "./whiteFaceImage";
+import { FACE_FIT_IMAGE_SPEC, frontReferenceBounds, type FrontReferenceRegion } from "./whiteFaceImage";
 
 export type FaceGuideCheck = { key: string; label: string; target: number; observed: number; error: number };
 export type FaceGeometryGuide = {
@@ -25,17 +25,20 @@ export async function createFaceGeometryGuide(image: HTMLImageElement, shape: Fa
     const source = await detectFrontFaceGuide(image, region);
     const sourceFaceHeight = source.prepared.sourceFaceHeight;
     if (sourceFaceHeight < FACE_FIT_IMAGE_SPEC.minimumFaceHeight) throw new Error(`原始人脸高度约${Math.round(sourceFaceHeight)}像素，低于128像素，请选择清晰头像原图`);
-    const scale = Math.min(1, 1536 / Math.max(image.naturalWidth, image.naturalHeight));
-    const width = Math.round(image.naturalWidth * scale), height = Math.round(image.naturalHeight * scale);
+    const bounds = frontReferenceBounds(image.naturalWidth, image.naturalHeight, region);
+    const scale = Math.min(1, 1536 / Math.max(bounds.width, bounds.height));
+    const width = Math.round(bounds.width * scale), height = Math.round(bounds.height * scale);
+    const sourceFace = source.face.map(p => ({ ...p, x: (p.x * image.naturalWidth - bounds.x) / bounds.width,
+        y: (p.y * image.naturalHeight - bounds.y) / bounds.height }));
     const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) throw new Error("无法读取人脸图像");
-    context.drawImage(image, 0, 0, width, height);
+    context.drawImage(image, bounds.x, bounds.y, bounds.width, bounds.height, 0, 0, width, height);
     const original = context.getImageData(0, 0, width, height);
-    const wanted = faceGuideControls(source.face, shape, width, height);
+    const wanted = faceGuideControls(sourceFace, shape, width, height);
     let controls = wanted;
     const m = Object.fromEntries(measurements.map(item => [item.key, item.target]));
-    const before = frontGuideRatios(source.face, width, height);
+    const before = frontGuideRatios(sourceFace, width, height);
     const labels = { faceLength: "脸长／颧宽", jawWidth: "下颌宽／颧宽", eyeSpacing: "眼距／颧宽" };
     for (let iteration = 1; iteration <= 6; iteration++) {
         progress(`正在变形并复核正面比例（${iteration}/6）…`);
@@ -45,7 +48,7 @@ export async function createFaceGeometryGuide(image: HTMLImageElement, shape: Fa
         pixels.data.set(warpFacePixels(original.data, width, height, controls));
         context.putImageData(pixels, 0, 0);
         const { image: output, blob } = await canvasImage(canvas);
-        const detected = await detectFrontFaceGuide(output, region);
+        const detected = await detectFrontFaceGuide(output, "whole");
         const after = frontGuideRatios(detected.face, width, height);
         const checks = (Object.keys(before) as Array<keyof typeof before>).map(key => {
             const target = m[key] / m.cheekWidth * 100, observed = after[key] / before[key] * 100;
