@@ -41,6 +41,7 @@ import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterDesignPanel from "./CharacterDesignPanel";
 import WhiteFaceModel from "./character/WhiteFaceModel";
 import FaceGeometryGuide from "./character/FaceGeometryGuide";
+import { sideFaceGuidePrompt } from "@/lib/sideFaceGeometryGuide";
 import { faceGuidePrompt } from "@/lib/faceGeometryGuide";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
@@ -637,7 +638,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         full_body: null, three_view: null, headshot: null,
     });
     const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
-    const [appliedFaceGuide, setAppliedFaceGuide] = useState<{ reference: AssetLibraryReference; shapeKey: string; sourceKey: string } | null>(null);
+    const [appliedFaceGuide, setAppliedFaceGuide] = useState<{ reference: AssetLibraryReference; shapeKey: string; sourceKey: string; view?: "front" | "side" } | null>(null);
 
 
     useEffect(() => {
@@ -808,6 +809,10 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const savedFront = whiteFaceShape?.calibration?.referencePair?.front.source;
     const whiteFacePortraitSource = savedFront ? { scope: savedFront.source_scope, containerId: savedFront.source_container_id || "",
         assetType: savedFront.asset_type, assetId: savedFront.asset_id, variantId: savedFront.variant_id } : selectedPortraitSource;
+    const savedSide = whiteFaceShape?.calibration?.referencePair?.side.source;
+    const whiteFaceSideSource = savedSide ? { scope: savedSide.source_scope, containerId: savedSide.source_container_id || "",
+        assetType: savedSide.asset_type, assetId: savedSide.asset_id, variantId: savedSide.variant_id } : undefined;
+    const appliedFaceSource = appliedFaceGuide?.view === "side" ? whiteFaceSideSource : whiteFacePortraitSource;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
     const masterVariantId = masterAsset?.selected_id || masterAsset?.variants?.[0]?.id;
@@ -1282,7 +1287,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
 
     const handleGenerateClick = (type: "reference_sheet" | "full_body" | "three_view" | "headshot", batchSize: number) => {
         if (type === "headshot" && appliedFaceGuide && (appliedFaceGuide.shapeKey !== JSON.stringify(whiteFaceShape)
-            || appliedFaceGuide.sourceKey !== JSON.stringify(whiteFacePortraitSource))) {
+            || appliedFaceGuide.sourceKey !== JSON.stringify(appliedFaceSource))) {
             setDesignError("骨相参数或引导图来源已变更，请重新制作并应用引导图。");
             return;
         }
@@ -1383,7 +1388,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const reviewReferences = imageReviewRequest?.reference ? [imageReviewRequest.reference] : imageReviewRequest?.references || [];
     const reviewValidationError = !imageReviewRequest ? "" :
         imageReviewRequest.generation_type === "headshot" && appliedFaceGuide
-            && (appliedFaceGuide.shapeKey !== JSON.stringify(whiteFaceShape) || appliedFaceGuide.sourceKey !== JSON.stringify(whiteFacePortraitSource)
+            && (appliedFaceGuide.shapeKey !== JSON.stringify(whiteFaceShape) || appliedFaceGuide.sourceKey !== JSON.stringify(appliedFaceSource)
                 || imageReviewRequest.image_generation_mode !== "reference" || reviewReferences.length !== 1
                 || referenceKey(reviewReferences[0]) !== referenceKey(appliedFaceGuide.reference))
             ? "骨相引导图、参数或来源已变更，请重新制作并应用引导图。" :
@@ -1748,6 +1753,15 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                                     setHeadshotPrompt(faceGuidePrompt(asset.name || "角色"));
                                     refreshAssetIndex();
                                     setActivePanel("headshot");
+                                }} />
+                            <FaceGeometryGuide view="side" characterName={asset.name || "角色"} shape={whiteFaceShape} source={whiteFaceSideSource} editingPending={whiteFaceDirty}
+                                onApplied={(reference, shapeKey) => {
+                                    setAppliedFaceGuide({ reference, shapeKey, sourceKey: JSON.stringify(whiteFaceSideSource), view: "side" });
+                                    setPromptReferences(current => ({ ...current, headshot: [reference] }));
+                                    setPromptPickerReferences(current => ({ ...current, headshot: [] }));
+                                    setPromptModes(current => ({ ...current, headshot: "reference" }));
+                                    setHeadshotPrompt(sideFaceGuidePrompt(asset.name || "角色"));
+                                    refreshAssetIndex(); setActivePanel("headshot");
                                 }} />
                         </div>
                     </div>}
