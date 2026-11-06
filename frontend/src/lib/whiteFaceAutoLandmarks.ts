@@ -2,7 +2,7 @@ import { FaceLandmarker, FilesetResolver, type NormalizedLandmark } from "@media
 import { imageFaceMetrics, type FaceFitLandmarks, type FaceFitPoint } from "./whiteFaceFit";
 import { facePointInSource, frontReferenceBounds, renderFaceCrop, squareCropBounds, squareFaceCrop, type FrontReferenceRegion, type PreparedFaceImage } from "./whiteFaceImage";
 import { FACE_FIT_IMAGE_SPEC } from "./whiteFaceImage";
-import { validateFacePhotoView } from "./faceReferencePair";
+import { validateFacePhotoView, validateProfilePose } from "./faceReferencePair";
 
 const MODEL_ROOT = "/models/character/face-landmarker-v1";
 type FaceResult = NormalizedLandmark[];
@@ -185,7 +185,7 @@ export function prepareAndMarkFacePhoto(image: HTMLImageElement, view: "front" |
     const points = mapDetectedFaces(view === "front" ? final : undefined, view === "side" ? final : undefined, [0, 1], [0, 1], width / height);
     const clipped = Object.values(points).some(p => p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1);
     if (clipped) throw new Error("脸部被裁掉，请使用眼睛、鼻尖和下巴完整的原图");
-    return { points, prepared: { view, crop, sourceFaceHeight, canvas, detected: true } };
+    return { points, face: final, prepared: { view, crop, sourceFaceHeight, canvas, detected: true } };
 }
 
 export async function autoMarkFacePhoto(image: HTMLImageElement, view: "front" | "side") {
@@ -193,8 +193,12 @@ export async function autoMarkFacePhoto(image: HTMLImageElement, view: "front" |
     const landmarker = await FaceLandmarker.createFromOptions(vision, {
         baseOptions: { modelAssetPath: `${MODEL_ROOT}/face_landmarker.task`, delegate: "CPU" },
         // A stricter detector suppresses an observed ear false positive on cropped profiles.
-        runningMode: "IMAGE", numFaces: 2, minFaceDetectionConfidence: 0.7,
+        runningMode: "IMAGE", numFaces: 2, minFaceDetectionConfidence: 0.7, outputFacialTransformationMatrixes: view === "side",
     });
-    try { return prepareAndMarkFacePhoto(image, view, canvas => landmarker.detect(canvas).faceLandmarks); }
+    try { return prepareAndMarkFacePhoto(image, view, canvas => {
+        const result = landmarker.detect(canvas);
+        if (view === "side" && result.faceLandmarks.length === 1) validateProfilePose(result.facialTransformationMatrixes[0]);
+        return result.faceLandmarks;
+    }); }
     finally { landmarker.close(); }
 }
