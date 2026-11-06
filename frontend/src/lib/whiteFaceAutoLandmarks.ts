@@ -22,6 +22,12 @@ function mapped(face: FaceResult, index: number, start: number, end: number, top
     return { x: start + point.x * (end - start), y: top + point.y * (bottom - top) };
 }
 
+function eyeCenter(face: FaceResult, corners: [number, number], range: [number, number], verticalRange: [number, number]): FaceFitPoint {
+    const a = mapped(face, corners[0], ...range, ...verticalRange);
+    const b = mapped(face, corners[1], ...range, ...verticalRange);
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
 export function mapDetectedFaces(front: FaceResult | undefined, side: FaceResult | undefined, frontRange: [number, number],
     sideRange: [number, number], aspect: number, verticalRange: [number, number] = [0, 1]): Partial<FaceFitLandmarks> {
     const points: Partial<FaceFitLandmarks> = {};
@@ -30,15 +36,24 @@ export function mapDetectedFaces(front: FaceResult | undefined, side: FaceResult
         frontRightCheek: mapped(front, 454, ...frontRange, ...verticalRange),
         frontLeftJaw: mapped(front, 172, ...frontRange, ...verticalRange),
         frontRightJaw: mapped(front, 397, ...frontRange, ...verticalRange),
-        frontLeftEye: mapped(front, 133, ...frontRange, ...verticalRange),
-        frontRightEye: mapped(front, 362, ...frontRange, ...verticalRange),
+        frontLeftEye: eyeCenter(front, [33, 133], frontRange, verticalRange),
+        frontRightEye: eyeCenter(front, [362, 263], frontRange, verticalRange),
         frontChin: mapped(front, 152, ...frontRange, ...verticalRange),
     });
-    if (side) Object.assign(points, {
-        sideEye: mapped(side, 362, ...sideRange, ...verticalRange),
-        sideNose: mapped(side, 1, ...sideRange, ...verticalRange),
-        sideChin: mapped(side, 152, ...sideRange, ...verticalRange),
-    });
+    if (side) {
+        // The far eye collapses under profile projection. Compare horizontal
+        // corner separation, independent of mirroring.
+        const width = (a: number, b: number) => Math.abs(
+            mapped(side, a, ...sideRange, ...verticalRange).x - mapped(side, b, ...sideRange, ...verticalRange).x,
+        );
+        const corners: [number, number] = width(33, 133) > width(362, 263) ? [33, 133] : [362, 263];
+        Object.assign(points, {
+            sideEye: eyeCenter(side, corners, sideRange, verticalRange),
+            sideNose: mapped(side, 1, ...sideRange, ...verticalRange),
+            // 199 is on the anterior chin; 152 is the inferior chin contour.
+            sideChin: mapped(side, 199, ...sideRange, ...verticalRange),
+        });
+    }
     if (front && side) imageFaceMetrics(points as FaceFitLandmarks, aspect);
     return points;
 }

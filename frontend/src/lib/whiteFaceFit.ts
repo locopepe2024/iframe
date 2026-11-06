@@ -12,8 +12,17 @@ export const FACE_FIT_MARKS = [
 export type FaceFitMark = typeof FACE_FIT_MARKS[number][0];
 export type FaceFitPoint = { x: number; y: number };
 export type FaceFitLandmarks = Record<FaceFitMark, FaceFitPoint>;
-type FitMetric = "cheekAspect" | "jawRatio" | "eyeRatio" | "noseProjection" | "chinProjection";
+export const FACE_FIT_LANDMARK_CONVENTION = "eye-center-chin-front.v2";
+export type FitMetric = "cheekAspect" | "jawRatio" | "eyeRatio" | "noseProjection" | "chinProjection";
 type Metrics = Record<FitMetric, number>;
+export const FIT_METRIC_LABELS: Record<FitMetric, string> = {
+    cheekAspect: "脸宽比例", jawRatio: "下颌比例", eyeRatio: "眼距比例",
+    noseProjection: "鼻尖突出比例", chinProjection: "下巴前突比例",
+};
+export type FaceFitDiagnostics = {
+    metrics: Array<{ key: FitMetric; target: number; actual: number; error: number }>;
+    atLimits: Array<keyof FaceShapeNumbers>;
+};
 
 const FIT_CONTROLS: Array<[keyof FaceShapeNumbers, number, number]> = [
     ["cheekWidth", 80, 120], ["jawWidth", 75, 125],
@@ -29,74 +38,100 @@ export function imageFaceMetrics(points: FaceFitLandmarks, imageAspect = 1): Met
             throw new Error(`面部标记点无效：${key}`);
         }
     }
+    return landmarkMetrics(points, imageAspect);
+}
+
+function landmarkMetrics(points: FaceFitLandmarks, imageAspect: number): Metrics {
     const eyeY = (points.frontLeftEye.y + points.frontRightEye.y) / 2;
     const faceHeight = points.frontChin.y - eyeY;
     const sideHeight = points.sideChin.y - points.sideEye.y;
     const cheek = points.frontRightCheek.x - points.frontLeftCheek.x;
     const jaw = points.frontRightJaw.x - points.frontLeftJaw.x;
     const eyes = points.frontRightEye.x - points.frontLeftEye.x;
-    if (faceHeight <= 0.015 || sideHeight <= 0.015 || cheek <= 0.015 || jaw <= 0 || eyes <= 0) {
+    const noseOffset = points.sideNose.x - points.sideEye.x;
+    if (faceHeight <= 0 || sideHeight <= 0 || cheek <= 0 || jaw <= 0 || eyes <= 0 || Math.abs(noseOffset) < 1e-6) {
         throw new Error("标记点的左右或上下顺序不正确");
     }
     return {
         cheekAspect: cheek * imageAspect / faceHeight,
         jawRatio: jaw / cheek,
         eyeRatio: eyes / cheek,
-        noseProjection: Math.abs(points.sideNose.x - points.sideEye.x) * imageAspect / sideHeight,
-        chinProjection: Math.abs(points.sideChin.x - points.sideEye.x) * imageAspect / sideHeight,
+        noseProjection: Math.abs(noseOffset) * imageAspect / sideHeight,
+        chinProjection: (points.sideChin.x - points.sideEye.x) * Math.sign(noseOffset) * imageAspect / sideHeight,
     };
 }
 
-function meshFaceMetrics(shape: FaceShape, data: WhiteFaceMeshData): Metrics {
+// MakeHuman hm08 source vertex IDs, reviewed in front and profile projections.
+// Eye centers average the inner/outer canthi, matching the image convention.
+// Landmarks remain attached to these vertices throughout deformation.
+export const FACE_MESH_LANDMARK_VERTICES = {
+    frontLeftCheek: [269], frontRightCheek: [7038],
+    frontLeftJaw: [894], frontRightJaw: [7596],
+    frontLeftEye: [70, 86], frontRightEye: [6854, 6870],
+    frontChin: [5225], sideEye: [6854, 6870], sideNose: [297], sideChin: [5162],
+} as const;
+
+/** Orthographic front and left-facing profile projections in mesh units. */
+export function meshFaceLandmarks(shape: FaceShape, data: WhiteFaceMeshData): FaceFitLandmarks {
     const geometry = faceShellGeometry(shape, data);
     const positions = geometry.getAttribute("position");
-    let cheek = 0, jaw = 0, eyeX = 0, eyeDistance = Infinity;
-    let eyeZ = 0, noseZ = -Infinity, chinZ = -Infinity, chinY = Infinity;
-    for (let index = 0; index < positions.count; index++) {
-        const x = positions.getX(index), y = positions.getY(index), z = positions.getZ(index);
-        if (z > 0.05 && y > -0.32 && y < -0.12) cheek = Math.max(cheek, Math.abs(x));
-        if (z > 0.05 && y > -0.65 && y < -0.47) jaw = Math.max(jaw, Math.abs(x));
-        if (z > 0.1 && x > 0 && Math.abs(y + 0.02) < 0.09) {
-            const distance = Math.abs(x - 0.28) + Math.abs(y + 0.02) + Math.max(0, 0.45 - z);
-            if (distance < eyeDistance) { eyeDistance = distance; eyeX = x; eyeZ = z; }
-        }
-        if (Math.abs(x) < 0.14 && y > -0.4 && y < -0.18) noseZ = Math.max(noseZ, z);
-        if (Math.abs(x) < 0.16 && y > -0.84 && y < -0.67) {
-            chinZ = Math.max(chinZ, z);
-            chinY = Math.min(chinY, y);
-        }
+    try {
+        return Object.fromEntries(FACE_FIT_MARKS.map(([key]) => {
+            const ids = FACE_MESH_LANDMARK_VERTICES[key];
+            let x = 0, y = 0;
+            for (const id of ids) {
+                const index = data.sourceVertexIds.indexOf(id);
+                if (index < 0) throw new Error(`白模缺少拟合所需的面部区域：${key}`);
+                x += key.startsWith("side") ? -positions.getZ(index) : positions.getX(index);
+                y -= positions.getY(index);
+            }
+            return [key, { x: x / ids.length, y: y / ids.length }];
+        })) as FaceFitLandmarks;
+    } finally {
+        geometry.dispose();
     }
-    geometry.dispose();
-    const eyeChinHeight = -0.02 - chinY;
-    if (!cheek || !jaw || !eyeX || !Number.isFinite(noseZ) || !Number.isFinite(chinZ) || eyeChinHeight <= 0) {
-        throw new Error("白模缺少拟合所需的面部区域");
-    }
+}
+
+export function meshFaceMetrics(shape: FaceShape, data: WhiteFaceMeshData): Metrics {
+    return landmarkMetrics(meshFaceLandmarks(shape, data), 1);
+}
+
+function metricError(key: FitMetric, predicted: number, target: number): number {
+    // A chin may sit behind the eye or cross its depth. asinh remains signed
+    // and finite at zero; the other four strictly positive ratios use logs.
+    return key === "chinProjection"
+        ? Math.asinh(predicted / 0.1) - Math.asinh(target / 0.1)
+        : Math.log(Math.max(predicted, 0.001) / Math.max(target, 0.001));
+}
+
+export function faceFitDiagnostics(shape: FaceShape, data: WhiteFaceMeshData, points: FaceFitLandmarks, imageAspect = 1): FaceFitDiagnostics {
+    const target = imageFaceMetrics(points, imageAspect);
+    const actual = meshFaceMetrics(shape, data);
     return {
-        cheekAspect: 2 * cheek / eyeChinHeight,
-        jawRatio: jaw / cheek,
-        eyeRatio: eyeX / cheek,
-        noseProjection: Math.abs(noseZ - eyeZ) / eyeChinHeight,
-        chinProjection: Math.abs(chinZ - eyeZ) / eyeChinHeight,
+        metrics: (Object.keys(target) as FitMetric[]).map(key => ({
+            key, target: target[key], actual: actual[key],
+            error: metricError(key, actual[key], target[key]),
+        })),
+        atLimits: FIT_CONTROLS.filter(([key, min, max]) => shape[key] === min || shape[key] === max).map(([key]) => key),
     };
 }
 
 function fitError(predicted: Metrics, target: Metrics): number {
     return (Object.keys(target) as FitMetric[]).reduce((sum, key) => {
-        const difference = Math.log(Math.max(predicted[key], 0.001) / Math.max(target[key], 0.001));
+        const difference = metricError(key, predicted[key], target[key]);
         return sum + difference * difference;
     }, 0);
 }
 
 export function fitFaceToLandmarks(points: FaceFitLandmarks, data: WhiteFaceMeshData, preset: FaceBasePreset, imageAspect = 1): {
-    shape: FaceShape; residual: number;
+    shape: FaceShape; residual: number; diagnostics: FaceFitDiagnostics;
 } {
     const target = imageFaceMetrics(points, imageAspect);
-    const original = faceBaseShape(preset);
-    const shape = { ...original };
+    const shape = { ...faceBaseShape(preset) };
     const score = () => fitError(meshFaceMetrics(shape, data), target);
     let best = score();
     for (const step of [16, 8, 4, 2, 1]) {
-        for (let pass = 0; pass < 3; pass++) {
+        for (let pass = 0; pass < 12; pass++) {
             let improved = false;
             for (const [key, minimum, maximum] of FIT_CONTROLS) {
                 const previous = shape[key];
@@ -113,5 +148,5 @@ export function fitFaceToLandmarks(points: FaceFitLandmarks, data: WhiteFaceMesh
             if (!improved) break;
         }
     }
-    return { shape, residual: Math.sqrt(best / 5) };
+    return { shape, residual: Math.sqrt(best / 5), diagnostics: faceFitDiagnostics(shape, data, points, imageAspect) };
 }

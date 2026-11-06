@@ -1,3 +1,5 @@
+import type { FaceFitDiagnostics } from "./whiteFaceFit";
+
 export type FaceShapeNumbers = {
     faceLength: number;
     faceWidth: number;
@@ -30,6 +32,8 @@ export type FaceShapeCalibration = {
     landmarks: Record<string, { x: number; y: number }>;
     residual: number;
     reviewed?: boolean;
+    landmarkConvention?: "eye-center-chin-front.v2";
+    fitDiagnostics?: FaceFitDiagnostics;
 };
 
 export type FaceShape = FaceShapeNumbers & {

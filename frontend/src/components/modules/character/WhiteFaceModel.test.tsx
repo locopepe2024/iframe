@@ -6,6 +6,7 @@ import WhiteFaceModel from "./WhiteFaceModel";
 import { DEFAULT_FACE_SHAPE } from "@/lib/whiteFaceShape";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
 import headMesh from "../../../../public/models/character/makehuman-face-v1/head.json";
+import { FACE_FIT_LANDMARK_CONVENTION } from "@/lib/whiteFaceFit";
 
 const meshData = headMesh as WhiteFaceMeshData;
 
@@ -113,9 +114,54 @@ it("fits a selected three-view source and saves the reviewed shape as its 100% b
     expect(saved.calibration).toEqual(expect.objectContaining({
         source: { asset_type: "character", asset_id: "su-yan", variant_id: "three-view-1",
             source_scope: "series", source_container_id: "series-1" }, reviewed: true,
-        residual: expect.any(Number),
+        residual: expect.any(Number), landmarkConvention: FACE_FIT_LANDMARK_CONVENTION,
+        fitDiagnostics: expect.objectContaining({ metrics: expect.any(Array) }),
     }));
     expect(createLibraryAsset.mock.calls[0][1].description).not.toContain("中性基准 100%");
+});
+
+it("retains old calibrated geometry but requires fresh marking and fitting", async () => {
+    const { basePreset, ...baseline } = DEFAULT_FACE_SHAPE;
+    render(<WhiteFaceModel characterName="苏砚" fitSource={{
+        scope: "series", containerId: "series-1", assetId: "su-yan", variantId: "three-view-1",
+    }} initialShape={{ ...DEFAULT_FACE_SHAPE, basePreset, calibration: {
+        schema: "iframe.white-face-fit.v1", baseline: { ...baseline, jawWidth: 125 },
+        source: { asset_type: "character", asset_id: "su-yan", variant_id: "three-view-1" },
+        landmarks: { sideChin: { x: .5, y: .2 } }, residual: .239, reviewed: true,
+    } }} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    await screen.findByAltText("苏砚三视图拟合参考");
+    expect(screen.getByText(/已标记 0\/10/)).toBeInTheDocument();
+    expect(screen.getByText("标记定义或点位已变更，请重新拟合并核对。")).toBeInTheDocument();
+    expect(screen.getByLabelText("已核对正面与侧面白模")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
+    expect(screen.getByLabelText("基础脸型正面与侧面预览")).toBeInTheDocument();
+});
+
+it("requires refitting after a reviewed mark is moved", async () => {
+    const { basePreset, ...baseline } = DEFAULT_FACE_SHAPE;
+    const points = {
+        frontLeftCheek: { x: .19, y: .16 }, frontRightCheek: { x: .31, y: .16 },
+        frontLeftJaw: { x: .21, y: .21 }, frontRightJaw: { x: .29, y: .21 },
+        frontLeftEye: { x: .22, y: .12 }, frontRightEye: { x: .28, y: .12 },
+        frontChin: { x: .25, y: .25 }, sideEye: { x: .55, y: .12 },
+        sideNose: { x: .51, y: .16 }, sideChin: { x: .53, y: .25 },
+    };
+    render(<WhiteFaceModel characterName="苏砚" fitSource={{
+        scope: "series", containerId: "series-1", assetId: "su-yan", variantId: "three-view-1",
+    }} initialShape={{ ...DEFAULT_FACE_SHAPE, basePreset, calibration: {
+        schema: "iframe.white-face-fit.v1", landmarkConvention: FACE_FIT_LANDMARK_CONVENTION, baseline,
+        source: { asset_type: "character", asset_id: "su-yan", variant_id: "three-view-1" },
+        landmarks: points, residual: .1, reviewed: true,
+    } }} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    const image = await screen.findByAltText("苏砚三视图拟合参考");
+    await waitFor(() => expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeEnabled());
+    vi.spyOn(image, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.click(screen.getByRole("button", { name: /侧面下巴前端/ }));
+    fireEvent.click(image, { clientX: 51, clientY: 24 });
+    expect(screen.getByLabelText("已核对正面与侧面白模")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
 });
 
 it("saves the edited geometry as a stable reference and matching prompt", async () => {

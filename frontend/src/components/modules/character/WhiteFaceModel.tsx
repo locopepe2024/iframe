@@ -5,7 +5,7 @@ import { Canvas, useThree } from "@react-three/fiber";
 import { Undo2 } from "lucide-react";
 import { API_URL, api, authenticatedFetch, type AssetLibraryReference } from "@/lib/api";
 import { DEFAULT_FACE_SHAPE, FACE_BASE_PRESETS, SELECTABLE_FACE_PRESETS, faceBaseShape, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape, type FaceShapeNumbers } from "@/lib/whiteFaceShape";
-import { FACE_FIT_MARKS, fitFaceToLandmarks, type FaceFitLandmarks, type FaceFitPoint } from "@/lib/whiteFaceFit";
+import { FACE_FIT_MARKS, FACE_FIT_LANDMARK_CONVENTION, FIT_METRIC_LABELS, fitFaceToLandmarks, type FaceFitLandmarks, type FaceFitPoint } from "@/lib/whiteFaceFit";
 import { autoMarkThreeView } from "@/lib/whiteFaceAutoLandmarks";
 import { resolveAssetVariantDelivery } from "@/lib/mediaDelivery";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
@@ -84,10 +84,12 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
 
     useEffect(() => {
         setShape(normalizeFaceShape(initialShape));
-        setFitPoints(fitSource && initialShape?.calibration?.source.asset_id === fitSource.assetId
+        setFitPoints(fitSource && initialShape?.calibration?.landmarkConvention === FACE_FIT_LANDMARK_CONVENTION
+            && initialShape.calibration.source.asset_id === fitSource.assetId
             && initialShape.calibration.source.variant_id === fitSource.variantId
             ? initialShape?.calibration?.landmarks as Partial<FaceFitLandmarks> : {});
-        setFitReviewed(!!(fitSource && initialShape?.calibration?.source.asset_id === fitSource.assetId
+        setFitReviewed(!!(fitSource && initialShape?.calibration?.landmarkConvention === FACE_FIT_LANDMARK_CONVENTION
+            && initialShape.calibration.source.asset_id === fitSource.assetId
             && initialShape.calibration.source.variant_id === fitSource.variantId && initialShape.calibration.reviewed));
     }, [initialShape, fitSource?.assetId, fitSource?.variantId]);
 
@@ -138,6 +140,13 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
 
     const nextMark = FACE_FIT_MARKS.find(([key]) => !fitPoints[key]);
     const markedCount = FACE_FIT_MARKS.filter(([key]) => !!fitPoints[key]).length;
+    const calibrationCurrent = !!(shape.calibration && fitSource
+        && shape.calibration.landmarkConvention === FACE_FIT_LANDMARK_CONVENTION
+        && shape.calibration.source.asset_id === fitSource.assetId
+        && shape.calibration.source.variant_id === fitSource.variantId
+        && FACE_FIT_MARKS.every(([key]) => fitPoints[key]
+            && fitPoints[key]?.x === shape.calibration?.landmarks[key]?.x
+            && fitPoints[key]?.y === shape.calibration?.landmarks[key]?.y));
     const detect = async (image: HTMLImageElement) => {
         const imageSource = image.currentSrc || image.src;
         setDetecting(true);
@@ -179,13 +188,15 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
         if (nextMark) { setError(`请先在三视图上标记 ${nextMark[1]}（${markedCount + 1}/${FACE_FIT_MARKS.length}）。`); return; }
         try {
             const image = fitImageRef.current;
-            const { shape: baselineShape, residual } = fitFaceToLandmarks(
+            const { shape: baselineShape, residual, diagnostics } = fitFaceToLandmarks(
                 fitPoints as FaceFitLandmarks, meshData, shape.basePreset, image.naturalWidth / image.naturalHeight,
             );
             const { basePreset, calibration: ignored, ...baseline } = baselineShape;
             void ignored;
             setShape({ ...DEFAULT_FACE_SHAPE, basePreset, calibration: {
                 schema: "iframe.white-face-fit.v1",
+                landmarkConvention: FACE_FIT_LANDMARK_CONVENTION,
+                fitDiagnostics: diagnostics,
                 source: { asset_type: "character", asset_id: fitSource.assetId, variant_id: fitSource.variantId,
                     source_scope: fitSource.scope, source_container_id: fitSource.containerId },
                 baseline, landmarks: fitPoints as FaceFitLandmarks, residual,
@@ -198,9 +209,8 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     };
 
     const save = async () => {
-        if (shape.calibration && (!fitSource || shape.calibration.source.asset_id !== fitSource.assetId
-            || shape.calibration.source.variant_id !== fitSource.variantId || !fitReviewed)) {
-            setError("骨相基准的三视图已变更，请重新拟合并核对。");
+        if (shape.calibration && (!calibrationCurrent || !fitReviewed)) {
+            setError("骨相基准或标记点已变更，请重新拟合并核对。");
             return;
         }
         const canvas = stageRef.current?.querySelector("canvas");
@@ -244,6 +254,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
         {fitSource && <div className="space-y-2">
             <div className="text-xs text-text-secondary">拟合参考 · 三视图</div>
             <p className="text-xs text-text-secondary">自动标记后请核对正面与侧面点位。可选择标记名称，再点击图像校正位置。</p>
+            <p className="text-xs text-text-muted">眼中心取内外眼角中点；侧面下巴取前端，正面下巴取最低点。</p>
             {fitImageUrl ? <div className="max-h-[600px] w-full overflow-auto rounded border border-glass-border">
                 <div className="relative w-full min-w-[760px] max-w-[1223px]">
                 <img ref={fitImageRef} src={fitImageUrl} alt={`${characterName}三视图拟合参考`} className="block h-auto w-full cursor-crosshair" onLoad={event => {
@@ -276,8 +287,27 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             {shape.calibration?.source.variant_id === fitSource.variantId &&
                 <div className="space-y-1 text-xs text-text-secondary">
                     <div>拟合初稿 · 归一化残差 {shape.calibration.residual.toFixed(3)} · 当前滑杆以此脸型为 100%</div>
+                    {shape.calibration.fitDiagnostics && <>
+                        <details>
+                            <summary className="cursor-pointer">查看初稿各部位比例</summary>
+                            <dl className="mt-1 space-y-1">
+                                {shape.calibration.fitDiagnostics.metrics.map(metric => <div key={metric.key} className="flex flex-wrap justify-between gap-x-3">
+                                    <dt>{FIT_METRIC_LABELS[metric.key]}</dt>
+                                    <dd>参考 {metric.target.toFixed(3)} · 白模 {metric.actual.toFixed(3)}</dd>
+                                </div>)}
+                            </dl>
+                        </details>
+                        {shape.calibration.fitDiagnostics.metrics.some(metric => Math.abs(metric.error) > 0.15) &&
+                            <div role="status" className="text-amber-300">局部比例仍有偏差：{shape.calibration.fitDiagnostics.metrics
+                                .filter(metric => Math.abs(metric.error) > 0.15).map(metric => FIT_METRIC_LABELS[metric.key]).join("、")}。</div>}
+                        {shape.calibration.fitDiagnostics.atLimits.length > 0 && <div role="status" className="text-amber-300">
+                            拟合参数已达调节边界：{shape.calibration.fitDiagnostics.atLimits.map(key =>
+                                CONTROL_GROUPS.flatMap(([, controls]) => controls).find(([control]) => control === key)?.[1] || key).join("、")}。请核对对应轮廓。
+                        </div>}
+                    </>}
                     {shape.calibration.residual > 0.15 && <div role="status" className="text-amber-300">拟合偏差较大，请检查标记点和白模轮廓。</div>}
-                    <label className="flex items-center gap-2"><input type="checkbox" checked={fitReviewed} onChange={event => setFitReviewed(event.target.checked)} />已核对正面与侧面白模</label>
+                    {!calibrationCurrent && <div role="status" className="text-amber-300">标记定义或点位已变更，请重新拟合并核对。</div>}
+                    <label className="flex items-center gap-2"><input type="checkbox" disabled={!calibrationCurrent} checked={fitReviewed && calibrationCurrent} onChange={event => setFitReviewed(event.target.checked)} />已核对正面与侧面白模</label>
                 </div>}
         </div>}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -305,7 +335,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                 </div>
             </details>)}
         </div>
-        <button type="button" disabled={saving || !meshData || !!(shape.calibration && (!fitReviewed || !fitSource || shape.calibration.source.asset_id !== fitSource.assetId || shape.calibration.source.variant_id !== fitSource.variantId))} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
+        <button type="button" disabled={saving || !meshData || !!(shape.calibration && (!fitReviewed || !calibrationCurrent))} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
         {shape.calibration && (!fitSource || shape.calibration.source.asset_id !== fitSource.assetId || shape.calibration.source.variant_id !== fitSource.variantId) &&
             <p role="status" className="text-xs text-amber-300">骨相基准的三视图已变更，请重新拟合。</p>}
         {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
