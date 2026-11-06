@@ -16,10 +16,30 @@ export function faceGuidePrompt(name: string) {
 const mid = (a: Point, b: Point): Point => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 const finite = (p: Point) => Number.isFinite(p?.x) && Number.isFinite(p?.y);
 
+const BASE_CONTROLS = [234, 454, 172, 397, 152, 33, 133, 159, 145, 362, 263, 386, 374];
+const CONTOUR_CONTROLS = [93, 132, 58, 136, 150, 149, 176, 148, 377, 400, 378, 379, 365, 288, 361, 323];
+const MOUTH_CONTROLS = [61, 291, 0, 13, 14, 17];
+const NOSE_CONTROLS = [168, 6, 197, 195, 5, 4, 1, 2, 19, 94,
+    122, 351, 196, 419, 174, 399, 198, 420, 51, 281, 45, 275,
+    44, 274, 49, 279, 48, 278, 129, 358, 64, 294, 98, 327, 97, 326];
+
+const CONTROL_GROUPS: Array<[string, number[]]> = [
+    ["脸颊、下颌或下巴", [...BASE_CONTROLS.slice(0, 5), ...CONTOUR_CONTROLS]],
+    ["眼部", BASE_CONTROLS.slice(5)], ["嘴部", MOUTH_CONTROLS], ["鼻部", NOSE_CONTROLS],
+];
+
 /** Coordinates are in pixels. Eyes retain their local shape while their centers move. */
 export function faceGuideControls(face: Point[], shape: FaceShape, width: number, height: number): GuideControls {
-    if (face.length < 468 || face.some(p => !finite(p) || p.x < 0 || p.x > 1 || p.y < 0 || p.y > 1)
-        || !Number.isFinite(width) || !Number.isFinite(height) || Math.min(width, height) <= 0) throw new Error("人脸点位或图像尺寸无效");
+    if (!Number.isInteger(width) || !Number.isInteger(height) || Math.min(width, height) < 2) throw new Error("正脸原图尺寸无效，请等待图片加载完成后重试");
+    if (face.length < 468 || Array.from({ length: face.length }, (_, i) => face[i]).some(p => !p)) throw new Error("人脸识别点位不完整，请重新制作预览");
+    if (face.some(p => !finite(p))) throw new Error("人脸识别点位包含无效坐标，请重新制作预览");
+    // A padded face crop may predict forehead points outside the photograph.
+    // Only points sampled or constrained by this warp must be inside its pixels.
+    for (const [label, ids] of CONTROL_GROUPS) {
+        if (ids.some(id => face[id].x < 0 || face[id].x * width > width - 1 || face[id].y < 0 || face[id].y * height > height - 1)) {
+            throw new Error(`${label}识别点超出所选原图，请选择整张正脸或使用脸部完整且留白更多的头像；无需重新拟合白模`);
+        }
+    }
     const sourceFace = face.map(p => ({ x: p.x * width, y: p.y * height }));
     const leftEye = mid(sourceFace[33], sourceFace[133]), rightEye = mid(sourceFace[362], sourceFace[263]);
     const center = mid(leftEye, rightEye), faceLength = sourceFace[152].y - center.y;
@@ -33,7 +53,7 @@ export function faceGuideControls(face: Point[], shape: FaceShape, width: number
         || sourceFace[45].y <= sourceFace[196].y || sourceFace[1].y <= sourceFace[168].y) throw new Error("鼻部点位无效，请换用清晰正脸");
     const measurements = Object.fromEntries(faceShapeMeasurements(shape).map(m => [m.key, m.target]));
     const lengthRatio = measurements.faceLength / 100;
-    const indices = [234, 454, 172, 397, 152, 33, 133, 159, 145, 362, 263, 386, 374];
+    const indices = [...BASE_CONTROLS];
     const source = indices.map(i => sourceFace[i]);
     const target = source.map((p, index) => {
         const id = indices[index];
@@ -63,7 +83,7 @@ export function faceGuideControls(face: Point[], shape: FaceShape, width: number
         || target[1].x <= target[0].x || target[3].x <= target[2].x || target[4].y <= center.y) throw new Error("目标超出可用图像区域，请减小调整幅度或换用留白更多的头像");
     // Attach the intervening jaw contour as well: isolated angle points can
     // move while a detector continues to follow the original surrounding edge.
-    const contour = [93, 132, 58, 136, 150, 149, 176, 148, 377, 400, 378, 379, 365, 288, 361, 323];
+    const contour = CONTOUR_CONTROLS;
     const forward = thinPlateMap(source, target);
     const extraSource = contour.map(index => sourceFace[index]);
     source.splice(indices.length, 0, ...extraSource);
@@ -71,7 +91,7 @@ export function faceGuideControls(face: Point[], shape: FaceShape, width: number
     indices.push(...contour);
     const baseMap = thinPlateMap(source, target);
     // Keep the mouth at the contour-only position. Nasal edits must not drag lips.
-    const mouth = [61, 291, 0, 13, 14, 17];
+    const mouth = MOUTH_CONTROLS;
     const nose = NOSE_CONTROLS;
     for (const id of [...mouth, ...nose]) {
         const p = sourceFace[id];
@@ -81,10 +101,6 @@ export function faceGuideControls(face: Point[], shape: FaceShape, width: number
     if (target.some(p => !finite(p) || p.x < left || p.x > right || p.y < top || p.y > bottom)) throw new Error("鼻部目标超出可用图像区域，请减小幅度后重试");
     return { source, target, indices };
 }
-
-const NOSE_CONTROLS = [168, 6, 197, 195, 5, 4, 1, 2, 19, 94,
-    122, 351, 196, 419, 174, 399, 198, 420, 51, 281, 45, 275,
-    44, 274, 49, 279, 48, 278, 129, 358, 64, 294, 98, 327, 97, 326];
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp = (value: number) => Math.max(0, Math.min(1, value));

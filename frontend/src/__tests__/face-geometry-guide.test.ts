@@ -60,6 +60,24 @@ describe("face geometry guide", () => {
         expect(() => thinPlateMap([{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 0 }], [{ x: 0, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 0 }])).toThrow(/退化/);
     });
 
+    it("ignores finite unused forehead marks outside the photo without altering anatomical controls", () => {
+        const original = face(), cropped = face();
+        cropped[10] = { x: .49, y: -.012 }; cropped[67] = { x: .4, y: -.005 };
+        cropped[338] = { x: 1.01, y: -.011 };
+        const shape = { ...DEFAULT_FACE_SHAPE, noseBridgeWidth: 110 };
+        expect(faceGuideControls(cropped, shape, 800, 1000)).toEqual(faceGuideControls(original, shape, 800, 1000));
+        const clipped = face(); clipped[152].y = 1.01;
+        expect(() => faceGuideControls(clipped, shape, 800, 1000)).toThrow(/下巴.*超出/);
+    });
+
+    it("distinguishes unloaded image dimensions from incomplete or non-finite landmarks", () => {
+        expect(() => faceGuideControls(face(), DEFAULT_FACE_SHAPE, 0, 1000)).toThrow(/原图尺寸/);
+        expect(() => faceGuideControls(face(), DEFAULT_FACE_SHAPE, 800, NaN)).toThrow(/原图尺寸/);
+        expect(() => faceGuideControls([], DEFAULT_FACE_SHAPE, 800, 1000)).toThrow(/点位不完整/);
+        const invalid = face(); invalid[1].x = NaN;
+        expect(() => faceGuideControls(invalid, DEFAULT_FACE_SHAPE, 800, 1000)).toThrow(/识别点位包含无效/);
+    });
+
     it("resamples pixels and preserves the background outside the face region", () => {
         const shape = { ...DEFAULT_FACE_SHAPE, cheekWidth: 117, jawWidth: 75 };
         const c = faceGuideControls(face(), shape, 80, 100);

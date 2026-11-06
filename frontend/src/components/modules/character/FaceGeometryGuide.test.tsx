@@ -48,6 +48,9 @@ it("invalidates preview and review when the saved shape or region changes", asyn
     expect(screen.queryByAltText("局部变形后的骨相引导图")).toBeNull();
     await preview(); fireEvent.change(screen.getByLabelText("引导图正脸区域"), { target: { value: "left" } });
     expect(screen.queryByAltText("局部变形后的骨相引导图")).toBeNull();
+    expect(screen.getByText(/单人正脸头像请选/)).toHaveTextContent("已选择左半图");
+    fireEvent.change(screen.getByLabelText("引导图正脸区域"), { target: { value: "whole" } });
+    expect(screen.queryByText(/单人正脸头像请选/)).toBeNull();
     expect(mocks.upload).not.toHaveBeenCalled();
 });
 

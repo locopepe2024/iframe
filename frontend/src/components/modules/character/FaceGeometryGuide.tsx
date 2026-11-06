@@ -120,6 +120,7 @@ export default function FaceGeometryGuide({ characterName, shape, source, onAppl
                     <option value="whole">整张图（单人正脸）</option><option value="left">左半图</option><option value="right">右半图</option>
                 </select>
             </label>
+            {region !== "whole" && <p role="status" className="text-xs text-amber-400">已选择{region === "left" ? "左" : "右"}半图。只有多视图或多人排版才需要选择半图；单人正脸头像请选“整张图”，避免截掉半张脸。</p>}
             <div className="grid gap-3 sm:grid-cols-2">
                 <figure>{originalUrl && <img ref={image} src={originalUrl} alt="骨相引导原始头像" className="max-h-96 w-full rounded object-contain" />}<figcaption className="mt-1 text-xs text-text-muted">原始头像</figcaption></figure>
                 {guideUrl && <figure><img src={guideUrl} alt="局部变形后的骨相引导图" className="max-h-96 w-full rounded object-contain" /><figcaption className="mt-1 text-xs text-text-muted">局部变形结果 · 未调用图像模型</figcaption></figure>}
