@@ -15,6 +15,22 @@ vi.mock('@/components/library/NewLibraryAssetDialog', () => ({
   ),
 }));
 
+it('confirms a video save on the card even before parent history refreshes', async () => {
+  vi.mocked(playgroundApi.saveToLibrary).mockResolvedValueOnce({ ok: true });
+  const generation: PlaygroundGeneration = {
+    id: 'saved-video', mode: 't2v', model_id: 'video-model', prompt: 'video', input_media: [], parameters: {}, batch_size: 1,
+    outputs: [{ id: 'video-out', media_path: '/video.mp4', media_type: 'video', saved_to_library: false }],
+    status: 'completed', created_at: '2026-11-06T08:00:00Z',
+  };
+  usePlaygroundStore.setState({ history: [generation] });
+  render(<ResultCard generation={generation} />);
+  fireEvent.click(screen.getByRole('button', { name: 'card.saveToLibrary' }));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('card.savedToLibraryNotice'));
+  expect(playgroundApi.saveToLibrary).toHaveBeenCalledWith('saved-video', 'video-out');
+  expect(screen.getByRole('button', { name: 'card.saved' })).toBeDisabled();
+  expect(usePlaygroundStore.getState().history[0].outputs[0].saved_to_library).toBe(true);
+});
+
 it('recovers a failed historical cover when history supplies a renewed URL', async () => {
   vi.mocked(resolveMediaDelivery).mockRejectedValueOnce(new Error('temporary failure'));
   const generation: PlaygroundGeneration = {

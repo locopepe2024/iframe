@@ -16,4 +16,3 @@ The retention page filters only the loaded page by title/type and provides no de
 ## Affected paths and validation
 
 Playground inventory/API, a small tombstone store, material-library client, retention browser and focused tests. Verify filters before pagination, local-day midnight/DST bounds, unknown dates, owner isolation, persistence/idempotence, restore, corruption behavior, pagination races and preserved content/version reads. Run relevant pytest/UI suites, frontend typecheck and production build.
-

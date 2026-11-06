@@ -1,4 +1,5 @@
 'use client';
+import { useGeneratedMaterialSave } from './useGeneratedMaterialSave';
 
 import { useEffect, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -81,24 +82,22 @@ export default function DetailPanel({
 }: DetailPanelProps) {
   const t = useTranslations('playground');
   const [copied, setCopied] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState('');
   const [importAssetOpen, setImportAssetOpen] = useState(false);
   const [freshMediaUrl, setFreshMediaUrl] = useState<string | null>(null);
-  const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
   const history = usePlaygroundStore((s) => s.history);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
   const toggleFeatured = usePlaygroundStore((s) => s.toggleFeatured);
 
   // Always read the latest generation from store (so saved_to_library stays in sync)
   const generation = history.find((g) => g.id === generationProp.id) ?? generationProp;
-  const saved = generation.outputs[0]?.saved_to_library ?? false;
 
   // Determine media — focus the clicked output of a batch, else the first.
   const output =
     generation.outputs.find((o) => o.id === focusOutputId) ?? generation.outputs[0];
+  const { saved, saving, confirmed, error: saveError, save } = useGeneratedMaterialSave(generation, output);
   const featured = output ? featuredByGen[generation.id] === output.id : false;
   const isVideo =
     output?.media_type === 'video' ||
@@ -160,25 +159,6 @@ export default function DetailPanel({
     try { await downloadOutput(generation.id, output.id, output.media_type); }
     catch (error) { setDownloadError(error instanceof Error ? error.message : '下载失败，请重试'); }
     finally { setDownloading(false); }
-  };
-
-  const handleSaveToLibrary = async () => {
-    if (!output || saving) return;
-    setSaving(true);
-    try {
-      const newSaved = !saved;
-      if (newSaved) {
-        await playgroundApi.saveToLibrary(generation.id, output.id);
-      }
-      const updatedOutputs = generation.outputs.map((o) =>
-        o.id === output.id ? { ...o, saved_to_library: newSaved } : o
-      );
-      updateGeneration({ ...generation, outputs: updatedOutputs });
-    } catch (err) {
-      console.error('[DetailPanel] Save to library failed:', err);
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleDelete = async () => {
@@ -394,8 +374,8 @@ export default function DetailPanel({
               </button>
             ) : output ? (
               <button
-                onClick={handleSaveToLibrary}
-                disabled={saving}
+                onClick={() => void save()}
+                disabled={saving || saved}
                 className={`w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-sm font-medium transition cursor-pointer disabled:opacity-50 disabled:cursor-wait ${
                   saved
                     ? 'bg-primary text-on-accent hover:bg-primary-hover'
@@ -403,7 +383,7 @@ export default function DetailPanel({
                 }`}
               >
                 <Bookmark className={`w-4 h-4 ${saved ? 'fill-current' : ''}`} />
-                {saving ? t('detail.saving') : saved ? t('detail.savedCancel') : t('detail.saveToLibrary')}
+                {saving ? t('detail.saving') : saved ? t('card.saved') : t('detail.saveToLibrary')}
               </button>
             ) : null}
 
@@ -440,6 +420,8 @@ export default function DetailPanel({
             )}
 
             {/* Secondary row: Download + Generate Video (neutral ghosts) */}
+            {confirmed && <p role="status" className="text-xs text-primary">{t('card.savedToLibraryNotice')}</p>}
+            {saveError && <p role="alert" className="text-xs text-status-failed-fg">{saveError}</p>}
             {downloadError && <p role="alert" className="text-xs text-status-failed-fg">{downloadError}</p>}
             {(mediaUrl || (!isVideo && output?.media_path && onGenerateVideo)) && (
               <div className="flex gap-2">
