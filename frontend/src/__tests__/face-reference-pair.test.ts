@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { validateFacePhotoView, validateFaceReferencePair } from "../lib/faceReferencePair";
+import { validateFacePhotoView, validateFaceReferencePair, validateProfilePose } from "../lib/faceReferencePair";
 import type { FacePhotoReference } from "../lib/whiteFaceImage";
 
 function face() {
@@ -33,4 +33,14 @@ it("requires two distinct validated sources and sufficient native face detail", 
     expect(() => validateFaceReferencePair(front, { ...side, source: front.source })).toThrow(/独立/);
     expect(() => validateFaceReferencePair(front, { ...side, preparation: { ...side.preparation, sourceFaceHeight: 91 } })).toThrow(/侧脸照/);
     expect(() => validateFaceReferencePair(front, { ...side, view: "front" })).toThrow(/侧脸照/);
+});
+
+
+it("rejects the observed oblique pose even when its eye widths resemble a profile", () => {
+    const matrix = (yaw: number) => { const a = yaw*Math.PI/180; return { rows:4,columns:4,data:[Math.cos(a),0,-Math.sin(a),0,0,1,0,0,Math.sin(a),0,Math.cos(a),0,0,0,-30,1] }; };
+    expect(() => validateProfilePose(matrix(45))).toThrow(/角度不足/);
+    expect(() => validateProfilePose(matrix(0))).toThrow(/角度不足/);
+    expect(validateProfilePose(matrix(60))).toBeCloseTo(60);
+    expect(validateProfilePose(matrix(-85))).toBeCloseTo(85);
+    expect(() => validateProfilePose()).toThrow(/无法核对/);
 });

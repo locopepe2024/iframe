@@ -163,11 +163,26 @@ export function thinPlateMap(from: Point[], to: Point[]) {
 }
 
 /** Bilinear inverse resampling. A coarse field avoids evaluating a spline per pixel. */
-export function warpFacePixels(pixels: Uint8ClampedArray, width: number, height: number, controls: GuideControls) {
+export function warpFacePixels(pixels: Uint8ClampedArray, width: number, height: number, controls: GuideControls, refineInverse = false) {
     if (pixels.length !== width * height * 4) throw new Error("图像像素尺寸不匹配");
     const result = new Uint8ClampedArray(pixels);
     if (controls.source.every((p, i) => Math.hypot(p.x - controls.target[i].x, p.y - controls.target[i].y) < 1e-8)) return result;
-    const map = thinPlateMap(controls.target, controls.source);
+    const approximate = thinPlateMap(controls.target, controls.source);
+    const forward = refineInverse ? thinPlateMap(controls.source, controls.target) : undefined;
+    const map = (target: Point) => {
+        let p = approximate(target);
+        if (forward) for (let iteration = 0; iteration < 8; iteration++) {
+            const actual = forward(p), ex = actual.x - target.x, ey = actual.y - target.y;
+            if (Math.hypot(ex, ey) < .01) break;
+            const x = forward({ x: p.x + .2, y: p.y }), y = forward({ x: p.x, y: p.y + .2 });
+            const a = (x.x - actual.x) / .2, b = (y.x - actual.x) / .2;
+            const c = (x.y - actual.y) / .2, d = (y.y - actual.y) / .2, det = a * d - b * c;
+            if (!Number.isFinite(det) || det <= .01) throw new Error("调整幅度造成图像折叠，请减小幅度后重试");
+            p = { x: p.x - (d * ex - b * ey) / det, y: p.y - (a * ey - c * ex) / det };
+        }
+        if (forward && Math.hypot(forward(p).x - target.x, forward(p).y - target.y) > .1) throw new Error("侧脸像素逆变换未收敛，请减小调整幅度");
+        return p;
+    };
     const left = Math.floor(Math.min(...controls.source.map(p => p.x))), top = Math.floor(Math.min(...controls.source.map(p => p.y)));
     const right = Math.ceil(Math.max(...controls.source.map(p => p.x))), bottom = Math.ceil(Math.max(...controls.source.map(p => p.y)));
     const step = 4, cols = Math.ceil((right - left) / step) + 1, rows = Math.ceil((bottom - top) / step) + 1;
