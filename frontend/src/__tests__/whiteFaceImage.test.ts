@@ -9,7 +9,8 @@ const context = { fillRect: vi.fn(), drawImage, imageSmoothingEnabled: false, im
 const image = () => Object.assign(new Image(), { width: 1600, height: 1000 });
 beforeEach(() => {
     drawImage.mockClear();
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+        ((type: string) => type === "2d" ? context : null) as unknown as HTMLCanvasElement["getContext"]);
 });
 afterEach(() => vi.restoreAllMocks());
 
