@@ -11,6 +11,7 @@ import { DEFAULT_FACE_SHAPE } from "@/lib/whiteFaceShape";
 import headMesh from "../../../public/models/character/makehuman-face-v1/head.json";
 
 const apiMocks = vi.hoisted(() => ({
+    guidePreview: vi.fn(),
     uploadLibraryImage: vi.fn().mockResolvedValue({ image_url: 'uploads/face.png' }),
     createLibraryAsset: vi.fn().mockResolvedValue({ id: 'face-prop', image_asset: { variants: [{ id: 'face-v1' }] } }),
     authenticatedFetch: vi.fn().mockResolvedValue({ ok: false }),
@@ -73,6 +74,7 @@ vi.mock("../common/VideoVariantSelector", () => ({
 vi.mock("@/components/shared/AssetIndexPreview", () => ({ AssetIndexPreview: () => <span data-testid="asset-preview" /> }));
 vi.mock("@/lib/api", () => ({ API_URL: "", api: apiMocks, agentRequest: apiMocks.agentRequest,
     authenticatedFetch: apiMocks.authenticatedFetch }));
+vi.mock("@/lib/createFaceGeometryGuide", () => ({ createFaceGeometryGuide: apiMocks.guidePreview }));
 vi.mock("@/store/projectStore", () => ({
     useProjectStore: (selector: (state: unknown) => unknown) => selector(projectStoreMocks),
 }));
@@ -90,6 +92,46 @@ const baseProps = {
     isGenerating: false,
     description: "Character reference",
 };
+
+it('reviews the warped portrait as the single image input without applying measured targets twice', async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
+    apiMocks.previewAssetImageSubmission.mockClear();
+    apiMocks.authenticatedFetch.mockImplementation((url: string) => Promise.resolve(url.includes('/asset-index/delivery?')
+        ? { ok: true, json: async () => ({ url: '/studio/owned-media/owner/portrait.png' }) }
+        : { ok: true, blob: async () => new Blob(['original'], { type: 'image/png' }) }));
+    apiMocks.guidePreview.mockResolvedValue({ blob: new Blob(['warped'], { type: 'image/png' }), verified: true, sourceFaceHeight: 501,
+        iterations: 4, checks: [{ key: 'faceLength', label: '脸长／颧宽', target: 84.48, observed: 85.21, error: .009 }], omitted: ['鼻尖突出度'] });
+    URL.createObjectURL = vi.fn(() => 'blob:guide'); URL.revokeObjectURL = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+    const shape = { ...DEFAULT_FACE_SHAPE, faceLength: 90, cheekWidth: 117 };
+    const asset = { id: 'guide-role', name: '苏砚', description: '少年',
+        headshot_asset: { selected_id: 'portrait', variants: [{ id: 'portrait', url: 'portrait.png' }, { id: 'new-portrait', url: 'new.png' }] },
+        full_body_asset: { selected_id: 'master', variants: [{ id: 'master', url: 'master.png' }] },
+        character_design: { design_draft: { white_face_shape: shape, identity: { visual_notes: '黑发' } } } };
+    const props = { asset, onClose: vi.fn(), onUpdateDescription: vi.fn(), onGenerate: vi.fn(), generatingTypes: [] };
+    try {
+        const view = render(<CharacterWorkbench {...props} />);
+        fireEvent.click(screen.getByRole('tab', { name: '面容白模' }));
+        const original = await screen.findByAltText('骨相引导原始头像');
+        Object.defineProperty(original, 'naturalWidth', { value: 1000 });
+        fireEvent.click(screen.getByRole('button', { name: '制作本地引导预览' }));
+        await screen.findByAltText('局部变形后的骨相引导图');
+        fireEvent.click(screen.getByRole('checkbox', { name: '已检查变形后的轮廓、五官和发际边缘' }));
+        fireEvent.click(screen.getByRole('button', { name: '使用引导图细化头像' }));
+        await waitFor(() => expect(screen.getByRole('tab', { name: 'avatar' })).toHaveAttribute('aria-selected', 'true'));
+        expect(imagePromptInput()).toHaveTextContent('这张参考图已完成正面骨相几何调整');
+        expect(imagePromptInput()).not.toHaveTextContent('骨相测量目标：');
+        fireEvent.click(screen.getAllByTestId('variant-generate')[0]);
+        await waitFor(() => expect(apiMocks.previewAssetImageSubmission).toHaveBeenCalled());
+        const request = apiMocks.previewAssetImageSubmission.mock.lastCall?.[1];
+        expect(request.reference).toMatchObject({ asset_type: 'prop', asset_id: 'face-prop', variant_id: 'face-v1' });
+        expect(request.references).toEqual([]); expect(request.image_generation_mode).toBe('reference');
+        expect(request.prompt).toContain('不再重复调整比例'); expect(request.prompt).not.toContain('骨相测量目标：');
+        expect(props.onGenerate).not.toHaveBeenCalled();
+        view.rerender(<CharacterWorkbench {...props} asset={{ ...asset, headshot_asset: { ...asset.headshot_asset, selected_id: 'new-portrait' } }} />);
+        expect(await screen.findByText('骨相引导图、参数或来源已变更，请重新制作并应用引导图。')).toBeInTheDocument();
+    } finally { apiMocks.authenticatedFetch.mockImplementation(() => Promise.resolve({ ok: false })); vi.unstubAllGlobals(); }
+});
 
 it('persists face adjustments with one save and restores them after closing the workbench', async () => {
     apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });

@@ -40,6 +40,8 @@ import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterDesignPanel from "./CharacterDesignPanel";
 import WhiteFaceModel from "./character/WhiteFaceModel";
+import FaceGeometryGuide from "./character/FaceGeometryGuide";
+import { faceGuidePrompt } from "@/lib/faceGeometryGuide";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 import AssetWorkbenchLayout from "@/components/shared/AssetWorkbenchLayout";
 
@@ -623,6 +625,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         full_body: null, three_view: null, headshot: null,
     });
     const [pendingImageReview, setPendingImageReview] = useState<AssetImageReviewRequest | null>(null);
+    const [appliedFaceGuide, setAppliedFaceGuide] = useState<{ reference: AssetLibraryReference; shapeKey: string; sourceKey: string } | null>(null);
 
 
     useEffect(() => {
@@ -864,6 +867,9 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const descriptionForSource = (source: "panel" | "ai") => [promptForSource(source), designConstraintText].filter(Boolean).join("\n");
 
     const applyDesignToPrompts = (source: "panel" | "ai") => {
+        if (appliedFaceGuide) setPromptReferences(current => ({ ...current,
+            headshot: current.headshot.filter(reference => referenceKey(reference) !== referenceKey(appliedFaceGuide.reference)) }));
+        setAppliedFaceGuide(null);
         const previousNegative = appliedDesignNegative.current;
         setNegativePrompt(current => Array.from(new Set([
             ...current.split('\n').filter(line => line && !previousNegative.includes(line)), ...normalizedConstraints.negative_prompt,
@@ -1260,12 +1266,17 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     }, [asset, hasAnyUpload, hasNonFullBodyUpload]);
 
     const handleGenerateClick = (type: "reference_sheet" | "full_body" | "three_view" | "headshot", batchSize: number) => {
+        if (type === "headshot" && appliedFaceGuide && (appliedFaceGuide.shapeKey !== JSON.stringify(whiteFaceShape)
+            || appliedFaceGuide.sourceKey !== JSON.stringify(whiteFacePortraitSource))) {
+            setDesignError("骨相参数或引导图来源已变更，请重新制作并应用引导图。");
+            return;
+        }
         // Choose the visible design explicitly; an AI response must never win merely by existing.
-        if (selectedDesignPromptSource === "ai" && !designResult?.trim()) {
+        if (!(type === "headshot" && appliedFaceGuide) && selectedDesignPromptSource === "ai" && !designResult?.trim()) {
             setDesignError("请先填写 AI 优化结果，或切换到角色设计后生成。");
             return;
         }
-        if (promptForSource(selectedDesignPromptSource).trim() && (promptsNeedDesignApply || appliedPromptSource !== selectedDesignPromptSource)) applyDesignToPrompts(selectedDesignPromptSource);
+        if (!(type === "headshot" && appliedFaceGuide) && promptForSource(selectedDesignPromptSource).trim() && (promptsNeedDesignApply || appliedPromptSource !== selectedDesignPromptSource)) applyDesignToPrompts(selectedDesignPromptSource);
         let prompt = "";
         if (type === "full_body" || type === "reference_sheet") prompt = fullBodyPrompt;
         else if (type === "three_view") prompt = threeViewPrompt;
@@ -1288,6 +1299,11 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             return;
         }
         const imageGenerationMode = promptModes[promptType];
+        if (type === "headshot" && appliedFaceGuide && (imageGenerationMode !== "reference"
+            || referenceKey(imageGenerationReferences([...promptReferences.headshot, ...promptPickerReferences.headshot, ...(masterReference ? [masterReference] : [])])[0]) !== referenceKey(appliedFaceGuide.reference))) {
+            setDesignError("骨相引导图必须作为头像参考图使用，请重新应用引导图，或应用角色设计以恢复普通生成。");
+            return;
+        }
         const selectedReferences = [...designReferenceAssets, ...promptReferences[promptType], ...promptPickerReferences[promptType]];
         const references = promptType === "full_body"
             ? fittedFullBodyReferences(whiteFaceShape, asset.id, imageGenerationMode, selectedReferences, masterReference)
@@ -1351,6 +1367,11 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         promptModes, pendingImageReview, masterReference, whiteFaceShape, asset.id]);
     const reviewReferences = imageReviewRequest?.reference ? [imageReviewRequest.reference] : imageReviewRequest?.references || [];
     const reviewValidationError = !imageReviewRequest ? "" :
+        imageReviewRequest.generation_type === "headshot" && appliedFaceGuide
+            && (appliedFaceGuide.shapeKey !== JSON.stringify(whiteFaceShape) || appliedFaceGuide.sourceKey !== JSON.stringify(whiteFacePortraitSource)
+                || imageReviewRequest.image_generation_mode !== "reference" || reviewReferences.length !== 1
+                || referenceKey(reviewReferences[0]) !== referenceKey(appliedFaceGuide.reference))
+            ? "骨相引导图、参数或来源已变更，请重新制作并应用引导图。" :
         reviewReferences.length > 9 ? "参考图最多九张。" :
         imageReviewRequest.prompt.includes("骨相测量目标：") && (imageReviewRequest.image_generation_mode !== "reference" || reviewReferences.length === 0)
             ? "骨相测量目标以角色参考图为基准，请选择角色参考图并切换到参考生图。" :
@@ -1703,6 +1724,16 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                                 <p className="mt-1 text-xs text-text-muted">独立调整脸型、鼻部、眼眉和嘴唇/下巴参数。参数会保存到当前角色，并作为骨相提示传递。</p>
                             </div>
                             <WhiteFaceModel characterName={asset.name || "角色"} initialShape={whiteFaceShape} fitSource={whiteFaceFitSource} portraitSource={whiteFacePortraitSource} onSaved={handleWhiteFaceSaved} standalone />
+                            <FaceGeometryGuide characterName={asset.name || "角色"} shape={whiteFaceShape} source={whiteFacePortraitSource}
+                                onApplied={(reference, shapeKey) => {
+                                    setAppliedFaceGuide({ reference, shapeKey, sourceKey: JSON.stringify(whiteFacePortraitSource) });
+                                    setPromptReferences(current => ({ ...current, headshot: [reference] }));
+                                    setPromptPickerReferences(current => ({ ...current, headshot: [] }));
+                                    setPromptModes(current => ({ ...current, headshot: "reference" }));
+                                    setHeadshotPrompt(faceGuidePrompt(asset.name || "角色"));
+                                    refreshAssetIndex();
+                                    setActivePanel("headshot");
+                                }} />
                         </div>
                     </div>}
 
@@ -1858,14 +1889,14 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         showReferencePicker
                         designReferences={designReferenceAssets}
                         effectiveReferences={imageGenerationReferences([...promptReferences.headshot, ...promptPickerReferences.headshot, ...(masterReference ? [masterReference] : [])]).slice(0, 1)}
-                        pickerReferences={[...(masterReference ? [masterReference] : []), ...promptPickerReferences.headshot]}
+                        pickerReferences={appliedFaceGuide ? [appliedFaceGuide.reference] : [...(masterReference ? [masterReference] : []), ...promptPickerReferences.headshot]}
                         onPickerReferencesChange={(references: AssetLibraryReference[]) => setPanelPickerReferences("headshot", references)}
                         imageGenerationMode={promptModes.headshot}
                         onImageGenerationModeChange={(mode: "text" | "reference") => setPanelMode("headshot", mode)}
                         onGenerate={(batchSize: number) => handleGenerateClick("headshot", batchSize)}
                         isGenerating={getGeneratingInfo("headshot").isGenerating}
                         generatingBatchSize={getGeneratingInfo("headshot").batchSize}
-                        isLocked={!hasFullBodyImage && !hasAnyUpload}
+                        isLocked={!hasFullBodyImage && !hasAnyUpload && !appliedFaceGuide}
                         description="Close-up facial details and expressions."
                         aspectRatio="1:1"
 
