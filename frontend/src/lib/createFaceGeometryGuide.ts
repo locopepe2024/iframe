@@ -9,6 +9,7 @@ export type FaceGeometryGuide = {
     blob: Blob; sourceFaceHeight: number; verified: boolean; iterations: number;
     checks: FaceGuideCheck[]; omitted: string[];
     noseComparison?: { original: Blob; guide: Blob }; pixelCheckPassed?: boolean;
+    textureChecks?: Array<{ id: number; error: number; textureError: number; reliable: boolean }>;
 };
 
 async function canvasImage(canvas: HTMLCanvasElement) {

@@ -16,7 +16,7 @@ export type PixelTrack = { point: FaceFitPoint; error: number; textureError: num
 
 /** Locate original texture in the rendered pixels. This checks the image, not a re-detected 3D nose prior. */
 export function trackGuidePixels(original: Uint8ClampedArray, output: Uint8ClampedArray, width: number, height: number,
-    controls: GuideControls, ids: number[]): Map<number, PixelTrack> {
+    controls: GuideControls, ids: number[], exactPatch = false): Map<number, PixelTrack> {
     const forward = thinPlateMap(controls.source, controls.target);
     const tracks = new Map<number, PixelTrack>();
     for (const id of ids) {
@@ -26,9 +26,10 @@ export function trackGuidePixels(original: Uint8ClampedArray, output: Uint8Clamp
         const dx = forward({ x: source.x + 1, y: source.y }), dy = forward({ x: source.x, y: source.y + 1 });
         const samples: Array<{ value: number; x: number; y: number }> = [];
         for (let y = -6; y <= 6; y += 2) for (let x = -6; x <= 6; x += 2) {
+            const warped = exactPatch ? forward({ x: source.x + x, y: source.y + y }) : undefined;
             samples.push({ value: gray(original, width, height, source.x + x, source.y + y),
-                x: (dx.x - expected.x) * x + (dy.x - expected.x) * y,
-                y: (dx.y - expected.y) * x + (dy.y - expected.y) * y });
+                x: warped ? warped.x - expected.x : (dx.x - expected.x) * x + (dy.x - expected.x) * y,
+                y: warped ? warped.y - expected.y : (dx.y - expected.y) * x + (dy.y - expected.y) * y });
         }
         const mean = samples.reduce((sum, s) => sum + s.value, 0) / samples.length;
         const variance = samples.reduce((sum, s) => sum + (s.value - mean) ** 2, 0);
