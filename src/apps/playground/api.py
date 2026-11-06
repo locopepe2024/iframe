@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Literal
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, Header, HTTPException, UploadFile, File, Form, Query
@@ -510,10 +510,19 @@ router.add_api_route("/input-media/{filename}", get_input_media, methods=["GET"]
 
 @router.get("/media-inventory")
 def media_inventory(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+                    query: str = Query('', max_length=200), media_type: Optional[Literal['image', 'video', 'audio']] = None,
+                    created_after: Optional[float] = Query(None, ge=0, allow_inf_nan=False),
+                    created_before: Optional[float] = Query(None, ge=0, allow_inf_nan=False),
+                    utc_offset_minutes: int = Query(0, ge=-840, le=840), temporary_only: bool = False,
+                    timezone_name: Optional[str] = Query(None, max_length=100),
                     identity: UserContext = Depends(require_user_context)):
     """Read-only retention review; never grants deletion permission."""
     from .media_inventory import owner_inventory
-    return owner_inventory(identity, media_root(), limit=limit, offset=offset)
+    if created_after is not None and created_before is not None and created_after >= created_before:
+        raise HTTPException(422, 'Invalid date range')
+    return owner_inventory(identity, media_root(), limit=limit, offset=offset, query=query, media_type=media_type,
+                           created_after=created_after, created_before=created_before,
+                           utc_offset_minutes=utc_offset_minutes, timezone_name=timezone_name, temporary_only=temporary_only)
 
 
 # Local image editing is separate from paid generation.
@@ -593,7 +602,51 @@ class PromoteMaterialRequest(BaseModel):
 @router.get('/material-library')
 def material_library(identity: UserContext = Depends(require_user_context)):
     from .material_library import MaterialLibrary
-    return MaterialLibrary(_storage_for(identity)).list()
+    from .material_trash import MaterialTrash
+    hidden = MaterialTrash(identity.owner_profile_id, media_root()).hidden('saved')
+    # Listing must not initialize Playground storage or recover generation tasks.
+    from types import SimpleNamespace
+    owner_dir = PlaygroundStorage._owner_dir(identity.owner_profile_id, output_root=media_root())
+    storage = SimpleNamespace(asset_dir=os.path.join(owner_dir, 'assets'), media_root=media_root())
+    return [row for row in MaterialLibrary(storage).list() if row['id'] not in hidden]
+
+
+class TrashMaterialRequest(BaseModel):
+    scope: Literal['temporary', 'saved']
+    material_id: str = Field(min_length=1, max_length=300)
+
+
+@router.get('/material-trash')
+def material_trash(identity: UserContext = Depends(require_user_context)):
+    from .material_trash import MaterialTrash
+    return MaterialTrash(identity.owner_profile_id, media_root()).list()
+
+
+@router.post('/material-trash', status_code=201)
+def trash_material(body: TrashMaterialRequest, identity: UserContext = Depends(require_user_context)):
+    from .material_trash import MaterialTrash
+    from .media_inventory import owner_inventory
+    store = MaterialTrash(identity.owner_profile_id, media_root())
+    prior = next((row for row in store.list() if row['scope'] == body.scope and row['material']['id'] == body.material_id), None)
+    if prior:
+        return prior
+    if body.scope == 'temporary':
+        report = owner_inventory(identity, media_root(), limit=1_000_000)
+        if report['diagnostics']:
+            raise HTTPException(409, 'Material history could not be fully read; retry after reconciliation')
+        rows = report['items']
+    else:
+        rows = material_library(identity)
+    item = next((row for row in rows if row['id'] == body.material_id), None)
+    if not item:
+        raise HTTPException(404, 'Material not found')
+    return store.move(body.scope, item)
+
+
+@router.delete('/material-trash/{trash_id}')
+def restore_material(trash_id: str, identity: UserContext = Depends(require_user_context)):
+    from .material_trash import MaterialTrash
+    return MaterialTrash(identity.owner_profile_id, media_root()).restore(trash_id)
 
 
 @router.post('/material-library', status_code=201)

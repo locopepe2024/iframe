@@ -100,3 +100,30 @@ def test_inventory_api_is_scoped_to_authenticated_profile(tmp_path, monkeypatch)
     assert client.get('/playground/media-inventory?limit=101').status_code == 422
     app.dependency_overrides[require_user_context] = lambda: other
     assert client.get('/playground/media-inventory').json()['total'] == 0
+
+
+def test_date_type_and_query_filter_before_paging_and_count_local_days(tmp_path):
+    from src.apps.playground.media_inventory import timestamp
+    generations = [SimpleNamespace(id=str(i), created_at=date, outputs=[
+        SimpleNamespace(id='out', media_type=kind, saved_to_library=False)])
+        for i, date, kind in [
+            (1, '2026-11-01T15:59:59Z', 'image'),
+            (2, '2026-11-01T16:00:00Z', 'image'),
+            (3, '2026-11-02T16:00:00Z', 'video'),
+            (4, 'bad', 'image'),
+        ]]
+    report = inventory(storage(tmp_path, generations), limit=1,
+        created_after=timestamp('2026-11-02T00:00:00+08:00'),
+        created_before=timestamp('2026-11-03T00:00:00+08:00'), utc_offset_minutes=480)
+    assert [row['id'] for row in report['items']] == ['generation:2:out']
+    assert report['total'] == 1 and report['next_offset'] is None
+    assert report['date_counts'] == {'2026-11-01': 1, '2026-11-02': 1, '2026-11-03': 1, 'unknown': 1}
+    report = inventory(storage(tmp_path, generations), media_type='image', query='4')
+    assert report['total'] == 1 and report['items'][0]['created_at'] is None
+
+
+def test_review_day_counts_respect_daylight_saving_transitions(tmp_path):
+    generations = [SimpleNamespace(id=str(i), created_at=date, outputs=[SimpleNamespace(id='out', saved_to_library=False)])
+        for i, date in enumerate(['2026-11-01T03:59:59Z', '2026-11-01T04:00:00Z', '2026-11-02T04:59:59Z', '2026-11-02T05:00:00Z'])]
+    report = inventory(storage(tmp_path, generations), timezone_name='America/New_York')
+    assert report['date_counts'] == {'2026-10-31': 1, '2026-11-01': 2, '2026-11-02': 1}
