@@ -35,7 +35,8 @@ export type FaceShapeNumbers = FaceHeightControls & {
 
 export type FaceShapeCalibration = {
     schema: "iframe.white-face-fit.v1";
-    source: { asset_type: "character"; asset_id: string; variant_id: string; source_scope?: "series" | "project"; source_container_id?: string };
+    source: { asset_type: "character" | "prop"; asset_id: string; variant_id: string; source_scope?: "series" | "project" | "global"; source_container_id?: string };
+    referencePair?: import("./whiteFaceImage").FaceReferencePair;
     baseline: Omit<FaceShapeNumbers, keyof FaceHeightControls> & Partial<FaceHeightControls>;
     landmarks: Record<string, { x: number; y: number }>;
     residual: number;

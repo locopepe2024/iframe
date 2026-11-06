@@ -25,9 +25,15 @@ export type FaceImagePreparation = {
 };
 export type PreparedFaceImage = PreparedFaceInfo & { canvas: HTMLCanvasElement };
 export type FrontReferenceRegion = "whole" | "left" | "right";
-export type FaceFitSource = { scope: "series" | "project"; containerId: string; assetId: string; variantId: string };
+export type FaceFitSource = { scope: "series" | "project" | "global"; containerId: string; assetId: string; variantId: string; assetType?: "character" | "prop" };
+export type FacePhotoSource = { asset_type: "character" | "prop"; asset_id: string; variant_id: string;
+    source_scope: "series" | "project" | "global"; source_container_id?: string };
+export type FacePhotoReference = { source: FacePhotoSource; sourceWidth: number; sourceHeight: number;
+    preparation: PreparedFaceInfo; view: "front" | "side" };
+export type FaceReferencePair = { schema: "iframe.face-reference-pair.v1"; front: FacePhotoReference; side: FacePhotoReference };
+
 export type FrontFaceReference = {
-    source: { asset_type: "character"; asset_id: string; variant_id: string; source_scope: "series" | "project"; source_container_id: string };
+    source: FacePhotoSource;
     region: FrontReferenceRegion;
     sourceWidth: number;
     sourceHeight: number;
