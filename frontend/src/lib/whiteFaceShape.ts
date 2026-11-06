@@ -1,4 +1,13 @@
-export type FaceShapeNumbers = {
+import type { FaceFitDiagnostics } from "./whiteFaceFit";
+import type { FaceImagePreparation, FrontFaceReference } from "./whiteFaceImage";
+
+export type FaceHeightControls = {
+    cheekHeight: number;
+    jawHeight: number;
+    noseTipHeight: number;
+};
+
+export type FaceShapeNumbers = FaceHeightControls & {
     faceLength: number;
     faceWidth: number;
     cheekWidth: number;
@@ -26,10 +35,15 @@ export type FaceShapeNumbers = {
 export type FaceShapeCalibration = {
     schema: "iframe.white-face-fit.v1";
     source: { asset_type: "character"; asset_id: string; variant_id: string; source_scope?: "series" | "project"; source_container_id?: string };
-    baseline: FaceShapeNumbers;
+    baseline: Omit<FaceShapeNumbers, keyof FaceHeightControls> & Partial<FaceHeightControls>;
     landmarks: Record<string, { x: number; y: number }>;
     residual: number;
     reviewed?: boolean;
+    landmarkConvention?: "eye-center-chin-front.v2";
+    fitObjective?: "ratios-and-heights.v1";
+    fitDiagnostics?: FaceFitDiagnostics;
+    imagePreparation?: FaceImagePreparation;
+    frontReference?: FrontFaceReference;
 };
 
 export type FaceShape = FaceShapeNumbers & {
@@ -54,6 +68,7 @@ export const FACE_BASE_PRESETS: Record<FaceBasePreset, { label: string; values: 
 
 export const DEFAULT_FACE_SHAPE: FaceShape = {
     basePreset: "neutral_young",
+    cheekHeight: 100, jawHeight: 100, noseTipHeight: 100,
     faceLength: 100, faceWidth: 100, cheekWidth: 100,
     jawWidth: 100, eyeSpacing: 100, noseProjection: 100,
     foreheadWidth: 100, chinWidth: 100, chinProjection: 100,
@@ -75,10 +90,12 @@ export function effectiveFaceShape(shape: FaceShape): FaceShape {
     const value = normalizeFaceShape(shape);
     if (!value.calibration) return value;
     const effective = { ...value };
+    // Baselines saved before height controls were introduced retain neutral y deformation.
+    const baseline = { cheekHeight: 100, jawHeight: 100, noseTipHeight: 100, ...value.calibration.baseline };
     for (const key of Object.keys(DEFAULT_FACE_SHAPE) as Array<keyof FaceShape>) {
         if (key === "basePreset" || key === "calibration") continue;
         const numericKey = key as keyof FaceShapeNumbers;
-        effective[numericKey] = value.calibration.baseline[numericKey] * value[numericKey] / 100;
+        effective[numericKey] = baseline[numericKey] * value[numericKey] / 100;
     }
     delete effective.calibration;
     return effective;
@@ -91,13 +108,14 @@ export function faceBaseShape(preset: FaceBasePreset): FaceShape {
 export function faceShapePrompt(shape: FaceShape): string {
     const value = normalizeFaceShape(shape);
     if (value.calibration) return calibratedFacePrompt(value);
-    return `${FACE_SHAPE_REFERENCE_PROMPT} 基础脸型：${FACE_BASE_PRESETS[value.basePreset]?.label || FACE_BASE_PRESETS.neutral_young.label}；头部轮廓：脸长 ${value.faceLength}%，脸宽 ${value.faceWidth}%，额头宽 ${value.foreheadWidth}%，颧部宽 ${value.cheekWidth}%，下颌宽 ${value.jawWidth}%，下巴宽 ${value.chinWidth}%，下巴前突 ${value.chinProjection}%；鼻部：鼻梁高度 ${value.noseBridgeHeight}%，鼻梁宽度 ${value.noseBridgeWidth}%，鼻尖突出度 ${value.noseProjection}%，鼻尖宽度 ${value.noseTipWidth}%，鼻翼宽度 ${value.nostrilWidth}%；眼眉：眼距 ${value.eyeSpacing}%，眼睛大小 ${value.eyeSize}%，眼窝深度 ${value.eyeDepth}%，眼尾倾斜 ${value.eyeTilt}%，眉眼距离 ${value.browEyeDistance}%；嘴唇：嘴宽 ${value.mouthWidth}%，上唇厚度 ${value.upperLipThickness}%，下唇厚度 ${value.lowerLipThickness}%，人中长度 ${value.philtrumLength}%，嘴角倾斜 ${value.mouthCornerTilt}%；100% 为中性基准。`;
+    return `${FACE_SHAPE_REFERENCE_PROMPT} 基础脸型：${FACE_BASE_PRESETS[value.basePreset]?.label || FACE_BASE_PRESETS.neutral_young.label}；头部轮廓：脸长 ${value.faceLength}%，脸宽 ${value.faceWidth}%，额头宽 ${value.foreheadWidth}%，颧部宽 ${value.cheekWidth}%，颧部高度 ${value.cheekHeight}%，下颌宽 ${value.jawWidth}%，下颌高度 ${value.jawHeight}%，下巴宽 ${value.chinWidth}%，下巴前突 ${value.chinProjection}%；鼻部：鼻梁高度 ${value.noseBridgeHeight}%，鼻梁宽度 ${value.noseBridgeWidth}%，鼻尖突出度 ${value.noseProjection}%，鼻尖高度 ${value.noseTipHeight}%，鼻尖宽度 ${value.noseTipWidth}%，鼻翼宽度 ${value.nostrilWidth}%；眼眉：眼距 ${value.eyeSpacing}%，眼睛大小 ${value.eyeSize}%，眼窝深度 ${value.eyeDepth}%，眼尾倾斜 ${value.eyeTilt}%，眉眼距离 ${value.browEyeDistance}%；嘴唇：嘴宽 ${value.mouthWidth}%，上唇厚度 ${value.upperLipThickness}%，下唇厚度 ${value.lowerLipThickness}%，人中长度 ${value.philtrumLength}%，嘴角倾斜 ${value.mouthCornerTilt}%；100% 为中性基准。`;
 }
 
 export function faceShapePanelPrompt(shape: FaceShape): string {
     const value = normalizeFaceShape(shape);
     if (value.calibration) return calibratedFacePrompt(value);
     const details: Array<[keyof FaceShape, string]> = [
+        ["cheekHeight", "颧部高度"], ["jawHeight", "下颌高度"], ["noseTipHeight", "鼻尖高度"],
         ["foreheadWidth", "额头宽"], ["chinWidth", "下巴宽"], ["chinProjection", "下巴前突"],
         ["noseBridgeHeight", "鼻梁高度"], ["noseBridgeWidth", "鼻梁宽度"],
         ["noseTipWidth", "鼻尖宽度"], ["nostrilWidth", "鼻翼宽度"],
@@ -113,6 +131,7 @@ export function faceShapePanelPrompt(shape: FaceShape): string {
 
 function calibratedFacePrompt(shape: FaceShape): string {
     const changes: Array<[keyof FaceShapeNumbers, string]> = [
+        ["cheekHeight", "颧部高度"], ["jawHeight", "下颌高度"], ["noseTipHeight", "鼻尖高度"],
         ["faceLength", "脸部长度"], ["faceWidth", "脸部宽度"], ["cheekWidth", "颧部宽度"],
         ["jawWidth", "下颌宽度"], ["eyeSpacing", "眼距"], ["noseProjection", "鼻尖突出度"],
         ["chinProjection", "下巴前突"], ["noseBridgeHeight", "鼻梁高度"],
