@@ -21,3 +21,11 @@ Create a local pixel guide before generation, using the saved white-model measur
 - Component tests cover source/shape invalidation, review-before-upload, failure behavior and explicit application. Workbench tests verify the single guide reference and visible non-duplicating prompt reach submission review.
 - Run relevant math/UI tests, TypeScript and production build. Follow the existing PR/CI/release workflow only after local pixel and browser validation.
 - Model adherence after refinement remains unproven until a separate real generation is reviewed.
+
+## Verification evidence
+
+- Chromium 136 ran the repository's detector, deformation, original-pixel resampling and output re-detection on Su Yan's latest 1190×1322 portrait (source face approximately 501 pixels high). Four correction passes achieved reference-normalized target/observed ratios of 84.48/85.21 for face-length-to-cheek, 86.22/90.18 for jaw-to-cheek and 92.91/92.85 for eyes-to-cheek. These are detector estimates; the maximum accepted relative deviation is 5%, not exact anatomical reconstruction.
+- Each of up to six correction attempts resamples the original pixels. Dense jaw-contour constraints accompany the seven primary anatomical points. Both triangles in each inverse-map grid cell must retain orientation; folded output is rejected.
+- A duplicated two-portrait image with the left region selected produces a single cropped portrait and passes re-detection. A 110-pixel-high original face is rejected before warping.
+- 12 math/landmark/measurement tests and 111 component/workbench tests pass, including review-before-upload, failed verification, obsolete async results, failed upload and a changed reference while submission review is open. TypeScript and production export pass.
+- The real component works at 1200px and 390px viewport widths with no horizontal overflow. Preview/review and source-region invalidation were exercised with zero write requests or page errors. No image generation was submitted and no production character data was changed.

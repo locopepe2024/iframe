@@ -54,7 +54,10 @@ export default function FaceGeometryGuide({ characterName, shape, source, onAppl
         const url = URL.createObjectURL(guide.blob); setGuideUrl(url);
         return () => URL.revokeObjectURL(url);
     }, [guide]);
-    useEffect(() => () => { serial.current++; currentInput.current = ""; }, []);
+    useEffect(() => {
+        currentInput.current = inputKey;
+        return () => { serial.current++; currentInput.current = ""; };
+    }, []);
 
     const preview = async () => {
         if (!shape || !image.current?.naturalWidth || busy || saving) return;
