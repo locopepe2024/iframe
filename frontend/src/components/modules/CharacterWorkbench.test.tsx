@@ -114,6 +114,12 @@ it('reviews the warped portrait as the single image input without applying measu
         fireEvent.click(screen.getByRole('tab', { name: '面容白模' }));
         const original = await screen.findByAltText('骨相引导原始头像');
         Object.defineProperty(original, 'naturalWidth', { value: 1000 });
+        fireEvent.click(screen.getByRole('button', { name: '面部比例白模' }));
+        fireEvent.change(screen.getByLabelText('鼻梁宽度'), { target: { value: '110' } });
+        expect(screen.getByRole('button', { name: '制作本地引导预览' })).toBeDisabled();
+        expect(screen.getByText(/骨相参数尚未保存/)).toBeVisible();
+        fireEvent.change(screen.getByLabelText('鼻梁宽度'), { target: { value: '100' } });
+        expect(screen.getByRole('button', { name: '制作本地引导预览' })).toBeEnabled();
         fireEvent.click(screen.getByRole('button', { name: '制作本地引导预览' }));
         await screen.findByAltText('局部变形后的骨相引导图');
         fireEvent.click(screen.getByRole('checkbox', { name: '已检查变形后的轮廓、五官和发际边缘' }));

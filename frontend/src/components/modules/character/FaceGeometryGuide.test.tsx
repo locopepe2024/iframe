@@ -9,6 +9,7 @@ vi.mock("@/lib/api", () => ({ API_URL: "http://localhost", authenticatedFetch: m
     api: { uploadLibraryImage: mocks.upload, createLibraryAsset: mocks.create } }));
 vi.mock("@/lib/mediaDelivery", () => ({ resolveAssetVariantDelivery: mocks.resolve }));
 vi.mock("@/lib/createFaceGeometryGuide", () => ({ createFaceGeometryGuide: mocks.preview }));
+const changedShape = { ...DEFAULT_FACE_SHAPE, cheekWidth: 110 };
 const source = { scope: "series" as const, containerId: "series", assetId: "role", variantId: "portrait" };
 const result = () => ({ blob: new Blob(["guide"], { type: "image/png" }), sourceFaceHeight: 501, verified: true, iterations: 4,
     checks: [{ key: "faceLength", label: "脸长／颧宽", target: 84.48, observed: 85.21, error: .009 }], omitted: ["鼻尖突出度"] });
@@ -29,7 +30,7 @@ async function preview() {
 
 it("previews without writes and requires visual review before uploading and applying the guide", async () => {
     const onApplied = vi.fn();
-    render(<FaceGeometryGuide characterName="苏砚" shape={DEFAULT_FACE_SHAPE} source={source} onApplied={onApplied} />);
+    render(<FaceGeometryGuide characterName="苏砚" shape={changedShape} source={source} onApplied={onApplied} />);
     await preview();
     expect(mocks.upload).not.toHaveBeenCalled(); expect(mocks.create).not.toHaveBeenCalled();
     expect(screen.getByRole("table", { name: "骨相引导比例复核" })).toHaveTextContent("85.21");
@@ -37,11 +38,11 @@ it("previews without writes and requires visual review before uploading and appl
     fireEvent.click(screen.getByRole("checkbox")); fireEvent.click(use);
     await waitFor(() => expect(onApplied).toHaveBeenCalledOnce());
     expect(mocks.create).toHaveBeenCalledWith("prop", expect.objectContaining({ description: expect.stringContaining('"source"') }));
-    expect(onApplied).toHaveBeenCalledWith(expect.objectContaining({ asset_id: "guide", variant_id: "guide-v1" }), JSON.stringify(DEFAULT_FACE_SHAPE));
+    expect(onApplied).toHaveBeenCalledWith(expect.objectContaining({ asset_id: "guide", variant_id: "guide-v1" }), JSON.stringify(changedShape));
 });
 
 it("invalidates preview and review when the saved shape or region changes", async () => {
-    const props = { characterName: "苏砚", shape: DEFAULT_FACE_SHAPE, source, onApplied: vi.fn() };
+    const props = { characterName: "苏砚", shape: changedShape, source, onApplied: vi.fn() };
     const view = render(<FaceGeometryGuide {...props} />); await preview(); fireEvent.click(screen.getByRole("checkbox"));
     view.rerender(<FaceGeometryGuide {...props} shape={{ ...DEFAULT_FACE_SHAPE, cheekWidth: 117 }} />);
     expect(screen.queryByAltText("局部变形后的骨相引导图")).toBeNull();
@@ -52,7 +53,7 @@ it("invalidates preview and review when the saved shape or region changes", asyn
 
 it("rejects failed output verification and ignores an obsolete preview result", async () => {
     mocks.preview.mockResolvedValueOnce({ ...result(), verified: false });
-    const props = { characterName: "苏砚", shape: DEFAULT_FACE_SHAPE, source, onApplied: vi.fn() };
+    const props = { characterName: "苏砚", shape: changedShape, source, onApplied: vi.fn() };
     const view = render(<FaceGeometryGuide {...props} />); await preview();
     expect(screen.getByRole("checkbox")).toBeDisabled();
     expect(screen.getByRole("button", { name: "使用引导图细化头像" })).toBeDisabled();
@@ -66,7 +67,38 @@ it("rejects failed output verification and ignores an obsolete preview result", 
 
 it("reports upload failure and does not apply an unpersisted reference", async () => {
     mocks.upload.mockRejectedValueOnce(new Error("上传失败")); const onApplied = vi.fn();
-    render(<FaceGeometryGuide characterName="苏砚" shape={DEFAULT_FACE_SHAPE} source={source} onApplied={onApplied} />);
+    render(<FaceGeometryGuide characterName="苏砚" shape={changedShape} source={source} onApplied={onApplied} />);
     await preview(); fireEvent.click(screen.getByRole("checkbox")); fireEvent.click(screen.getByRole("button", { name: "使用引导图细化头像" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("上传失败"); expect(onApplied).not.toHaveBeenCalled();
+});
+
+it("blocks stale saved controls during unsaved editing and invalidates the old preview", async () => {
+    const props = { characterName: "苏砚", shape: changedShape, source, onApplied: vi.fn() };
+    const view = render(<FaceGeometryGuide {...props} />); await preview();
+    view.rerender(<FaceGeometryGuide {...props} editingPending />);
+    expect(screen.getByText(/骨相参数尚未保存/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "制作本地引导预览" })).toBeDisabled();
+    expect(screen.queryByAltText("局部变形后的骨相引导图")).toBeNull();
+    view.rerender(<FaceGeometryGuide {...props} shape={{ ...changedShape, noseBridgeWidth: 110 }} />);
+    expect(screen.getByRole("button", { name: "制作本地引导预览" })).toBeEnabled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+});
+
+it("discloses unsupported depth changes and prevents a depth-only unchanged guide", async () => {
+    render(<FaceGeometryGuide characterName="苏砚" shape={{ ...DEFAULT_FACE_SHAPE, noseBridgeHeight: 110 }} source={source} onApplied={vi.fn()} />);
+    await screen.findByAltText("骨相引导原始头像");
+    expect(screen.getByText(/本次未应用/)).toHaveTextContent("鼻梁隆起高度");
+    expect(screen.getByRole("button", { name: "制作本地引导预览" })).toBeDisabled();
+    expect(mocks.preview).not.toHaveBeenCalled();
+});
+
+it("shows matching nasal crops and rejects an unreliable pixel check", async () => {
+    mocks.preview.mockResolvedValue({ ...result(), verified: false, pixelCheckPassed: false,
+        noseComparison: { original: new Blob(["before"]), guide: new Blob(["after"]) } });
+    render(<FaceGeometryGuide characterName="苏砚" shape={{ ...DEFAULT_FACE_SHAPE, noseBridgeWidth: 110 }} source={source} onApplied={vi.fn()} />);
+    await preview();
+    expect(screen.getByAltText("原始鼻部放大")).toBeVisible();
+    expect(screen.getByAltText("引导图鼻部放大")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("鼻部纹理核对未通过");
+    expect(screen.getByRole("button", { name: "使用引导图细化头像" })).toBeDisabled();
 });

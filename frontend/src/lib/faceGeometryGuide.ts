@@ -3,8 +3,10 @@ import type { FaceFitPoint } from "./whiteFaceFit";
 
 type Point = FaceFitPoint;
 export type GuideControls = { source: Point[]; target: Point[]; indices: number[] };
-export const GUIDE_KEYS = ["faceLength", "cheekWidth", "jawWidth", "eyeSpacing", "cheekHeight", "jawHeight"];
-export const FACE_GUIDE_INTENT = "这张参考图已完成正面骨相几何调整。保持图中的眼线至下巴长度、颧部宽度、下颌宽度和眼距，不再重复调整比例；仅细化自然肤理、发丝与光照，保持同一角色身份、发型和肤色。只呈现一个角色，不显示参考图、白模或对照排版。";
+export const GUIDE_KEYS = ["faceLength", "cheekWidth", "jawWidth", "eyeSpacing", "cheekHeight", "jawHeight",
+    "noseBridgeWidth", "noseTipWidth", "nostrilWidth", "noseTipHeight"];
+export const FACE_GUIDE_INTENT = "这张参考图已完成正面骨相几何调整。保持图中的眼线至下巴长度、颧部宽度、下颌宽度、眼距、鼻梁宽度、鼻尖宽度、鼻翼宽度和鼻尖上下位置，不再重复调整比例；仅细化自然肤理、发丝与光照，保持同一角色身份、发型和肤色。只呈现一个角色，不显示参考图、白模或对照排版。";
+export const GUIDE_NOSE_PAIRS = { noseBridgeWidth: [196, 419], noseTipWidth: [45, 275], nostrilWidth: [129, 358] } as const;
 
 /** Explicitly replaces numerical edit instructions: the guide already contains these edits. */
 export function faceGuidePrompt(name: string) {
@@ -27,6 +29,8 @@ export function faceGuideControls(face: Point[], shape: FaceShape, width: number
     if (Math.abs(rightEye.y - leftEye.y) / eyeDistance > .12
         || leftWidth / rightWidth < .65 || leftWidth / rightWidth > 1.54
         || Math.abs(sourceFace[1].x - center.x) / eyeDistance > .24) throw new Error("请使用正面且头部平正的单人头像，侧脸或明显倾斜不能制作正面引导图");
+    if (Object.values(GUIDE_NOSE_PAIRS).some(([a, b]) => sourceFace[b].x - sourceFace[a].x <= 1)
+        || sourceFace[45].y <= sourceFace[196].y || sourceFace[1].y <= sourceFace[168].y) throw new Error("鼻部点位无效，请换用清晰正脸");
     const measurements = Object.fromEntries(faceShapeMeasurements(shape).map(m => [m.key, m.target]));
     const lengthRatio = measurements.faceLength / 100;
     const indices = [234, 454, 172, 397, 152, 33, 133, 159, 145, 362, 263, 386, 374];
@@ -65,7 +69,41 @@ export function faceGuideControls(face: Point[], shape: FaceShape, width: number
     source.splice(indices.length, 0, ...extraSource);
     target.splice(indices.length, 0, ...extraSource.map(forward));
     indices.push(...contour);
+    const baseMap = thinPlateMap(source, target);
+    // Keep the mouth at the contour-only position. Nasal edits must not drag lips.
+    const mouth = [61, 291, 0, 13, 14, 17];
+    const nose = NOSE_CONTROLS;
+    for (const id of [...mouth, ...nose]) {
+        const p = sourceFace[id];
+        const next = nose.includes(id) ? nasalTarget(p, sourceFace, measurements, faceLength) : baseMap(p);
+        source.splice(indices.length, 0, p); target.splice(indices.length, 0, next); indices.push(id);
+    }
+    if (target.some(p => !finite(p) || p.x < left || p.x > right || p.y < top || p.y > bottom)) throw new Error("鼻部目标超出可用图像区域，请减小幅度后重试");
     return { source, target, indices };
+}
+
+const NOSE_CONTROLS = [168, 6, 197, 195, 5, 4, 1, 2, 19, 94,
+    122, 351, 196, 419, 174, 399, 198, 420, 51, 281, 45, 275,
+    44, 274, 49, 279, 48, 278, 129, 358, 64, 294, 98, 327, 97, 326];
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const clamp = (value: number) => Math.max(0, Math.min(1, value));
+
+/** Move the surrounding nasal texture with each interval, not just two isolated pixels. */
+function nasalTarget(p: Point, face: Point[], m: Record<string, number>, length: number): Point {
+    const cx = (face[196].x + face[419].x) / 2;
+    const bridgeY = (face[196].y + face[419].y) / 2, tipY = (face[45].y + face[275].y) / 2;
+    const t = clamp((p.y - bridgeY) / (tipY - bridgeY));
+    const radius = lerp((face[419].x - face[196].x) / 2, (face[275].x - face[45].x) / 2, t);
+    const outer = (face[358].x - face[129].x) / 2;
+    const innerDelta = radius * (lerp(m.noseBridgeWidth, m.noseTipWidth, t) / 100 - 1);
+    const outerDelta = outer * (lerp(100, m.nostrilWidth, t) / 100 - 1);
+    const x = Math.abs(p.x - cx);
+    const delta = x <= radius ? innerDelta * x / radius
+        : x <= outer ? lerp(innerDelta, outerDelta, (x - radius) / (outer - radius))
+        : outerDelta * (1 - clamp((x - outer) / outer));
+    const weight = clamp((p.y - face[168].y) / (face[1].y - face[168].y));
+    return { x: p.x + Math.sign(p.x - cx) * delta, y: p.y + m.noseTipHeight / 100 * length * weight };
 }
 
 function solve(matrix: number[][], rhs: number[][]) {
@@ -145,7 +183,16 @@ export function frontGuideRatios(face: Point[], width: number, height: number) {
     const eyeY = (p[33].y + p[133].y + p[362].y + p[263].y) / 4;
     const cheek = p[454].x - p[234].x;
     return { faceLength: (p[152].y - eyeY) / cheek, jawWidth: (p[397].x - p[172].x) / cheek,
-        eyeSpacing: ((p[362].x + p[263].x - p[33].x - p[133].x) / 2) / cheek };
+        eyeSpacing: ((p[362].x + p[263].x - p[33].x - p[133].x) / 2) / cheek,
+        noseBridgeWidth: (p[419].x - p[196].x) / cheek,
+        noseTipWidth: (p[275].x - p[45].x) / cheek, nostrilWidth: (p[358].x - p[129].x) / cheek };
+}
+
+/** Signed image position, normalized by the original eye-line-to-chin length. */
+export function frontNosePosition(face: Point[], width: number, height: number) {
+    void width;
+    const eyeY = (face[33].y + face[133].y + face[362].y + face[263].y) / 4;
+    return { tipY: (face[1].y - eyeY) * height, length: (face[152].y - eyeY) * height };
 }
 
 /** Correct detector drift using fresh output marks; always warp original pixels. */
@@ -163,9 +210,12 @@ export function correctGuideControls(current: GuideControls, wanted: GuideContro
         for (let i = start; i < end; i++) { target[i].x += goal.x - observed.x; target[i].y += goal.y - observed.y; }
     }
     for (let i = 13; i < wanted.indices.length; i++) {
-        const observed = actual[wanted.indices[i]];
-        target[i].x += wanted.target[i].x - observed.x;
-        target[i].y += wanted.target[i].y - observed.y;
+        const id = wanted.indices[i];
+        // In portrait verification, nasal width estimates barely followed local edits.
+        // Repeated correction distorted pixels without reaching those estimates.
+        if (NOSE_CONTROLS.includes(id)) continue;
+        target[i].x += wanted.target[i].x - actual[id].x;
+        target[i].y += wanted.target[i].y - actual[id].y;
     }
     return { ...current, target };
 }

@@ -8,8 +8,13 @@ function face() {
         234: [.28, .48], 454: [.72, .48], 172: [.33, .65], 397: [.67, .65], 152: [.5, .77],
         33: [.35, .4], 133: [.43, .4], 159: [.39, .385], 145: [.39, .415],
         362: [.57, .4], 263: [.65, .4], 386: [.61, .385], 374: [.61, .415], 1: [.5, .54],
+        196: [.48, .48], 419: [.52, .48], 45: [.475, .53], 275: [.525, .53], 129: [.44, .55], 358: [.56, .55],
+        168: [.5, .41], 6: [.5, .45], 197: [.5, .48], 195: [.5, .50], 5: [.5, .515], 4: [.5, .53], 2: [.5, .56],
+        61: [.42, .62], 291: [.58, .62], 0: [.5, .60], 13: [.5, .62], 14: [.5, .63], 17: [.5, .65],
     };
     for (const [index, [x, y]] of Object.entries(points)) f[Number(index)] = { x, y };
+    const extras = [19, 94, 122, 351, 174, 399, 198, 420, 51, 281, 44, 274, 49, 279, 48, 278, 64, 294, 98, 327, 97, 326];
+    extras.forEach((id, i) => { const row = Math.floor(i / 2); f[id] = { x: .5 + (i % 2 ? 1 : -1) * (.025 + row * .003), y: .44 + row * .012 }; });
     const contour = [93, 132, 58, 136, 150, 149, 176, 148, 377, 400, 378, 379, 365, 288, 361, 323];
     contour.forEach((id, i) => {
         const angle = Math.PI * (.06 + .88 * i / (contour.length - 1));
@@ -19,6 +24,18 @@ function face() {
 }
 
 describe("face geometry guide", () => {
+    it.each([75, 125])("applies measured nasal widths and vertical position for control %s", value => {
+        const shape = { ...DEFAULT_FACE_SHAPE, noseBridgeWidth: value, noseTipWidth: value, nostrilWidth: value, noseTipHeight: value };
+        const c = faceGuideControls(face(), shape, 800, 1000);
+        const measures = Object.fromEntries(faceShapeMeasurements(shape).map(m => [m.key, m.target]));
+        for (const [key, a, b] of [["noseBridgeWidth", 196, 419], ["noseTipWidth", 45, 275], ["nostrilWidth", 129, 358]] as const) {
+            const i = c.indices.indexOf(a), j = c.indices.indexOf(b);
+            expect(i).toBeGreaterThanOrEqual(0); expect(j).toBeGreaterThanOrEqual(0);
+            expect((c.target[j].x - c.target[i].x) / (c.source[j].x - c.source[i].x)).toBeCloseTo(measures[key] / 100);
+        }
+        const tip = c.indices.indexOf(1);
+        expect((c.target[tip].y - c.source[tip].y) / 370 * 100).toBeCloseTo(measures.noseTipHeight);
+    });
     it("maps image landmarks to the measured combined targets, preserving local eye shape", () => {
         const shape = { ...DEFAULT_FACE_SHAPE, faceLength: 90, faceWidth: 120, cheekWidth: 117, jawWidth: 75, eyeSpacing: 80 };
         const c = faceGuideControls(face(), shape, 800, 1000);
