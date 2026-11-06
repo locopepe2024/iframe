@@ -1,4 +1,5 @@
 import type { FaceFitDiagnostics } from "./whiteFaceFit";
+import type { FaceImagePreparation } from "./whiteFaceImage";
 
 export type FaceShapeNumbers = {
     faceLength: number;
@@ -34,6 +35,7 @@ export type FaceShapeCalibration = {
     reviewed?: boolean;
     landmarkConvention?: "eye-center-chin-front.v2";
     fitDiagnostics?: FaceFitDiagnostics;
+    imagePreparation?: FaceImagePreparation;
 };
 
 export type FaceShape = FaceShapeNumbers & {

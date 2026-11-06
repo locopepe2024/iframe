@@ -1,20 +1,10 @@
 import { FaceLandmarker, FilesetResolver, type NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { imageFaceMetrics, type FaceFitLandmarks, type FaceFitPoint } from "./whiteFaceFit";
+import { facePointInSource, renderFaceCrop, squareCropBounds, squareFaceCrop, type FaceImageCrop, type PreparedFaceImage } from "./whiteFaceImage";
 
 const MODEL_ROOT = "/models/character/face-landmarker-v1";
 type FaceResult = NormalizedLandmark[];
-type DetectFace = (canvas: HTMLCanvasElement) => FaceResult | undefined;
-
-function crop(image: HTMLImageElement, start: number, end: number, top = 0, bottom = 1): HTMLCanvasElement {
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = Math.max(256, Math.round(512 * image.naturalHeight * (bottom - top) / (image.naturalWidth * (end - start))));
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("无法读取三视图图像");
-    context.drawImage(image, image.naturalWidth * start, image.naturalHeight * top, image.naturalWidth * (end - start),
-        image.naturalHeight * (bottom - top), 0, 0, canvas.width, canvas.height);
-    return canvas;
-}
+export type DetectFace = (canvas: HTMLCanvasElement) => FaceResult | undefined;
 
 function mapped(face: FaceResult, index: number, start: number, end: number, top: number, bottom: number): FaceFitPoint {
     const point = face[index];
@@ -58,7 +48,44 @@ export function mapDetectedFaces(front: FaceResult | undefined, side: FaceResult
     return points;
 }
 
-export async function autoMarkThreeView(image: HTMLImageElement): Promise<Partial<FaceFitLandmarks>> {
+export function prepareAndMarkThreeView(image: HTMLImageElement, detect: DetectFace,
+    onPrepared?: (images: PreparedFaceImage[]) => void): Partial<FaceFitLandmarks> {
+    const width = image.naturalWidth, height = image.naturalHeight;
+    if (!width || !height) throw new Error("三视图尚未加载完成");
+    const prepared: PreparedFaceImage[] = [];
+    const points: Partial<FaceFitLandmarks> = {};
+    const faceOval = Array.from(new Set(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL.flatMap(edge => [edge.start, edge.end])));
+    for (const [view, start, end] of [["front", 0, .34], ["side", .35, .66]] as const) {
+        let preview: PreparedFaceImage | undefined;
+        for (const bottom of [.35, 1]) {
+            const region = { x: start * width, y: 0, width: (end - start) * width, height: bottom * height };
+            const bounds = squareCropBounds(region);
+            const located = detect(renderFaceCrop(image, region));
+            if (!located) continue;
+            const originalFace = located.map(point => ({ ...point, ...facePointInSource(point, bounds, width, height) }));
+            const { crop, sourceFaceHeight } = squareFaceCrop(faceOval.map(index => originalFace[index]), width, height);
+            const canvas = renderFaceCrop(image, crop);
+            const finalFace = detect(canvas);
+            preview = { view, canvas, crop, sourceFaceHeight, detected: !!finalFace };
+            // A head-only sheet can be truncated by the coarse upper region.
+            // Retry locating the whole column, always requiring final detection.
+            if (!finalFace) continue;
+            const original = finalFace.map(point => ({ ...point, ...facePointInSource(point, crop, width, height) }));
+            Object.assign(points, mapDetectedFaces(view === "front" ? original : undefined, view === "side" ? original : undefined,
+                [0, 1], [0, 1], width / height));
+            break;
+        }
+        if (preview) prepared.push(preview);
+    }
+    onPrepared?.(prepared);
+    if (!Object.keys(points).length) throw new Error("处理后未识别到正面或侧面人脸，请核对裁剪预览或手动标记");
+    if (points.frontLeftCheek && points.sideEye) imageFaceMetrics(points as FaceFitLandmarks, width / height);
+    return points;
+}
+
+export async function autoMarkThreeView(image: HTMLImageElement, options?: {
+    onPrepared?: (images: PreparedFaceImage[]) => void;
+}): Promise<Partial<FaceFitLandmarks>> {
     if (!image.naturalWidth || !image.naturalHeight) throw new Error("三视图尚未加载完成");
     const vision = await FilesetResolver.forVisionTasks(MODEL_ROOT);
     const landmarker = await FaceLandmarker.createFromOptions(vision, {
@@ -67,26 +94,7 @@ export async function autoMarkThreeView(image: HTMLImageElement): Promise<Partia
     });
     try {
         const detect: DetectFace = canvas => landmarker.detect(canvas).faceLandmarks[0];
-        const frontRange: [number, number] = [0, 0.34];
-        const sideRange: [number, number] = [0.35, 0.66];
-        const headRange: [number, number] = [0, 0.35];
-        const fullRange: [number, number] = [0, 1];
-        const detectView = (range: [number, number]) => {
-            const head = detect(crop(image, ...range, ...headRange));
-            return head ? { face: head, verticalRange: headRange } : {
-                face: detect(crop(image, ...range)), verticalRange: fullRange,
-            };
-        };
-        const front = detectView(frontRange);
-        const side = detectView(sideRange);
-        if (!front.face && !side.face) throw new Error("未识别到正面或侧面人脸，请手动标记");
-        const aspect = image.naturalWidth / image.naturalHeight;
-        const points = {
-            ...mapDetectedFaces(front.face, undefined, frontRange, sideRange, aspect, front.verticalRange),
-            ...mapDetectedFaces(undefined, side.face, frontRange, sideRange, aspect, side.verticalRange),
-        };
-        if (front.face && side.face) imageFaceMetrics(points as FaceFitLandmarks, aspect);
-        return points;
+        return prepareAndMarkThreeView(image, detect, options?.onPrepared);
     } finally {
         landmarker.close();
     }

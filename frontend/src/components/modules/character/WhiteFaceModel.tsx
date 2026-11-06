@@ -7,6 +7,7 @@ import { API_URL, api, authenticatedFetch, type AssetLibraryReference } from "@/
 import { DEFAULT_FACE_SHAPE, FACE_BASE_PRESETS, SELECTABLE_FACE_PRESETS, faceBaseShape, faceShapePrompt, normalizeFaceShape, type FaceBasePreset, type FaceShape, type FaceShapeNumbers } from "@/lib/whiteFaceShape";
 import { FACE_FIT_MARKS, FACE_FIT_LANDMARK_CONVENTION, FIT_METRIC_LABELS, fitFaceToLandmarks, type FaceFitLandmarks, type FaceFitPoint } from "@/lib/whiteFaceFit";
 import { autoMarkThreeView } from "@/lib/whiteFaceAutoLandmarks";
+import { FACE_FIT_IMAGE_SPEC, type FaceImagePreparation, type PreparedFaceInfo } from "@/lib/whiteFaceImage";
 import { resolveAssetVariantDelivery } from "@/lib/mediaDelivery";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
 
@@ -79,6 +80,8 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     const [detecting, setDetecting] = useState(false);
     const [selectedMark, setSelectedMark] = useState<keyof FaceFitLandmarks | null>(null);
     const [autoMarkMessage, setAutoMarkMessage] = useState("");
+    const [preparedFaces, setPreparedFaces] = useState<Array<PreparedFaceInfo & { preview: string }>>([]);
+    const [imagePreparation, setImagePreparation] = useState<FaceImagePreparation>();
     const stageRef = useRef<HTMLDivElement>(null);
     const fitImageRef = useRef<HTMLImageElement>(null);
 
@@ -100,6 +103,8 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
         setFitImageUrl("");
         setDetecting(false);
         setAutoMarkMessage("");
+        setPreparedFaces([]);
+        setImagePreparation(undefined);
         resolveAssetVariantDelivery({
             scope: fitSource.scope, containerId: fitSource.containerId,
             assetType: "character", assetId: fitSource.assetId, variantId: fitSource.variantId,
@@ -150,9 +155,21 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     const detect = async (image: HTMLImageElement) => {
         const imageSource = image.currentSrc || image.src;
         setDetecting(true);
-        setAutoMarkMessage("正在识别人脸标记…");
+        setFitPoints({});
+        setFitReviewed(false);
+        setPreparedFaces([]);
+        setImagePreparation(undefined);
+        setAutoMarkMessage("正在裁剪和标准化人脸，再识别标记…");
         try {
-            const points = await autoMarkThreeView(image);
+            const points = await autoMarkThreeView(image, { onPrepared: images => {
+                if (fitImageRef.current !== image || (image.currentSrc || image.src) !== imageSource) return;
+                setPreparedFaces(images.map(({ canvas, ...info }) => ({ ...info, preview: canvas.toDataURL("image/png") })));
+                setImagePreparation({
+                    version: FACE_FIT_IMAGE_SPEC.version, size: FACE_FIT_IMAGE_SPEC.size,
+                    sourceWidth: image.naturalWidth, sourceHeight: image.naturalHeight,
+                    views: images.map(({ canvas: ignored, ...info }) => { void ignored; return info; }),
+                });
+            } });
             if (fitImageRef.current !== image || (image.currentSrc || image.src) !== imageSource) return;
             setFitPoints(points);
             setSelectedMark(null);
@@ -183,6 +200,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     };
 
     const fit = () => {
+        if (detecting) return;
         if (!fitImageUrl || !fitImageRef.current || !fitSource) { setError("三视图尚未加载完成。"); return; }
         if (!meshData) { setError("面部白模尚未加载完成。"); return; }
         if (nextMark) { setError(`请先在三视图上标记 ${nextMark[1]}（${markedCount + 1}/${FACE_FIT_MARKS.length}）。`); return; }
@@ -197,6 +215,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                 schema: "iframe.white-face-fit.v1",
                 landmarkConvention: FACE_FIT_LANDMARK_CONVENTION,
                 fitDiagnostics: diagnostics,
+                imagePreparation,
                 source: { asset_type: "character", asset_id: fitSource.assetId, variant_id: fitSource.variantId,
                     source_scope: fitSource.scope, source_container_id: fitSource.containerId },
                 baseline, landmarks: fitPoints as FaceFitLandmarks, residual,
@@ -209,7 +228,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     };
 
     const save = async () => {
-        if (shape.calibration && (!calibrationCurrent || !fitReviewed)) {
+        if (detecting || (shape.calibration && (!calibrationCurrent || !fitReviewed))) {
             setError("骨相基准或标记点已变更，请重新拟合并核对。");
             return;
         }
@@ -255,6 +274,23 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             <div className="text-xs text-text-secondary">拟合参考 · 三视图</div>
             <p className="text-xs text-text-secondary">自动标记后请核对正面与侧面点位。可选择标记名称，再点击图像校正位置。</p>
             <p className="text-xs text-text-muted">眼中心取内外眼角中点；侧面下巴取前端，正面下巴取最低点。</p>
+            <details className="text-xs text-text-secondary">
+                <summary className="cursor-pointer">人脸参考图规范 · 先处理，再拟合</summary>
+                <p className="mt-1">三视图按正面、侧面、背面从左到右排列。使用同一角色的清晰正脸和正侧脸，保持自然表情、头部水平，露出眼睛、鼻尖和下巴。</p>
+                <p className="mt-1">推荐提供头部三视图 3072 × 1024，每个视图 1024 × 1024。现有全身三视图也可处理，以原始人脸清晰度为准。</p>
+                <p className="mt-1">原图中每张脸从额头到下巴建议至少 {FACE_FIT_IMAGE_SPEC.recommendedFaceHeight} 像素。系统裁出人脸并保留边距，等比缩放为 {FACE_FIT_IMAGE_SPEC.size} × {FACE_FIT_IMAGE_SPEC.size}；放大不会增加原图细节。</p>
+            </details>
+            {preparedFaces.length > 0 && <div className="grid grid-cols-2 gap-2" aria-label="标准化人脸预览">
+                {preparedFaces.map(face => <div key={face.view} className="min-w-0 space-y-1 text-xs text-text-secondary">
+                    <img src={face.preview} alt={`${face.view === "front" ? "正面" : "侧面"}标准化人脸`} width={512} height={512} className="aspect-square w-full max-w-[256px] rounded" />
+                    <div>{face.view === "front" ? "正面" : "侧面"} · 512 × 512 · 原始脸高约 {Math.round(face.sourceFaceHeight)} 像素</div>
+                    {face.sourceFaceHeight < FACE_FIT_IMAGE_SPEC.minimumFaceHeight
+                        ? <p role="status" className="text-amber-300">原始人脸小于 128 像素，细节不足，建议更换清晰原图后再拟合。</p>
+                        : face.sourceFaceHeight < FACE_FIT_IMAGE_SPEC.recommendedFaceHeight
+                            ? <p className="text-text-muted">建议使用原始脸高至少 256 像素的参考图。</p> : null}
+                    {!face.detected && <p role="status" className="text-amber-300">处理后识别未成功，请核对裁剪图并手动补齐点位。</p>}
+                </div>)}
+            </div>}
             {fitImageUrl ? <div className="max-h-[600px] w-full overflow-auto rounded border border-glass-border">
                 <div className="relative w-full min-w-[760px] max-w-[1223px]">
                 <img ref={fitImageRef} src={fitImageUrl} alt={`${characterName}三视图拟合参考`} className="block h-auto w-full cursor-crosshair" onLoad={event => {
@@ -282,7 +318,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                 })} className="flex size-9 items-center justify-center rounded border border-glass-border text-foreground disabled:opacity-50"><Undo2 size={15} /></button>
                 <button type="button" onClick={() => { setFitPoints({}); setError(""); }} className="min-h-9 rounded border border-glass-border px-2 text-foreground">重置标记</button>
                 <button type="button" disabled={detecting || !fitImageUrl} onClick={() => { if (fitImageRef.current) void detect(fitImageRef.current); }} className="min-h-9 rounded border border-glass-border px-2 text-foreground disabled:opacity-50">{detecting ? "识别中…" : "重新自动标记"}</button>
-                <button type="button" onClick={fit} className="min-h-9 rounded border border-glass-border px-2 text-foreground hover:bg-hover-bg">拟合白模</button>
+                <button type="button" disabled={detecting} onClick={fit} className="min-h-9 rounded border border-glass-border px-2 text-foreground hover:bg-hover-bg disabled:opacity-50">拟合白模</button>
             </div>
             {shape.calibration?.source.variant_id === fitSource.variantId &&
                 <div className="space-y-1 text-xs text-text-secondary">
@@ -307,7 +343,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                     </>}
                     {shape.calibration.residual > 0.15 && <div role="status" className="text-amber-300">拟合偏差较大，请检查标记点和白模轮廓。</div>}
                     {!calibrationCurrent && <div role="status" className="text-amber-300">标记定义或点位已变更，请重新拟合并核对。</div>}
-                    <label className="flex items-center gap-2"><input type="checkbox" disabled={!calibrationCurrent} checked={fitReviewed && calibrationCurrent} onChange={event => setFitReviewed(event.target.checked)} />已核对正面与侧面白模</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" disabled={detecting || !calibrationCurrent} checked={fitReviewed && calibrationCurrent} onChange={event => setFitReviewed(event.target.checked)} />已核对正面与侧面白模</label>
                 </div>}
         </div>}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -335,7 +371,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                 </div>
             </details>)}
         </div>
-        <button type="button" disabled={saving || !meshData || !!(shape.calibration && (!fitReviewed || !calibrationCurrent))} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
+        <button type="button" disabled={saving || detecting || !meshData || !!(shape.calibration && (!fitReviewed || !calibrationCurrent))} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
         {shape.calibration && (!fitSource || shape.calibration.source.asset_id !== fitSource.assetId || shape.calibration.source.variant_id !== fitSource.variantId) &&
             <p role="status" className="text-xs text-amber-300">骨相基准的三视图已变更，请重新拟合。</p>}
         {error && <p role="alert" className="text-xs text-red-400">{error}</p>}

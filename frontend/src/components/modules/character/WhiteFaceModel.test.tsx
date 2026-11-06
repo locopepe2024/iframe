@@ -7,6 +7,7 @@ import { DEFAULT_FACE_SHAPE } from "@/lib/whiteFaceShape";
 import { faceShellGeometry, type WhiteFaceMeshData } from "@/lib/whiteFaceMesh";
 import headMesh from "../../../../public/models/character/makehuman-face-v1/head.json";
 import { FACE_FIT_LANDMARK_CONVENTION } from "@/lib/whiteFaceFit";
+import { FACE_FIT_IMAGE_SPEC, type PreparedFaceImage } from "@/lib/whiteFaceImage";
 
 const meshData = headMesh as WhiteFaceMeshData;
 
@@ -58,7 +59,7 @@ it("shows automatic face marks and lets the user correct one point", async () =>
     });
     fireEvent.load(image);
     await waitFor(() => expect(screen.getByText(/已自动标记正面和侧面/)).toBeInTheDocument());
-    expect(autoMarkThreeView).toHaveBeenCalledWith(image);
+    expect(autoMarkThreeView).toHaveBeenCalledWith(image, { onPrepared: expect.any(Function) });
     expect(screen.getByText("已标记 10/10 · 可以拟合")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /正面画面左颧部/ }));
     fireEvent.click(image, { clientX: 17, clientY: 18 });
@@ -83,6 +84,60 @@ it("keeps front marks when profile detection needs manual completion", async () 
     expect(await screen.findByText("已自动标记正面，请手动补齐侧面点位。")).toBeInTheDocument();
     expect(screen.getByText("已标记 7/10 · 下一点：侧面眼中心")).toBeInTheDocument();
     expect(screen.getByTitle("正面画面左颧部")).toHaveStyle({ left: "19%", top: "16%" });
+});
+
+it("previews standardized faces, warns on native detail, and saves crop provenance without preview images", async () => {
+    const points = {
+        frontLeftCheek: { x: .19, y: .16 }, frontRightCheek: { x: .31, y: .16 },
+        frontLeftJaw: { x: .21, y: .21 }, frontRightJaw: { x: .29, y: .21 },
+        frontLeftEye: { x: .22, y: .12 }, frontRightEye: { x: .28, y: .12 },
+        frontChin: { x: .25, y: .25 }, sideEye: { x: .55, y: .12 },
+        sideNose: { x: .51, y: .16 }, sideChin: { x: .53, y: .25 },
+    };
+    const crop = { x: 20, y: 20, width: 160, height: 160 };
+    const canvas = { toDataURL: () => "data:image/png;base64,face-preview" } as HTMLCanvasElement;
+    autoMarkThreeView.mockImplementation(async (_image, { onPrepared }) => {
+        onPrepared([
+            { view: "front", crop, sourceFaceHeight: 99, detected: true, canvas },
+            { view: "side", crop: { ...crop, x: 400 }, sourceFaceHeight: 280, detected: true, canvas },
+        ] as PreparedFaceImage[]);
+        return points;
+    });
+    const onSaved = vi.fn();
+    const fitSource = { scope: "series" as const, containerId: "series-1", assetId: "su-yan", variantId: "three-view-1" };
+    const { rerender } = render(<WhiteFaceModel characterName="苏砚" fitSource={fitSource} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    const image = await screen.findByAltText("苏砚三视图拟合参考");
+    Object.defineProperties(image, { naturalWidth: { value: 1223 }, naturalHeight: { value: 1286 } });
+    fireEvent.load(image);
+    expect(await screen.findByAltText("正面标准化人脸")).toHaveAttribute("width", "512");
+    expect(screen.getByAltText("侧面标准化人脸")).toBeInTheDocument();
+    expect(screen.getAllByText(/原始人脸小于 128 像素/)).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "拟合白模" }));
+    fireEvent.click(screen.getByLabelText("已核对正面与侧面白模"));
+    fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    const preparation = onSaved.mock.calls[0][2].calibration.imagePreparation;
+    expect(preparation).toMatchObject({ version: FACE_FIT_IMAGE_SPEC.version, size: 512, sourceWidth: 1223, sourceHeight: 1286 });
+    expect(preparation.views[0]).toEqual({ view: "front", crop, sourceFaceHeight: 99, detected: true });
+    expect(JSON.stringify(preparation)).not.toContain("data:image");
+    rerender(<WhiteFaceModel characterName="苏砚" fitSource={{ ...fitSource, variantId: "three-view-2" }} onSaved={onSaved} />);
+    await waitFor(() => expect(screen.queryByAltText("正面标准化人脸")).not.toBeInTheDocument());
+});
+
+it("disables fitting and saving while preprocessing is running", async () => {
+    let finish: (points: object) => void = () => {};
+    autoMarkThreeView.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    render(<WhiteFaceModel characterName="苏砚" fitSource={{
+        scope: "series", containerId: "series-1", assetId: "su-yan", variantId: "three-view-1",
+    }} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    const image = await screen.findByAltText("苏砚三视图拟合参考");
+    fireEvent.load(image);
+    expect(screen.getByRole("button", { name: "拟合白模" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
+    finish({ frontChin: { x: .2, y: .2 } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "拟合白模" })).toBeEnabled());
 });
 
 it("fits a selected three-view source and saves the reviewed shape as its 100% baseline", async () => {
