@@ -8,8 +8,11 @@ import {
     DEFAULT_CHARACTER_NEGATIVE_PROMPT,
 } from "@/lib/characterPrompts";
 import { DEFAULT_FACE_SHAPE } from "@/lib/whiteFaceShape";
+import headMesh from "../../../public/models/character/makehuman-face-v1/head.json";
 
 const apiMocks = vi.hoisted(() => ({
+    uploadLibraryImage: vi.fn().mockResolvedValue({ image_url: 'uploads/face.png' }),
+    createLibraryAsset: vi.fn().mockResolvedValue({ id: 'face-prop', image_asset: { variants: [{ id: 'face-v1' }] } }),
     authenticatedFetch: vi.fn().mockResolvedValue({ ok: false }),
     getVoices: vi.fn().mockResolvedValue([{ id: 'uniart:speech-2.8-hd:male-qn-qingse', name: '清朗男声', gender: 'Male', family: 'minimax', model: 'speech-2.8-hd', origin: 'system' }]),
     listCustomVoices: vi.fn().mockResolvedValue([]),
@@ -49,6 +52,7 @@ const projectStoreMocks = vi.hoisted(() => ({
 vi.mock("next-intl", () => ({
     useTranslations: () => (key: string) => key,
 }));
+vi.mock("@react-three/fiber", () => ({ Canvas: () => <canvas /> }));
 vi.mock("next/dynamic", () => ({
     default: () => function DynamicComponent() { return null; },
 }));
@@ -86,6 +90,66 @@ const baseProps = {
     isGenerating: false,
     description: "Character reference",
 };
+
+it('persists face adjustments with one save and restores them after closing the workbench', async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => headMesh }));
+    HTMLCanvasElement.prototype.toBlob = callback => callback(new Blob(['face'], { type: 'image/png' }));
+    let finishSave!: () => void;
+    const onUpdateAttributes = vi.fn((_attributes: Record<string, any>) => new Promise<void>(resolve => { finishSave = resolve; }));
+    const previous = { confirmed: true, identity: { visual_notes: '原有黑发', editor_mode: 'notes' },
+        look: { visual_notes: '原有外衣' }, active_design_source: 'panel',
+        reference_assets: [{ asset_type: 'prop', asset_id: 'old-face', variant_id: 'old-v1', applied_fields: ['face_geometry'] },
+            { asset_type: 'prop', asset_id: 'coat', variant_id: 'coat-v1' }] };
+    const asset = { id: 'face-save-role', name: '苏砚', description: '少年',
+        character_design: { design_draft: previous } };
+    try {
+        const props = { asset, onClose: vi.fn(), onUpdateDescription: vi.fn(), onUpdateAttributes, onGenerate: vi.fn(), generatingTypes: [] };
+        const view = render(<CharacterWorkbench {...props} />);
+        fireEvent.click(screen.getByRole('tab', { name: '面容白模' }));
+        fireEvent.click(screen.getByRole('button', { name: '面部比例白模' }));
+        fireEvent.click(screen.getByText('鼻部', { exact: true }));
+        fireEvent.change(screen.getByLabelText('鼻梁高度'), { target: { value: '118' } });
+        fireEvent.change(screen.getByLabelText('鼻梁宽度'), { target: { value: '112' } });
+        await waitFor(() => expect(screen.getByRole('button', { name: '保存骨相参数' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: '保存骨相参数' }));
+        await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalledOnce());
+        expect(screen.getByRole('button', { name: '保存中…' })).toBeDisabled();
+        const saved = onUpdateAttributes.mock.calls[0][0].character_design;
+        const { reference_assets: ignored, ...preserved } = previous;
+        void ignored;
+        expect(saved).toMatchObject({ ...preserved, white_face_shape: { noseBridgeHeight: 118, noseBridgeWidth: 112 } });
+        expect(saved.reference_assets.map((ref: { asset_id: string }) => ref.asset_id)).toEqual(['coat', 'face-prop']);
+        await act(async () => finishSave());
+        expect(screen.getByText('骨相参数已保存到角色')).toBeInTheDocument();
+        view.unmount();
+        render(<CharacterWorkbench {...props} asset={{ ...asset, character_design: { design_draft: saved } }} />);
+        fireEvent.click(screen.getByRole('tab', { name: '面容白模' }));
+        fireEvent.click(screen.getByRole('button', { name: '面部比例白模' }));
+        expect(screen.getByLabelText('鼻梁高度')).toHaveValue('118');
+        expect(screen.getByLabelText('鼻梁宽度')).toHaveValue('112');
+    } finally { vi.unstubAllGlobals(); }
+});
+
+it('surfaces character face-save failures and retains the adjusted controls for retry', async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => headMesh }));
+    HTMLCanvasElement.prototype.toBlob = callback => callback(new Blob(['face'], { type: 'image/png' }));
+    const onUpdateAttributes = vi.fn().mockRejectedValue(new Error('角色保存失败，请重试'));
+    try {
+        render(<CharacterWorkbench asset={{ id: 'retry-face', name: '苏砚' }} onClose={vi.fn()}
+            onUpdateDescription={vi.fn()} onUpdateAttributes={onUpdateAttributes} onGenerate={vi.fn()} generatingTypes={[]} />);
+        fireEvent.click(screen.getByRole('tab', { name: '面容白模' }));
+        fireEvent.click(screen.getByRole('button', { name: '面部比例白模' }));
+        fireEvent.change(screen.getByLabelText('脸部长度'), { target: { value: '111' } });
+        await waitFor(() => expect(screen.getByRole('button', { name: '保存骨相参数' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: '保存骨相参数' }));
+        expect(await screen.findByRole('alert')).toHaveTextContent('角色保存失败，请重试');
+        expect(screen.queryByText('骨相参数已保存到角色')).not.toBeInTheDocument();
+        expect(screen.getByLabelText('脸部长度')).toHaveValue('111');
+        expect(screen.getByRole('button', { name: '保存骨相参数' })).toBeEnabled();
+    } finally { vi.unstubAllGlobals(); }
+});
 
 it("loads selected three-view and optional portrait originals from the series when no episode is active", async () => {
     const previous = projectStoreMocks.currentProject;
