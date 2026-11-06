@@ -13,3 +13,10 @@
 3. Add optional front/profile nasal close-ups for baseline/current comparison without changing geometry coefficients, fit constraints, existing full-head preview or exported view. Verify control direction and unchanged preview export behavior; inspect real mesh close-ups in Chromium.
 
 No image generation or existing character-data overwrite is needed for these checks.
+
+## Verification result
+
+- 104 component/workbench tests and 21 math/image/detection tests passed; TypeScript check passed.
+- Chromium 136 loaded the actual component and `autoMarkThreeView` against the original 1024×1024 portrait and 1223×1286 sheet. It returned seven front and three side marks, fitted the mesh, and required review before saving.
+- Independent 100→110 changes to bridge height, bridge width and tip width each changed the actual rendered close-ups. Visual inspection confirmed the bridge rise in profile and width changes from the front. This establishes white-model behavior; it does not establish image-generator adherence to the numeric prompt.
+- Optional close-ups leave the full-head export canvas unchanged. The browser verification blocked non-GET requests and made no character-data writes.

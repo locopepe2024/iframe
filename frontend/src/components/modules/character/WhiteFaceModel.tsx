@@ -56,6 +56,30 @@ function FacePreview({ shape, data }: { shape: FaceShape; data: WhiteFaceMeshDat
     </Canvas>;
 }
 
+function NoseCamera({ side }: { side: boolean }) {
+    const { camera, size, invalidate } = useThree();
+    useEffect(() => {
+        const x = side ? 0.85 : 0;
+        const z = side ? 0 : 0.6;
+        const distance = Math.max(2, 0.35 / (Math.tan(Math.PI / 18) * (size.width / size.height)));
+        camera.position.set(x, -0.18, z + distance);
+        camera.lookAt(x, -0.18, z);
+        camera.updateProjectionMatrix();
+        invalidate();
+    }, [camera, side, size.width, size.height, invalidate]);
+    return null;
+}
+
+function NosePreview({ shape, data, side }: { shape: FaceShape; data: WhiteFaceMeshData; side: boolean }) {
+    return <Canvas frameloop="demand" camera={{ position: [0, 0, 3], fov: 20 }}>
+        <NoseCamera side={side} />
+        <color attach="background" args={["#28302f"]} />
+        <ambientLight intensity={1.5} />
+        <directionalLight position={[2, 3, 5]} intensity={2} />
+        <Head shape={shape} data={data} x={0} side={side} />
+    </Canvas>;
+}
+
 function matchesSource(stored: NonNullable<FaceShape["calibration"]>["source"] | undefined, source: FaceFitSource | undefined): boolean {
     return !!(stored && source && stored.asset_id === source.assetId && stored.variant_id === source.variantId
         && (!stored.source_scope || stored.source_scope === source.scope)
@@ -74,6 +98,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     const [open, setOpen] = useState(false);
     const [saving, setSaving] = useState(false);
     const [savedShape, setSavedShape] = useState<string>("");
+    const [showNose, setShowNose] = useState(false);
     const [error, setError] = useState("");
     const [meshData, setMeshData] = useState<WhiteFaceMeshData | null>(null);
     const [fitImageUrl, setFitImageUrl] = useState("");
@@ -447,6 +472,24 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                 </div>
             </div>
         </div>
+        <label className="flex min-h-10 items-center gap-2 text-xs text-text-secondary">
+            <input type="checkbox" checked={showNose} onChange={event => setShowNose(event.target.checked)} />显示鼻部放大对比
+        </label>
+        {showNose && <section aria-label="鼻部放大对比" className="space-y-2">
+            <p className="text-xs text-text-secondary">鼻梁高度控制向前隆起，请看侧面；鼻梁宽度、鼻尖宽度请看正面。100% 为当前基准。</p>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                {([false, true] as const).flatMap(side => ([false, true] as const).map(current => {
+                    const label = `${current ? "当前" : "基准"}鼻部${side ? "侧面" : "正面"}放大预览`;
+                    const baseline = shape.calibration ? { ...DEFAULT_FACE_SHAPE, basePreset: shape.basePreset, calibration: shape.calibration } : faceBaseShape(shape.basePreset);
+                    return <div key={label} className="min-w-0">
+                        <p className="mb-1 text-xs text-text-secondary">{current ? "当前调整" : "基准"} · {side ? "侧面" : "正面"}</p>
+                        <div aria-label={label} className="aspect-square overflow-hidden rounded bg-[#28302f]">
+                            {meshData && <NosePreview shape={current ? shape : baseline} data={meshData} side={side} />}
+                        </div>
+                    </div>;
+                }))}
+            </div>
+        </section>}
         <div className="space-y-2">
             {CONTROL_GROUPS.map(([group, controls]) => <details key={group} open={group === "头部轮廓"} className="rounded border border-glass-border/60 p-2">
                 <summary className="cursor-pointer text-xs font-medium text-text-secondary">{group}</summary>
