@@ -13,6 +13,16 @@ const landmarks: FaceFitLandmarks = {
 };
 
 describe("three-view face fitting", () => {
+    it("turns bone controls into explicit anatomical changes with baseline values", () => {
+        const prompt = faceShapePrompt({ ...DEFAULT_FACE_SHAPE, faceLength: 90, faceWidth: 120,
+            eyeSpacing: 80, cheekWidth: 117, jawWidth: 75, noseProjection: 75 });
+        for (const phrase of ["脸部纵向轮廓缩短", "面部横向宽度加宽", "眼距收窄",
+            "颧部横向加宽", "下颌横向收窄", "鼻尖突出度减弱"]) expect(prompt).toContain(phrase);
+        expect(prompt).toContain("中性基准100%");
+        expect(prompt).not.toContain("脸长 90%（中性基准 100%）");
+        expect(prompt).toContain("参考图用于保持目标角色身份、发型和肤色");
+        expect(prompt).toContain("骨相要求优先于参考图中的原始轮廓比例");
+    });
     it("preserves exact calibrated controls, including small edits and every control group, in prompts", () => {
         const calibration = { schema: "iframe.white-face-fit.v1" as const,
             source: { asset_type: "character" as const, asset_id: "su-yan", variant_id: "sheet" },

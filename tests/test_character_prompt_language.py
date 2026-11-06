@@ -8,6 +8,7 @@ from src.apps.comic_gen.character_prompts import (
     append_style_suffix,
     build_character_image_prompt,
     build_reference_sheet_prompt,
+    bind_character_reference_prompt,
 )
 from src.apps.comic_gen.models import Character
 
@@ -31,6 +32,24 @@ def test_reference_sheet_default_is_chinese():
     assert prompt.startswith("角色设定参考图：周涵（大学时期）")
     assert "多视角展示：正面、侧面和背面" in prompt
     assert "Character reference sheet" not in prompt
+
+
+def test_portrait_reference_allows_explicit_bone_changes_in_separate_sections():
+    description = "肤质：轻微日晒，不作整体脏污。\n骨相调整：脸部纵向轮廓缩短。"
+    prompt = build_character_image_prompt("headshot", "苏砚", description, True)
+    assert prompt.startswith("主体：角色苏砚的近景肖像。\n\n参考基准：")
+    assert "以输入的参考图作为角色身份依据，保持发型和肤色" in prompt
+    assert "五官与轮廓仅按下述明确要求调整" in prompt
+    assert f"面部与外观要求：\n{description}" in prompt
+    assert "\n\n构图与表现：" in prompt
+    assert "严格保持参考图中的角色面孔" not in prompt
+    assert bind_character_reference_prompt(prompt) == prompt
+
+
+def test_portrait_without_reference_does_not_invent_an_input_reference():
+    prompt = build_character_image_prompt("headshot", "苏砚", "下眼睑轻微自然隆起。")
+    assert "参考基准：" not in prompt
+    assert "下眼睑轻微自然隆起。" in prompt
 
 
 def test_style_suffix_is_appended_without_duplicate_terminal_punctuation():

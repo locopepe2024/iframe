@@ -366,14 +366,14 @@ it("saves the edited geometry as a stable reference and matching prompt", async 
     await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
     expect(createLibraryAsset).toHaveBeenCalledWith("prop", expect.objectContaining({
         name: "探子首领 · 面部比例白模", image_url: "uploads/white-face.png",
-        description: expect.stringContaining("脸长 112%"),
+        description: expect.stringContaining("脸部纵向轮廓拉长（脸部长度调节值112%）"),
     }));
     expect(onSaved).toHaveBeenCalledWith(
         { asset_type: "prop", asset_id: "face-prop", variant_id: "face-v1", application_mode: "reference_only", applied_fields: ["face_geometry"] },
-        expect.stringContaining("鼻尖突出度 118%"),
+        expect.stringContaining("鼻尖突出度增强（鼻尖突出度调节值118%）"),
         expect.objectContaining({ faceLength: 112, foreheadWidth: 108, mouthCornerTilt: 115 }),
     );
-    expect(createLibraryAsset.mock.calls[0][1].description).toContain("嘴角倾斜 115%");
+    expect(createLibraryAsset.mock.calls[0][1].description).toContain("嘴角上提（嘴角倾斜调节值115%）");
 });
 
 it("compares the base face with the edit and exports only the edited preview", async () => {

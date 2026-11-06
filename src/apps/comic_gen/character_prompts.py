@@ -53,12 +53,12 @@ def build_character_image_prompt(
         )
 
     if generation_type == "headshot":
-        return _sentence(
-            "严格保持参考图中的角色面孔、发型、肤色和五官" if preserve_reference else "",
-            f"角色{character_name}的近景肖像",
-            character_description,
-            "聚焦面部和肩部，刻画清晰的面部细节，未指定表情时采用中性表情，未指定视线时正面看向镜头",
-        )
+        return "\n\n".join(part for part in [
+            _sentence(f"主体：角色{character_name}的近景肖像"),
+            "参考基准：以输入的参考图作为角色身份依据，保持发型和肤色；五官与轮廓仅按下述明确要求调整，其余特征沿用参考图。" if preserve_reference else "",
+            f"面部与外观要求：\n{_sentence(character_description)}" if character_description else "",
+            "构图与表现：聚焦面部和肩部，刻画清晰的面部细节，未指定表情时采用中性表情，未指定视线时正面看向镜头。",
+        ] if part)
 
     raise ValueError(f"Unsupported character generation type: {generation_type}")
 
