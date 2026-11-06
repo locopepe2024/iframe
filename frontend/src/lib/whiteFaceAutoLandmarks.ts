@@ -136,3 +136,26 @@ export async function autoMarkFrontReference(image: HTMLImageElement, options: {
         landmarker.close();
     }
 }
+
+/** Dense original-image coordinates for local image deformation; no remote inference. */
+export async function detectFrontFaceGuide(image: HTMLImageElement, region: FrontReferenceRegion) {
+    const vision = await FilesetResolver.forVisionTasks(MODEL_ROOT);
+    const landmarker = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: `${MODEL_ROOT}/face_landmarker.task`, delegate: "CPU" },
+        runningMode: "IMAGE", numFaces: 2,
+    });
+    let face: FaceResult | undefined, prepared: PreparedFaceImage | undefined;
+    try {
+        const marks = prepareAndMarkFrontReference(image, region, canvas => {
+            const faces = landmarker.detect(canvas).faceLandmarks;
+            face = faces[0];
+            return faces;
+        }, items => { prepared = items[0]; });
+        if (!face || !prepared) throw new Error("正脸识别不完整");
+        return { marks, prepared, face: face.map(point => ({ ...point,
+            ...facePointInSource(point, prepared!.crop, image.naturalWidth, image.naturalHeight),
+        })) };
+    } finally {
+        landmarker.close();
+    }
+}
