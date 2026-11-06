@@ -19,6 +19,8 @@ async function canvasImage(canvas: HTMLCanvasElement) {
 /** Local-only preprocessing and independent output re-detection; never submits generation. */
 export async function createFaceGeometryGuide(image: HTMLImageElement, shape: FaceShape, region: FrontReferenceRegion,
     progress: (message: string) => void = () => {}) : Promise<FaceGeometryGuide> {
+    const measurements = faceShapeMeasurements(shape);
+    if (!measurements.some(item => GUIDE_KEYS.includes(item.key) && item.target !== item.baseline)) throw new Error("当前没有可应用的正面轮廓调整；鼻部深度等参数暂不支持引导图变形");
     progress("正在识别原始正脸…");
     const source = await detectFrontFaceGuide(image, region);
     const sourceFaceHeight = source.prepared.sourceFaceHeight;
@@ -32,7 +34,7 @@ export async function createFaceGeometryGuide(image: HTMLImageElement, shape: Fa
     const original = context.getImageData(0, 0, width, height);
     const wanted = faceGuideControls(source.face, shape, width, height);
     let controls = wanted;
-    const measurements = faceShapeMeasurements(shape), m = Object.fromEntries(measurements.map(item => [item.key, item.target]));
+    const m = Object.fromEntries(measurements.map(item => [item.key, item.target]));
     const before = frontGuideRatios(source.face, width, height);
     const labels = { faceLength: "脸长／颧宽", jawWidth: "下颌宽／颧宽", eyeSpacing: "眼距／颧宽" };
     for (let iteration = 1; iteration <= 6; iteration++) {
