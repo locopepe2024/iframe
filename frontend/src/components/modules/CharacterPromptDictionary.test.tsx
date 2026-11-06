@@ -18,6 +18,36 @@ function setup(query: string, slot?: string, configurations?: DictionaryConfigur
   return { replaceWithText, onApply, onClose, onConfiguration, keyHandler };
 }
 
+it('keeps an upward dictionary inside the clipping workbench when its viewport is short', async () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  let anchorTop = 300;
+  const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return { top: this.hasAttribute('data-clip') ? 200 : anchorTop } as DOMRect;
+  });
+  const offsetParent = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetParent');
+  Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
+    configurable: true,
+    get(this: HTMLElement) { return this.closest<HTMLElement>('[data-dictionary-anchor]'); },
+  });
+  try {
+    await act(async () => {
+      render(<main data-clip style={{ overflowY: 'hidden' }}><div data-dictionary-anchor style={{ position: 'relative' }}>
+        <CharacterPromptDictionary suggestion={{ query: '', replaceWithText: text => text }} placement="above"
+          onApply={vi.fn()} onClose={vi.fn()} keyHandler={{ current: null }} />
+      </div></main>);
+    });
+    const panel = screen.getByRole('dialog');
+    expect(panel).toHaveStyle({ maxHeight: '82px' });
+    anchorTop = 400;
+    fireEvent(window, new Event('resize'));
+    expect(panel).toHaveStyle({ maxHeight: '182px' });
+  } finally {
+    rect.mockRestore();
+    if (offsetParent) Object.defineProperty(HTMLElement.prototype, 'offsetParent', offsetParent);
+    else Reflect.deleteProperty(HTMLElement.prototype, 'offsetParent');
+  }
+});
+
 it("restores valid saved choices and ignores options retired from the current panel", () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const configuration = dictionaryConfiguration(CHARACTER_DICTIONARY_PRESETS.find(item => item.id === "dictionary.panel.face")!, { 肤色: "暖小麦肤色" });

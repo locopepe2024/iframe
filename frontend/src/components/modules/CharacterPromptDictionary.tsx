@@ -75,7 +75,15 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
     if (host || placement !== "above") return;
     const anchor = panelRef.current?.offsetParent;
     if (!(anchor instanceof HTMLElement)) return;
-    const update = () => setAvailableHeight(Math.max(0, Math.min(440, window.innerHeight * 0.6, anchor.getBoundingClientRect().top - 18)));
+    const update = () => {
+      let visibleTop = 0;
+      for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
+        if (/(hidden|clip|auto|scroll)/.test(getComputedStyle(parent).overflowY)) {
+          visibleTop = Math.max(visibleTop, parent.getBoundingClientRect().top);
+        }
+      }
+      setAvailableHeight(Math.max(0, Math.min(440, window.innerHeight * 0.6, anchor.getBoundingClientRect().top - visibleTop - 18)));
+    };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(anchor);
