@@ -383,6 +383,10 @@ it("compares the base face with the edit and exports only the edited preview", a
     expect(screen.getByLabelText("基础脸型正面与侧面预览")).toBeInTheDocument();
     expect(screen.getByLabelText("当前调整正面与侧面预览")).toBeInTheDocument();
     await waitFor(() => expect(document.querySelectorAll("canvas")).toHaveLength(2));
+    fireEvent.click(screen.getByLabelText("显示鼻部放大对比"));
+    expect(screen.getByLabelText("基准鼻部正面放大预览")).toBeInTheDocument();
+    expect(screen.getByLabelText("当前鼻部侧面放大预览")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelectorAll("canvas")).toHaveLength(6));
     const exported: HTMLCanvasElement[] = [];
     HTMLCanvasElement.prototype.toBlob = function (callback) {
         exported.push(this);

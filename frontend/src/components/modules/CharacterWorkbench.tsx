@@ -1439,8 +1439,17 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         setDesignStatus("draft"); setPromptsNeedDesignApply(true);
     };
 
-    const handleWhiteFaceSaved = (reference: AssetLibraryReference, prompt: string, shape: FaceShape) => {
+    const handleWhiteFaceSaved = async (reference: AssetLibraryReference, _prompt: string, shape: FaceShape) => {
+            if (!onUpdateAttributes) throw new Error("当前角色不支持保存骨相参数，请从角色编辑入口重试。");
             const withoutWhiteFace = (items: AssetLibraryReference[]) => items.filter(item => !item.applied_fields?.includes("face_geometry"));
+            const draft: DesignDraft = {
+                ...savedDesignSnapshot.current,
+                white_face_shape: shape,
+                reference_assets: [...withoutWhiteFace(savedDesignSnapshot.current.reference_assets || []), reference],
+            };
+            await onUpdateAttributes({ character_design: draft });
+            savedDesignSnapshot.current = draft;
+            setHasSavedDesign(true);
             setDesignReferenceAssets(current => [...withoutWhiteFace(current), reference]);
             setPromptPickerReferences(current => ({ ...current, full_body: withoutWhiteFace(current.full_body) }));
             setWhiteFaceShape(shape);

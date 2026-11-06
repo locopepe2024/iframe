@@ -56,6 +56,30 @@ function FacePreview({ shape, data }: { shape: FaceShape; data: WhiteFaceMeshDat
     </Canvas>;
 }
 
+function NoseCamera({ side }: { side: boolean }) {
+    const { camera, size, invalidate } = useThree();
+    useEffect(() => {
+        const x = side ? 0.85 : 0;
+        const z = side ? 0 : 0.6;
+        const distance = Math.max(2, 0.35 / (Math.tan(Math.PI / 18) * (size.width / size.height)));
+        camera.position.set(x, -0.18, z + distance);
+        camera.lookAt(x, -0.18, z);
+        camera.updateProjectionMatrix();
+        invalidate();
+    }, [camera, side, size.width, size.height, invalidate]);
+    return null;
+}
+
+function NosePreview({ shape, data, side }: { shape: FaceShape; data: WhiteFaceMeshData; side: boolean }) {
+    return <Canvas frameloop="demand" camera={{ position: [0, 0, 3], fov: 20 }}>
+        <NoseCamera side={side} />
+        <color attach="background" args={["#28302f"]} />
+        <ambientLight intensity={1.5} />
+        <directionalLight position={[2, 3, 5]} intensity={2} />
+        <Head shape={shape} data={data} x={0} side={side} />
+    </Canvas>;
+}
+
 function matchesSource(stored: NonNullable<FaceShape["calibration"]>["source"] | undefined, source: FaceFitSource | undefined): boolean {
     return !!(stored && source && stored.asset_id === source.assetId && stored.variant_id === source.variantId
         && (!stored.source_scope || stored.source_scope === source.scope)
@@ -67,12 +91,14 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
     initialShape?: Partial<FaceShape>;
     fitSource?: FaceFitSource;
     portraitSource?: FaceFitSource;
-    onSaved: (reference: AssetLibraryReference, prompt: string, shape: FaceShape) => void;
+    onSaved: (reference: AssetLibraryReference, prompt: string, shape: FaceShape) => void | Promise<void>;
     standalone?: boolean;
 }) {
     const [shape, setShape] = useState<FaceShape>(normalizeFaceShape(initialShape));
     const [open, setOpen] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [savedShape, setSavedShape] = useState<string>("");
+    const [showNose, setShowNose] = useState(false);
     const [error, setError] = useState("");
     const [meshData, setMeshData] = useState<WhiteFaceMeshData | null>(null);
     const [fitImageUrl, setFitImageUrl] = useState("");
@@ -289,6 +315,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
         const canvas = stageRef.current?.querySelector("canvas");
         if (!canvas) { setError("白模预览尚未就绪"); return; }
         setSaving(true);
+        setSavedShape("");
         setError("");
         try {
             const savedShape = shape.calibration ? { ...shape, calibration: { ...shape.calibration, reviewed: fitReviewed } } : shape;
@@ -302,8 +329,9 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             });
             const variant = asset.image_asset?.variants?.[0];
             if (!asset.id || !variant?.id) throw new Error("白模图没有产生可引用的资产版本");
+            await onSaved({ asset_type: "prop", asset_id: asset.id, variant_id: variant.id, application_mode: "reference_only", applied_fields: ["face_geometry"] }, faceShapePrompt(savedShape), savedShape);
             setShape(savedShape);
-            onSaved({ asset_type: "prop", asset_id: asset.id, variant_id: variant.id, application_mode: "reference_only", applied_fields: ["face_geometry"] }, faceShapePrompt(savedShape), savedShape);
+            setSavedShape(JSON.stringify(savedShape));
         } catch (cause) {
             setError(cause instanceof Error ? cause.message : "保存白模参考失败");
         } finally {
@@ -313,7 +341,7 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
 
     return <section aria-label="面部比例白模" className={`space-y-3 rounded border border-glass-border ${standalone ? "p-5 lg:p-6" : "p-3"}`}>
         <button type="button" aria-expanded={open} onClick={() => setOpen(value => !value)} className="min-h-10 w-full text-left text-xs font-medium text-foreground">面部比例白模</button>
-        {open && <>
+        {open && <fieldset disabled={saving} className="space-y-3">
         <label className="block text-xs text-text-secondary">基础脸型
             <select aria-label="基础脸型" value={shape.basePreset} onChange={event => {
                 const preset = event.target.value as FaceBasePreset;
@@ -444,6 +472,24 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
                 </div>
             </div>
         </div>
+        <label className="flex min-h-10 items-center gap-2 text-xs text-text-secondary">
+            <input type="checkbox" checked={showNose} onChange={event => setShowNose(event.target.checked)} />显示鼻部放大对比
+        </label>
+        {showNose && <section aria-label="鼻部放大对比" className="space-y-2">
+            <p className="text-xs text-text-secondary">鼻梁高度控制向前隆起，请看侧面；鼻梁宽度、鼻尖宽度请看正面。100% 为当前基准。</p>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                {([false, true] as const).flatMap(side => ([false, true] as const).map(current => {
+                    const label = `${current ? "当前" : "基准"}鼻部${side ? "侧面" : "正面"}放大预览`;
+                    const baseline = shape.calibration ? { ...DEFAULT_FACE_SHAPE, basePreset: shape.basePreset, calibration: shape.calibration } : faceBaseShape(shape.basePreset);
+                    return <div key={label} className="min-w-0">
+                        <p className="mb-1 text-xs text-text-secondary">{current ? "当前调整" : "基准"} · {side ? "侧面" : "正面"}</p>
+                        <div aria-label={label} className="aspect-square overflow-hidden rounded bg-[#28302f]">
+                            {meshData && <NosePreview shape={current ? shape : baseline} data={meshData} side={side} />}
+                        </div>
+                    </div>;
+                }))}
+            </div>
+        </section>}
         <div className="space-y-2">
             {CONTROL_GROUPS.map(([group, controls]) => <details key={group} open={group === "头部轮廓"} className="rounded border border-glass-border/60 p-2">
                 <summary className="cursor-pointer text-xs font-medium text-text-secondary">{group}</summary>
@@ -456,9 +502,10 @@ export default function WhiteFaceModel({ characterName, initialShape, fitSource,
             </details>)}
         </div>
         <button type="button" disabled={saving || detecting || !meshData || (usePortrait && !shape.calibration) || !!(shape.calibration && (!fitReviewed || !calibrationCurrent))} onClick={() => void save()} className="min-h-10 rounded border border-glass-border px-3 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">{saving ? "保存中…" : "保存骨相参数"}</button>
+        {savedShape === JSON.stringify(shape) && <p role="status" className="text-xs text-green-400">骨相参数已保存到角色</p>}
         {shape.calibration && (!fitSource || shape.calibration.source.asset_id !== fitSource.assetId || shape.calibration.source.variant_id !== fitSource.variantId) &&
             <p role="status" className="text-xs text-amber-300">骨相基准的三视图已变更，请重新拟合。</p>}
         {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
-        </>}
+        </fieldset>}
     </section>;
 }
