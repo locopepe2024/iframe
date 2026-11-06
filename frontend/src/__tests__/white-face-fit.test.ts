@@ -13,6 +13,22 @@ const landmarks: FaceFitLandmarks = {
 };
 
 describe("three-view face fitting", () => {
+    it("measures and fits independent original images with different aspect ratios and scales", () => {
+        const known = { ...DEFAULT_FACE_SHAPE, cheekWidth: 94, cheekHeight: 114, noseTipHeight: 90 };
+        const projected = meshFaceLandmarks(known, mesh as WhiteFaceMeshData);
+        const aspects = { front: 1, side: .6 };
+        const points = Object.fromEntries(Object.entries(projected).map(([key, p]) => {
+            const side = key.startsWith("side"), scale = side ? .2 : .3;
+            return [key, { x: (side ? .7 : .5) + p.x * scale / (side ? aspects.side : aspects.front), y: .3 + p.y * scale }];
+        })) as FaceFitLandmarks;
+        const actual = imageFaceMetrics(points, aspects), expected = meshFaceMetrics(known, mesh as WhiteFaceMeshData);
+        for (const key of Object.keys(expected) as Array<keyof typeof expected>) expect(actual[key]).toBeCloseTo(expected[key], 12);
+        const fitted = fitFaceToLandmarks(points, mesh as WhiteFaceMeshData, "neutral_young", aspects);
+        expect(fitted.residual).toBeLessThan(.01);
+        expect(fitted.shape.cheekHeight).toBeGreaterThan(100);
+        expect(() => imageFaceMetrics(points, { front: 0, side: .6 })).toThrow("尺寸无效");
+        expect(() => imageFaceMetrics(points, { front: 1, side: NaN })).toThrow("尺寸无效");
+    });
     it("preserves chin depth and metrics when a profile is mirrored", () => {
         const recessed = { ...landmarks, sideChin: { x: .57, y: .25 } };
         const mirrored = Object.fromEntries(Object.entries(recessed).map(([key, point]) => [key,

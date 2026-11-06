@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import WhiteFaceModel from "./WhiteFaceModel";
 import { DEFAULT_FACE_SHAPE } from "@/lib/whiteFaceShape";
@@ -11,13 +11,13 @@ import { FACE_FIT_IMAGE_SPEC, type PreparedFaceImage } from "@/lib/whiteFaceImag
 
 const meshData = headMesh as WhiteFaceMeshData;
 
-const { uploadLibraryImage, createLibraryAsset, authenticatedFetch, autoMarkThreeView, resolveAssetVariantDelivery } = vi.hoisted(() => ({
-    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), autoMarkThreeView: vi.fn(), resolveAssetVariantDelivery: vi.fn(),
+const { uploadLibraryImage, createLibraryAsset, authenticatedFetch, autoMarkThreeView, autoMarkFrontReference, resolveAssetVariantDelivery } = vi.hoisted(() => ({
+    uploadLibraryImage: vi.fn(), createLibraryAsset: vi.fn(), authenticatedFetch: vi.fn(), autoMarkThreeView: vi.fn(), autoMarkFrontReference: vi.fn(), resolveAssetVariantDelivery: vi.fn(),
 }));
 
 vi.mock("@react-three/fiber", () => ({ Canvas: () => <canvas /> }));
 vi.mock("@/lib/api", () => ({ API_URL: "http://test", authenticatedFetch, api: { uploadLibraryImage, createLibraryAsset } }));
-vi.mock("@/lib/whiteFaceAutoLandmarks", () => ({ autoMarkThreeView }));
+vi.mock("@/lib/whiteFaceAutoLandmarks", () => ({ autoMarkThreeView, autoMarkFrontReference }));
 vi.mock("@/lib/mediaDelivery", () => ({ resolveAssetVariantDelivery }));
 
 beforeEach(() => {
@@ -29,11 +29,110 @@ beforeEach(() => {
     authenticatedFetch.mockReset().mockResolvedValue({ ok: true, blob: async () => new Blob(["reference"], { type: "image/png" }) });
     resolveAssetVariantDelivery.mockReset().mockResolvedValue("http://test/studio/owned-media/owner/three-view.png");
     autoMarkThreeView.mockReset();
+    autoMarkFrontReference.mockReset();
     URL.createObjectURL = vi.fn(() => "blob:three-view");
     URL.revokeObjectURL = vi.fn();
     HTMLCanvasElement.prototype.toBlob = function (callback) {
         callback(new Blob(["white-face"], { type: "image/png" }));
     };
+});
+
+const portraitPoints = {
+    frontLeftCheek: { x: .2, y: .35 }, frontRightCheek: { x: .45, y: .35 },
+    frontLeftJaw: { x: .23, y: .45 }, frontRightJaw: { x: .42, y: .45 },
+    frontLeftEye: { x: .26, y: .33 }, frontRightEye: { x: .38, y: .33 }, frontChin: { x: .32, y: .55 },
+};
+const profilePoints = { sideEye: { x: .55, y: .12 }, sideNose: { x: .51, y: .16 }, sideChin: { x: .53, y: .25 } };
+const sheetSource = { scope: "series" as const, containerId: "series-1", assetId: "su-yan", variantId: "three-view-1" };
+const portraitSource = { ...sheetSource, variantId: "avatar-1" };
+
+it("fits and saves independent original images with separate points and source provenance", async () => {
+    const crop = { x: 40, y: 180, width: 430, height: 430 };
+    const canvas = { toDataURL: () => "data:image/png;base64,preview" } as HTMLCanvasElement;
+    autoMarkFrontReference.mockImplementation(async (_image, options) => {
+        options.onPrepared([{ view: "front", crop, sourceFaceHeight: 307, detected: true, canvas }]);
+        return portraitPoints;
+    });
+    autoMarkThreeView.mockImplementation(async (_image, options) => {
+        options.onPrepared([{ view: "side", crop, sourceFaceHeight: 91, detected: true, canvas }]);
+        return profilePoints;
+    });
+    const onSaved = vi.fn();
+    const { rerender } = render(<WhiteFaceModel characterName="苏砚" fitSource={sheetSource} portraitSource={portraitSource} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    const sheet = await screen.findByAltText("苏砚三视图拟合参考");
+    fireEvent.change(screen.getByLabelText("正面参考"), { target: { value: "portrait" } });
+    fireEvent.change(screen.getByLabelText("正脸所在区域"), { target: { value: "left" } });
+    const portrait = await screen.findByAltText("苏砚头像正脸拟合参考");
+    Object.defineProperties(portrait, { naturalWidth: { value: 1024 }, naturalHeight: { value: 1024 } });
+    Object.defineProperties(sheet, { naturalWidth: { value: 1223 }, naturalHeight: { value: 1286 } });
+    fireEvent.load(portrait);
+    await screen.findByText(/已标记头像正脸/);
+    fireEvent.load(sheet);
+    await screen.findByText("已标记 10/10 · 可以拟合");
+    expect(autoMarkThreeView).toHaveBeenLastCalledWith(sheet, { views: ["side"], onPrepared: expect.any(Function) });
+    expect(autoMarkFrontReference).toHaveBeenLastCalledWith(portrait, { region: "left", onPrepared: expect.any(Function) });
+    expect(resolveAssetVariantDelivery).toHaveBeenCalledWith({ scope: "series", containerId: "series-1", assetType: "character", assetId: "su-yan", variantId: "avatar-1" });
+    expect(within(screen.getByLabelText("独立正脸参考")).getByTitle("正面画面左颧部")).toHaveStyle({ left: "20%" });
+    expect(portrait.parentElement?.querySelector('[title="侧面眼中心"]')).toBeNull();
+    expect(sheet.parentElement?.querySelector('[title="正面画面左颧部"]')).toBeNull();
+    vi.spyOn(portrait, "getBoundingClientRect").mockReturnValue({ left: 0, top: 0, width: 100, height: 100 } as DOMRect);
+    fireEvent.click(screen.getByRole("button", { name: /正面画面左颧部/ }));
+    fireEvent.click(portrait, { clientX: 19, clientY: 35 });
+    fireEvent.click(screen.getByRole("button", { name: "拟合白模" }));
+    fireEvent.click(screen.getByLabelText("已核对正面与侧面白模"));
+    fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledOnce());
+    const calibration = onSaved.mock.calls[0][2].calibration;
+    expect(calibration.frontReference).toEqual({
+        source: { asset_type: "character", asset_id: "su-yan", variant_id: "avatar-1", source_scope: "series", source_container_id: "series-1" },
+        region: "left", sourceWidth: 1024, sourceHeight: 1024,
+        preparation: { view: "front", crop, sourceFaceHeight: 307, detected: true },
+    });
+    expect(calibration.imagePreparation).toMatchObject({ sourceWidth: 1223, sourceHeight: 1286, views: [{ view: "side" }] });
+    expect(calibration.landmarks.frontLeftCheek).toEqual({ x: .19, y: .35 });
+    expect(calibration.landmarks.sideEye).toEqual(profilePoints.sideEye);
+    expect(JSON.stringify(calibration)).not.toContain("data:image");
+    fireEvent.change(screen.getByLabelText("正脸所在区域"), { target: { value: "right" } });
+    expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
+    expect(screen.getByLabelText("已核对正面与侧面白模")).toBeDisabled();
+    rerender(<WhiteFaceModel characterName="苏砚" fitSource={sheetSource} portraitSource={{ ...portraitSource, variantId: "avatar-2" }} onSaved={onSaved} />);
+    await waitFor(() => expect(screen.getByText(/已标记 0\/10/)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
+});
+
+it("discards old portrait callbacks after changing region without clearing a newer busy state", async () => {
+    let finishOld: (value: object) => void = () => {};
+    let finishNew: (value: object) => void = () => {};
+    let oldPrepared: (value: PreparedFaceImage[]) => void = () => {};
+    autoMarkFrontReference.mockImplementationOnce((_image, options) => {
+        oldPrepared = options.onPrepared;
+        return new Promise(resolve => { finishOld = resolve; });
+    }).mockImplementationOnce(() => new Promise(resolve => { finishNew = resolve; }));
+    render(<WhiteFaceModel characterName="苏砚" fitSource={sheetSource} portraitSource={portraitSource} onSaved={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    await screen.findByAltText("苏砚三视图拟合参考");
+    fireEvent.change(screen.getByLabelText("正面参考"), { target: { value: "portrait" } });
+    const oldImage = await screen.findByAltText("苏砚头像正脸拟合参考");
+    Object.defineProperties(oldImage, { naturalWidth: { value: 1024 }, naturalHeight: { value: 1024 } });
+    fireEvent.load(oldImage);
+    await waitFor(() => expect(autoMarkFrontReference).toHaveBeenCalledTimes(1));
+    fireEvent.change(screen.getByLabelText("正脸所在区域"), { target: { value: "left" } });
+    const newImage = await screen.findByAltText("苏砚头像正脸拟合参考");
+    expect(newImage).not.toBe(oldImage);
+    Object.defineProperties(newImage, { naturalWidth: { value: 1024 }, naturalHeight: { value: 1024 } });
+    fireEvent.load(newImage);
+    await waitFor(() => expect(autoMarkFrontReference).toHaveBeenCalledTimes(2));
+    await act(async () => {
+        oldPrepared([{ view: "front", crop: { x: 0, y: 0, width: 512, height: 512 }, sourceFaceHeight: 999, detected: true,
+            canvas: { toDataURL: () => "stale" } as HTMLCanvasElement }]);
+        finishOld({ ...portraitPoints, frontLeftCheek: { x: .99, y: .99 } });
+    });
+    expect(screen.getByRole("button", { name: "拟合白模" })).toBeDisabled();
+    expect(screen.queryByAltText("正面标准化人脸")).not.toBeInTheDocument();
+    await act(async () => finishNew(portraitPoints));
+    expect(screen.getByRole("button", { name: "拟合白模" })).toBeEnabled();
+    expect(screen.getByTitle("正面画面左颧部")).toHaveStyle({ left: "20%", top: "35%" });
 });
 
 it("shows automatic face marks and lets the user correct one point", async () => {

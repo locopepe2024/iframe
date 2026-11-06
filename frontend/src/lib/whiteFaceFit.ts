@@ -17,6 +17,7 @@ export const FACE_FIT_OBJECTIVE = "ratios-and-heights.v1";
 export type FitHeightMetric = "cheekHeight" | "jawHeight" | "noseTipHeight";
 export type FitMetric = "cheekAspect" | "jawRatio" | "eyeRatio" | "noseProjection" | "chinProjection" | FitHeightMetric;
 type Metrics = Record<FitMetric, number>;
+export type FaceFitImageAspect = number | { front: number; side: number };
 export const FIT_METRIC_LABELS: Record<FitMetric, string> = {
     cheekAspect: "脸宽比例", jawRatio: "下颌比例", eyeRatio: "眼距比例",
     noseProjection: "鼻尖突出比例", chinProjection: "下巴前突比例",
@@ -36,8 +37,9 @@ const FIT_CONTROLS: Array<[keyof FaceShapeNumbers, number, number]> = [
     ["cheekHeight", 75, 125], ["jawHeight", 75, 125], ["noseTipHeight", 75, 125],
 ];
 
-export function imageFaceMetrics(points: FaceFitLandmarks, imageAspect = 1): Metrics {
-    if (!Number.isFinite(imageAspect) || imageAspect <= 0) throw new Error("参考图尺寸无效");
+export function imageFaceMetrics(points: FaceFitLandmarks, imageAspect: FaceFitImageAspect = 1): Metrics {
+    const aspects = typeof imageAspect === "number" ? [imageAspect] : [imageAspect.front, imageAspect.side];
+    if (aspects.some(aspect => !Number.isFinite(aspect) || aspect <= 0)) throw new Error("参考图尺寸无效");
     for (const [key] of FACE_FIT_MARKS) {
         const point = points[key];
         if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)
@@ -48,7 +50,9 @@ export function imageFaceMetrics(points: FaceFitLandmarks, imageAspect = 1): Met
     return landmarkMetrics(points, imageAspect);
 }
 
-function landmarkMetrics(points: FaceFitLandmarks, imageAspect: number): Metrics {
+function landmarkMetrics(points: FaceFitLandmarks, imageAspect: FaceFitImageAspect): Metrics {
+    const frontAspect = typeof imageAspect === "number" ? imageAspect : imageAspect.front;
+    const sideAspect = typeof imageAspect === "number" ? imageAspect : imageAspect.side;
     const eyeY = (points.frontLeftEye.y + points.frontRightEye.y) / 2;
     const faceHeight = points.frontChin.y - eyeY;
     const sideHeight = points.sideChin.y - points.sideEye.y;
@@ -60,11 +64,11 @@ function landmarkMetrics(points: FaceFitLandmarks, imageAspect: number): Metrics
         throw new Error("标记点的左右或上下顺序不正确");
     }
     return {
-        cheekAspect: cheek * imageAspect / faceHeight,
+        cheekAspect: cheek * frontAspect / faceHeight,
         jawRatio: jaw / cheek,
         eyeRatio: eyes / cheek,
-        noseProjection: Math.abs(noseOffset) * imageAspect / sideHeight,
-        chinProjection: (points.sideChin.x - points.sideEye.x) * Math.sign(noseOffset) * imageAspect / sideHeight,
+        noseProjection: Math.abs(noseOffset) * sideAspect / sideHeight,
+        chinProjection: (points.sideChin.x - points.sideEye.x) * Math.sign(noseOffset) * sideAspect / sideHeight,
         cheekHeight: ((points.frontLeftCheek.y + points.frontRightCheek.y) / 2 - eyeY) / faceHeight,
         jawHeight: ((points.frontLeftJaw.y + points.frontRightJaw.y) / 2 - eyeY) / faceHeight,
         noseTipHeight: (points.sideNose.y - points.sideEye.y) / sideHeight,
@@ -116,7 +120,7 @@ function metricError(key: FitMetric, predicted: number, target: number): number 
         : Math.log(Math.max(predicted, 0.001) / Math.max(target, 0.001));
 }
 
-export function faceFitDiagnostics(shape: FaceShape, data: WhiteFaceMeshData, points: FaceFitLandmarks, imageAspect = 1): FaceFitDiagnostics {
+export function faceFitDiagnostics(shape: FaceShape, data: WhiteFaceMeshData, points: FaceFitLandmarks, imageAspect: FaceFitImageAspect = 1): FaceFitDiagnostics {
     const target = imageFaceMetrics(points, imageAspect);
     const actual = meshFaceMetrics(shape, data);
     return {
@@ -135,7 +139,7 @@ function fitError(predicted: Metrics, target: Metrics): number {
     }, 0);
 }
 
-export function fitFaceToLandmarks(points: FaceFitLandmarks, data: WhiteFaceMeshData, preset: FaceBasePreset, imageAspect = 1): {
+export function fitFaceToLandmarks(points: FaceFitLandmarks, data: WhiteFaceMeshData, preset: FaceBasePreset, imageAspect: FaceFitImageAspect = 1): {
     shape: FaceShape; residual: number; diagnostics: FaceFitDiagnostics;
 } {
     const target = imageFaceMetrics(points, imageAspect);

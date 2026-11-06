@@ -772,6 +772,12 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
         assetId: asset.id,
         variantId: selectedThreeViewId,
     } : undefined;
+    const selectedPortraitId = asset.headshot_asset?.selected_id || asset.headshot_asset?.variants?.[0]?.id;
+    const whiteFacePortraitSource = selectedPortraitId && fitContainerId
+        && asset.headshot_asset?.variants?.some((variant: { id: string }) => variant.id === selectedPortraitId) ? {
+            scope: (fitSeriesId ? "series" : "project") as "series" | "project",
+            containerId: fitContainerId, assetId: asset.id, variantId: selectedPortraitId,
+        } : undefined;
     const masterGenerationType = referenceSheetImageAsset ? "reference_sheet" : "full_body";
     const hasFullBodyImage = !!masterImageUrl;
     const masterVariantId = masterAsset?.selected_id || masterAsset?.variants?.[0]?.id;
@@ -1259,6 +1265,16 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             setDesignError("骨相基准的三视图已不可用，请重新拟合。");
             return;
         }
+        const calibratedFront = whiteFaceShape?.calibration?.frontReference;
+        if (promptType === "full_body" && whiteFaceShape?.calibration?.reviewed && calibratedFront
+            && (!whiteFacePortraitSource || calibratedFront.source.asset_id !== whiteFacePortraitSource.assetId
+                || calibratedFront.source.variant_id !== whiteFacePortraitSource.variantId
+                || calibratedFront.source.source_scope !== whiteFacePortraitSource.scope
+                || calibratedFront.source.source_container_id !== whiteFacePortraitSource.containerId
+                || whiteFaceShape.calibration.source.variant_id !== selectedThreeViewId)) {
+            setDesignError("骨相基准的正脸或侧面来源已变更，请重新拟合并核对。");
+            return;
+        }
         const imageGenerationMode = promptModes[promptType];
         const selectedReferences = [...designReferenceAssets, ...promptReferences[promptType], ...promptPickerReferences[promptType]];
         const references = promptType === "full_body"
@@ -1671,7 +1687,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                                 <h2 className="text-lg font-semibold text-foreground">面容白模</h2>
                                 <p className="mt-1 text-xs text-text-muted">独立调整脸型、鼻部、眼眉和嘴唇/下巴参数。参数会保存到当前角色，并作为骨相提示传递。</p>
                             </div>
-                            <WhiteFaceModel characterName={asset.name || "角色"} initialShape={whiteFaceShape} fitSource={whiteFaceFitSource} onSaved={handleWhiteFaceSaved} standalone />
+                            <WhiteFaceModel characterName={asset.name || "角色"} initialShape={whiteFaceShape} fitSource={whiteFaceFitSource} portraitSource={whiteFacePortraitSource} onSaved={handleWhiteFaceSaved} standalone />
                         </div>
                     </div>}
 

@@ -87,7 +87,7 @@ const baseProps = {
     description: "Character reference",
 };
 
-it("loads the selected three-view from the series when no episode is active", async () => {
+it("loads selected three-view and optional portrait originals from the series when no episode is active", async () => {
     const previous = projectStoreMocks.currentProject;
     projectStoreMocks.currentProject = null as any;
     apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [] });
@@ -98,6 +98,7 @@ it("loads the selected three-view from the series when no episode is active", as
     try {
         render(<CharacterWorkbench asset={{ id: "su-yan", name: "苏砚", description: "雪痕客",
             three_view_asset: { selected_id: "three-view-1", variants: [{ id: "three-view-1", url: "three-view.png" }] },
+            headshot_asset: { selected_id: "avatar-1", variants: [{ id: "avatar-old", url: "old.png" }, { id: "avatar-1", url: "avatar.png" }] },
         }} seriesId="series-1" onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
         fireEvent.click(screen.getByRole("tab", { name: "面容白模" }));
         fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
@@ -109,8 +110,32 @@ it("loads the selected three-view from the series when no episode is active", as
             "/studio/owned-media/0123456789abcdef01234567/original-three-view.png",
             expect.objectContaining({ signal: expect.any(AbortSignal) }),
         ));
+        apiMocks.authenticatedFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ url: "/studio/owned-media/0123456789abcdef01234567/original-avatar.png" }) });
+        apiMocks.authenticatedFetch.mockResolvedValueOnce({ ok: false });
+        fireEvent.change(screen.getByLabelText("正面参考"), { target: { value: "portrait" } });
+        await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
+            expect.stringContaining("variant_id=avatar-1"), { cache: "no-store" },
+        ));
+        await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
+            "/studio/owned-media/0123456789abcdef01234567/original-avatar.png", expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        ));
     } finally {
         projectStoreMocks.currentProject = previous;
+        vi.unstubAllGlobals();
+    }
+});
+
+it("does not offer an unregistered selected portrait as a face fitting source", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
+    try {
+    render(<CharacterWorkbench asset={{ id: "su-yan", name: "苏砚", description: "雪痕客",
+        three_view_asset: { selected_id: "sheet-1", variants: [{ id: "sheet-1", url: "sheet.png" }] },
+        headshot_asset: { selected_id: "missing-avatar", variants: [{ id: "history-avatar", url: "old.png" }] },
+    }} seriesId="series-1" onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={vi.fn()} generatingTypes={[]} />);
+    fireEvent.click(screen.getByRole("tab", { name: "面容白模" }));
+    fireEvent.click(screen.getByRole("button", { name: "面部比例白模" }));
+    expect(screen.queryByLabelText("正面参考")).not.toBeInTheDocument();
+    } finally {
         vi.unstubAllGlobals();
     }
 });
@@ -951,6 +976,27 @@ it('submits the master image followed by the fitted three-view as ordered refere
     expect(request.image_generation_mode).toBe('reference');
     expect(request.references.map((reference: { variant_id: string }) => reference.variant_id)).toEqual(['master-1', 'three-view-1']);
     expect(request.prompt).toContain('最后一张参考图是该角色的正面、侧面和背面三视图');
+});
+
+it('requires refitting before generating with a replaced independent portrait source', () => {
+    const { basePreset: ignored, ...baseline } = DEFAULT_FACE_SHAPE;
+    void ignored;
+    const saved = { confirmed: true, active_design_source: 'panel', white_face_shape: { ...DEFAULT_FACE_SHAPE, calibration: {
+        schema: 'iframe.white-face-fit.v1', baseline, landmarks: {}, residual: .01, reviewed: true,
+        source: { asset_type: 'character', asset_id: 'simple-role', variant_id: 'sheet-1' },
+        frontReference: { source: { asset_type: 'character', asset_id: 'simple-role', variant_id: 'old-avatar', source_scope: 'project', source_container_id: 'project-1' },
+            region: 'left', sourceWidth: 1024, sourceHeight: 1024 },
+    } } };
+    apiMocks.previewAssetImageSubmission.mockClear();
+    const { onGenerate } = mountSimpleDesign({
+        three_view_asset: { selected_id: 'sheet-1', variants: [{ id: 'sheet-1', url: 'sheet.png' }] },
+        headshot_asset: { selected_id: 'new-avatar', variants: [{ id: 'old-avatar', url: 'old.png' }, { id: 'new-avatar', url: 'new.png' }] },
+        character_design: { design_draft: saved, design_revisions: [{ revision: 1, design: saved }] },
+    });
+    fireEvent.click(screen.getAllByTestId('variant-generate')[0]);
+    expect(screen.getAllByText('骨相基准的正脸或侧面来源已变更，请重新拟合并核对。').length).toBeGreaterThan(0);
+    expect(apiMocks.previewAssetImageSubmission).not.toHaveBeenCalled();
+    expect(onGenerate).not.toHaveBeenCalled();
 });
 
 it('submits face proportions without including the white model image in a full-body generation', async () => {

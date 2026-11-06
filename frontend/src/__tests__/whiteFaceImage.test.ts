@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { facePointInSource, renderFaceCrop, squareCropBounds, squareFaceCrop } from "@/lib/whiteFaceImage";
-import { prepareAndMarkThreeView } from "@/lib/whiteFaceAutoLandmarks";
+import { facePointInSource, renderFaceCrop, squareCropBounds, squareFaceCrop, frontReferenceBounds } from "@/lib/whiteFaceImage";
+import { prepareAndMarkThreeView, prepareAndMarkFrontReference } from "@/lib/whiteFaceAutoLandmarks";
 import { imageFaceMetrics, type FaceFitLandmarks } from "@/lib/whiteFaceFit";
 
 const drawImage = vi.fn();
@@ -95,4 +95,38 @@ it("relocates the full column when a head-only sheet fails the upper crop", () =
     expect(Object.keys(marks)).toHaveLength(10);
     expect(detect).toHaveBeenCalledTimes(6);
     expect(onPrepared.mock.calls[0][0].every((face: { detected: boolean }) => face.detected)).toBe(true);
+});
+
+it("marks an independent portrait region in its own original coordinates", () => {
+    expect(frontReferenceBounds(1600, 1000, "right")).toEqual({ x: 800, y: 0, width: 800, height: 1000 });
+    expect(() => frontReferenceBounds(0, 1000, "left")).toThrow("尺寸无效");
+    const final = detectedFace(); final[234].x = .25;
+    const detect = vi.fn().mockReturnValueOnce([detectedFace()]).mockReturnValueOnce([final]);
+    const prepared = vi.fn();
+    const points = prepareAndMarkFrontReference(sourceImage(), "left", detect, prepared);
+    expect(Object.keys(points)).toHaveLength(7);
+    expect(points.sideEye).toBeUndefined();
+    const image = prepared.mock.calls[0][0][0];
+    expect(points.frontLeftCheek?.x).toBeCloseTo(facePointInSource(final[234], image.crop, 1600, 1000).x, 12);
+    expect(points.frontChin?.y).toBeCloseTo(facePointInSource(final[152], image.crop, 1600, 1000).y, 12);
+});
+
+it("rejects ambiguous or unsuccessful portrait detections instead of picking or substituting a face", () => {
+    const multiple = vi.fn().mockReturnValue([detectedFace(), detectedFace()]);
+    expect(() => prepareAndMarkFrontReference(sourceImage(), "whole", multiple)).toThrow("多张人脸");
+    expect(multiple).toHaveBeenCalledTimes(1);
+    const failed = vi.fn().mockReturnValueOnce([detectedFace()]).mockReturnValueOnce([]);
+    const prepared = vi.fn();
+    expect(() => prepareAndMarkFrontReference(sourceImage(), "left", failed, prepared)).toThrow("处理后未识别");
+    expect(prepared.mock.calls[0][0][0].detected).toBe(false);
+});
+
+it("detects only profile points when an independent portrait supplies the front", () => {
+    const detect = vi.fn().mockReturnValue(detectedFace());
+    const prepared = vi.fn();
+    const points = prepareAndMarkThreeView(sourceImage(), detect, prepared, ["side"]);
+    expect(Object.keys(points)).toHaveLength(3);
+    expect(points.frontLeftCheek).toBeUndefined();
+    expect(detect).toHaveBeenCalledTimes(2);
+    expect(prepared.mock.calls[0][0].map((face: { view: string }) => face.view)).toEqual(["side"]);
 });

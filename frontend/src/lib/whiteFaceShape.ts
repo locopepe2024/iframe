@@ -1,5 +1,5 @@
 import type { FaceFitDiagnostics } from "./whiteFaceFit";
-import type { FaceImagePreparation } from "./whiteFaceImage";
+import type { FaceImagePreparation, FrontFaceReference } from "./whiteFaceImage";
 
 export type FaceHeightControls = {
     cheekHeight: number;
@@ -43,6 +43,7 @@ export type FaceShapeCalibration = {
     fitObjective?: "ratios-and-heights.v1";
     fitDiagnostics?: FaceFitDiagnostics;
     imagePreparation?: FaceImagePreparation;
+    frontReference?: FrontFaceReference;
 };
 
 export type FaceShape = FaceShapeNumbers & {

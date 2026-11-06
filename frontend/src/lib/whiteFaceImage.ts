@@ -24,6 +24,21 @@ export type FaceImagePreparation = {
     views: PreparedFaceInfo[];
 };
 export type PreparedFaceImage = PreparedFaceInfo & { canvas: HTMLCanvasElement };
+export type FrontReferenceRegion = "whole" | "left" | "right";
+export type FaceFitSource = { scope: "series" | "project"; containerId: string; assetId: string; variantId: string };
+export type FrontFaceReference = {
+    source: { asset_type: "character"; asset_id: string; variant_id: string; source_scope: "series" | "project"; source_container_id: string };
+    region: FrontReferenceRegion;
+    sourceWidth: number;
+    sourceHeight: number;
+    preparation?: PreparedFaceInfo;
+};
+
+export function frontReferenceBounds(width: number, height: number, region: FrontReferenceRegion): FaceImageCrop {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) throw new Error("正脸原图尺寸无效");
+    if (region !== "whole" && region !== "left" && region !== "right") throw new Error("正脸参考区域无效");
+    return { x: region === "right" ? width / 2 : 0, y: 0, width: region === "whole" ? width : width / 2, height };
+}
 
 export function facePointInSource(point: FaceFitPoint, crop: FaceImageCrop, sourceWidth: number, sourceHeight: number): FaceFitPoint {
     return { x: (crop.x + point.x * crop.width) / sourceWidth, y: (crop.y + point.y * crop.height) / sourceHeight };

@@ -1,6 +1,6 @@
 import { FaceLandmarker, FilesetResolver, type NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { imageFaceMetrics, type FaceFitLandmarks, type FaceFitPoint } from "./whiteFaceFit";
-import { facePointInSource, renderFaceCrop, squareCropBounds, squareFaceCrop, type FaceImageCrop, type PreparedFaceImage } from "./whiteFaceImage";
+import { facePointInSource, frontReferenceBounds, renderFaceCrop, squareCropBounds, squareFaceCrop, type FrontReferenceRegion, type PreparedFaceImage } from "./whiteFaceImage";
 
 const MODEL_ROOT = "/models/character/face-landmarker-v1";
 type FaceResult = NormalizedLandmark[];
@@ -49,13 +49,14 @@ export function mapDetectedFaces(front: FaceResult | undefined, side: FaceResult
 }
 
 export function prepareAndMarkThreeView(image: HTMLImageElement, detect: DetectFace,
-    onPrepared?: (images: PreparedFaceImage[]) => void): Partial<FaceFitLandmarks> {
+    onPrepared?: (images: PreparedFaceImage[]) => void, views: ReadonlyArray<"front" | "side"> = ["front", "side"]): Partial<FaceFitLandmarks> {
     const width = image.naturalWidth, height = image.naturalHeight;
     if (!width || !height) throw new Error("三视图尚未加载完成");
     const prepared: PreparedFaceImage[] = [];
     const points: Partial<FaceFitLandmarks> = {};
     const faceOval = Array.from(new Set(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL.flatMap(edge => [edge.start, edge.end])));
     for (const [view, start, end] of [["front", 0, .34], ["side", .35, .66]] as const) {
+        if (!views.includes(view)) continue;
         let preview: PreparedFaceImage | undefined;
         for (const bottom of [.35, 1]) {
             const region = { x: start * width, y: 0, width: (end - start) * width, height: bottom * height };
@@ -85,6 +86,7 @@ export function prepareAndMarkThreeView(image: HTMLImageElement, detect: DetectF
 
 export async function autoMarkThreeView(image: HTMLImageElement, options?: {
     onPrepared?: (images: PreparedFaceImage[]) => void;
+    views?: ReadonlyArray<"front" | "side">;
 }): Promise<Partial<FaceFitLandmarks>> {
     if (!image.naturalWidth || !image.naturalHeight) throw new Error("三视图尚未加载完成");
     const vision = await FilesetResolver.forVisionTasks(MODEL_ROOT);
@@ -94,7 +96,42 @@ export async function autoMarkThreeView(image: HTMLImageElement, options?: {
     });
     try {
         const detect: DetectFace = canvas => landmarker.detect(canvas).faceLandmarks[0];
-        return prepareAndMarkThreeView(image, detect, options?.onPrepared);
+        return prepareAndMarkThreeView(image, detect, options?.onPrepared, options?.views);
+    } finally {
+        landmarker.close();
+    }
+}
+
+export function prepareAndMarkFrontReference(image: HTMLImageElement, region: FrontReferenceRegion,
+    detect: (canvas: HTMLCanvasElement) => FaceResult[], onPrepared?: (images: PreparedFaceImage[]) => void): Partial<FaceFitLandmarks> {
+    const width = image.naturalWidth, height = image.naturalHeight;
+    const bounds = frontReferenceBounds(width, height, region);
+    const located = detect(renderFaceCrop(image, bounds));
+    if (located.length > 1) throw new Error("参考区域包含多张人脸，请选择正脸所在的左半图或右半图，或手动标记");
+    if (!located.length) throw new Error("参考区域未识别到人脸，请核对正脸区域或手动标记");
+    const original = located[0].map(point => ({ ...point, ...facePointInSource(point, squareCropBounds(bounds), width, height) }));
+    const oval = Array.from(new Set(FaceLandmarker.FACE_LANDMARKS_FACE_OVAL.flatMap(edge => [edge.start, edge.end])));
+    const { crop, sourceFaceHeight } = squareFaceCrop(oval.map(index => original[index]), width, height);
+    const canvas = renderFaceCrop(image, crop);
+    const final = detect(canvas);
+    onPrepared?.([{ view: "front", crop, sourceFaceHeight, canvas, detected: final.length === 1 }]);
+    if (final.length > 1) throw new Error("裁剪区域包含多张人脸，请调整正脸区域或手动标记");
+    if (!final.length) throw new Error("处理后未识别到正脸，请核对裁剪预览或手动标记");
+    const mapped = final[0].map(point => ({ ...point, ...facePointInSource(point, crop, width, height) }));
+    return mapDetectedFaces(mapped, undefined, [0, 1], [0, 1], width / height);
+}
+
+export async function autoMarkFrontReference(image: HTMLImageElement, options: {
+    region: FrontReferenceRegion; onPrepared?: (images: PreparedFaceImage[]) => void;
+}): Promise<Partial<FaceFitLandmarks>> {
+    frontReferenceBounds(image.naturalWidth, image.naturalHeight, options.region);
+    const vision = await FilesetResolver.forVisionTasks(MODEL_ROOT);
+    const landmarker = await FaceLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: `${MODEL_ROOT}/face_landmarker.task`, delegate: "CPU" },
+        runningMode: "IMAGE", numFaces: 2,
+    });
+    try {
+        return prepareAndMarkFrontReference(image, options.region, canvas => landmarker.detect(canvas).faceLandmarks, options.onPrepared);
     } finally {
         landmarker.close();
     }
