@@ -2968,6 +2968,7 @@
       "saveToLibrary": "Save material",
       "importAsAsset": "Import as asset",
       "saved": "Saved",
+      "savedToLibraryNotice": "Saved to material library for long-term use",
       "featured": "Featured",
       "useAsReference": "Use as reference",
       "reedit": "Edit again",

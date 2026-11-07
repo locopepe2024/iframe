@@ -83,6 +83,25 @@ def test_service_input_and_archive_use_selected_root(workspace, prefix):
     assert (Path(storage.asset_dir) / 'portraits/image.jpg').read_bytes() == b'correct image'
 
 
+@pytest.mark.parametrize('media_type,suffix', [('video', '.mp4'), ('audio', '.wav')])
+def test_generated_video_and_audio_save_to_the_material_collection(workspace, media_type, suffix):
+    from src.apps.playground.material_library import MaterialLibrary
+    root, identity, storage = workspace
+    path = Path(storage.output_dir) / ('output' + suffix)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b'generated-media-bytes')
+    storage.add_generation(PlaygroundGeneration(id='g', mode='t2v', model_id='test', prompt='test', created_at='today',
+        owner_user_id=identity.user_id, owner_profile_id=identity.owner_profile_id,
+        outputs=[PlaygroundOutput(id='o', media_type=media_type, media_path=str(path))]))
+    assert PlaygroundService(storage).save_to_library('g', 'o')
+    assert storage.get_generation('g').outputs[0].saved_to_library
+    record = MaterialLibrary(storage).list()[0]
+    assert record['media_type'] == media_type
+    assert MaterialLibrary(storage).content(record['id']).read_bytes() == b'generated-media-bytes'
+    assert PlaygroundService(storage).save_to_library('g', 'o')
+    assert len(MaterialLibrary(storage).list()) == 1
+
+
 @pytest.mark.parametrize('category', ['../escape', '/absolute', 'nested/../../escape'])
 def test_archive_category_cannot_escape_asset_directory(workspace, category):
     root, identity, storage = workspace

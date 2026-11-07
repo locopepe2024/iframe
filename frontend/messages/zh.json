@@ -2968,6 +2968,7 @@
       "saveToLibrary": "保存素材",
       "importAsAsset": "导入为资产",
       "saved": "已保存",
+      "savedToLibraryNotice": "已保存到素材库，长期保留",
       "featured": "精选",
       "useAsReference": "用作参考图",
       "reedit": "重新编辑",
