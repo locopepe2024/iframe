@@ -75,6 +75,36 @@ def test_ambiguous_duplicate_names_are_rejected():
     assert bind_reference_names('@1 and @2', ['face.png', 'face.png']) == '@1 and @2'
 
 
+@pytest.mark.parametrize('opening,closing', [('`', '`'), ('**', '**'), ('"', '"'), ('(', ')'), ('[', ']')])
+def test_formatted_reference_names_bind_to_attachment_indices(opening, closing):
+    prompt = f'以 {opening}@portrait.png{closing} 为身份参考，生成朝右的侧脸。'
+    assert bind_reference_names(prompt, ['portrait.png']) == f'以 {opening}@1{closing} 为身份参考，生成朝右的侧脸。'
+
+
+@pytest.mark.parametrize('suffix', ['x', '.jpg', '-other', '_other'])
+def test_reference_name_prefix_does_not_bind_another_filename(suffix):
+    prompt = f'@portrait.png{suffix}'
+    assert bind_reference_names(prompt, ['portrait.png']) == prompt
+
+
+def test_image_edit_binds_copied_markdown_reference_before_submission(monkeypatch, tmp_path):
+    post = capture(monkeypatch)
+    reference = 'https://cdn.example/portrait.png'
+    label = '素材-session-20261106T135513Z-image'
+    prompt = f'以 `@{label}` 为身份参考，生成**标准左侧视图，面朝画面右侧**。'
+    gen = PlaygroundGeneration(
+        id='profile', model_id='uniart/gpt-image-2.5-flare-discount', mode='i2i',
+        prompt=prompt, input_media=[reference], media_names={reference: label}, created_at='today',
+    )
+
+    PlaygroundService(Mock(output_dir=str(tmp_path), media_root=str(tmp_path)))._generate_image_mulerouter(gen, 'unused.png', 0)
+
+    assert post.call_args.args[1] == '/images/edits'
+    assert post.call_args.args[2]['prompt'] == '以 `@1` 为身份参考，生成**标准左侧视图，面朝画面右侧**。'
+    assert post.call_args.args[2]['images'] == [{'image_url': reference}]
+    assert gen.prompt == prompt
+
+
 def test_i2v_never_silently_drops_second_image(monkeypatch, tmp_path):
     post = capture(monkeypatch)
     gen = PlaygroundGeneration(id='images', model_id='uniart/minimax-h3-vip', mode='i2v',
