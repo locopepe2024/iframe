@@ -57,7 +57,9 @@ def bind_reference_names(prompt: str, labels: list[str]) -> str:
                     positions.setdefault(alias, []).append(index)
     if not positions:
         return prompt
-    pattern = r"@(" + "|".join(re.escape(name) for name in sorted(positions, key=len, reverse=True)) + r")(?=$|[\s，。！？、,.!?;；:：\u3400-\u9fff])"
+    # Match the editor's filename boundary, including copied Markdown/quotes,
+    # without resolving a prefix of a different filename to an attachment.
+    pattern = r"@(" + "|".join(re.escape(name) for name in sorted(positions, key=len, reverse=True)) + r")(?![A-Za-z0-9_.-])"
     def replace(match):
         indices = positions[match[1]]
         if len(indices) != 1:
