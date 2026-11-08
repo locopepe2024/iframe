@@ -41,6 +41,7 @@ export function mapDetectedFaces(front: FaceResult | undefined, side: FaceResult
         const corners: [number, number] = width(33, 133) > width(362, 263) ? [33, 133] : [362, 263];
         Object.assign(points, {
             sideEye: eyeCenter(side, corners, sideRange, verticalRange),
+            sideNoseRoot: mapped(side, 168, ...sideRange, ...verticalRange),
             sideNose: mapped(side, 1, ...sideRange, ...verticalRange),
             // 199 is on the anterior chin; 152 is the inferior chin contour.
             sideChin: mapped(side, 199, ...sideRange, ...verticalRange),

@@ -30,6 +30,11 @@ export function sideFaceGuideControls(face: FaceFitPoint[], shape: FaceShape, wi
         const nextEye = { x: manual.sideEye!.x * width, y: manual.sideEye!.y * height };
         for (const id of visible) p[id] = { x: p[id].x + nextEye.x - eye.x, y: p[id].y + nextEye.y - eye.y };
         eye = nextEye;
+        if (manual.sideNoseRoot) {
+            if (!finite(manual.sideNoseRoot) || manual.sideNoseRoot.x < 0 || manual.sideNoseRoot.x > 1
+                || manual.sideNoseRoot.y < 0 || manual.sideNoseRoot.y > 1) throw new Error("已保存的侧脸点位无效，请重新拟合并核对");
+            p[168] = { x: manual.sideNoseRoot.x * width, y: manual.sideNoseRoot.y * height };
+        }
         p[1] = { x: manual.sideNose!.x * width, y: manual.sideNose!.y * height };
         p[199] = { x: manual.sideChin!.x * width, y: manual.sideChin!.y * height };
     }

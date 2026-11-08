@@ -58,6 +58,18 @@ it("keeps root displacement finite even when the root starts on or behind the ey
         expect(after.noseRootHeight).toBeGreaterThan(before.noseRootHeight);
     }
 });
+it("uses an optional saved root point while accepting legacy three-point marks", () => {
+    const face = sideFace();
+    const legacy = { sideEye: { x: .54, y: .32 }, sideNose: { x: .29, y: .51 }, sideChin: { x: .38, y: .75 } };
+    const detected = sideFaceGuideControls(face, { ...DEFAULT_FACE_SHAPE, noseRootHeight: 110 }, 500, 600, legacy);
+    expect(detected.source[detected.indices.indexOf(168)].x).toBe(face[168].x * 500);
+
+    const manual = { ...legacy, sideNoseRoot: { x: .45, y: .33 } };
+    const corrected = sideFaceGuideControls(face, { ...DEFAULT_FACE_SHAPE, noseRootHeight: 110 }, 500, 600, manual);
+    expect(corrected.source[corrected.indices.indexOf(168)]).toEqual({ x: 225, y: 198 });
+    expect(() => sideFaceGuideControls(face, DEFAULT_FACE_SHAPE, 500, 600,
+        { ...legacy, sideNoseRoot: { x: 1.2, y: .33 } })).toThrow(/已保存/);
+});
 it("verifies actual warped texture and rejects unchanged output with a changed nose", () => {
     const width=600,height=700,c=sideFaceGuideControls(sideFace(),{...DEFAULT_FACE_SHAPE,noseProjection:110},width,height);
     const pixels=Uint8ClampedArray.from({length:width*height*4},(_,i)=>{const x=Math.floor(i/4)%width,y=Math.floor(i/4/width);return i%4===3?255:125+45*Math.sin(x*.31)+40*Math.cos(y*.27)+20*Math.sin((x+y)*.41)});

@@ -67,11 +67,12 @@ it("uses final processed detections and maps their points back to the original",
         .mockReturnValueOnce(coarse).mockReturnValueOnce(finalFace);
     const onPrepared = vi.fn();
     const marks = prepareAndMarkThreeView(sourceImage(), detect, onPrepared);
-    expect(Object.keys(marks)).toHaveLength(10);
+    expect(Object.keys(marks)).toHaveLength(11);
     expect(detect).toHaveBeenCalledTimes(4);
     const prepared = onPrepared.mock.calls[0][0];
     expect(prepared.map((p: { canvas: HTMLCanvasElement }) => [p.canvas.width, p.canvas.height])).toEqual([[512, 512], [512, 512]]);
     expect(marks.frontLeftCheek?.x).toBeCloseTo(facePointInSource(finalFace[234], prepared[0].crop, 1600, 1000).x);
+    expect(marks.sideNoseRoot?.x).toBeCloseTo(facePointInSource(finalFace[168], prepared[1].crop, 1600, 1000).x);
     expect(prepared[0].sourceFaceHeight).toBeGreaterThan(0);
 });
 
@@ -81,7 +82,7 @@ it("does not silently use coarse marks when final face detection fails", () => {
         .mockReturnValueOnce(detectedFace()).mockReturnValueOnce(detectedFace());
     const onPrepared = vi.fn();
     const marks = prepareAndMarkThreeView(sourceImage(), detect, onPrepared);
-    expect(Object.keys(marks)).toHaveLength(3);
+    expect(Object.keys(marks)).toHaveLength(4);
     expect(marks.frontLeftEye).toBeUndefined();
     expect(onPrepared.mock.calls[0][0][0].detected).toBe(false);
 });
@@ -92,7 +93,7 @@ it("relocates the full column when a head-only sheet fails the upper crop", () =
         .mockReturnValueOnce(detectedFace()).mockReturnValueOnce(detectedFace());
     const onPrepared = vi.fn();
     const marks = prepareAndMarkThreeView(sourceImage(), detect, onPrepared);
-    expect(Object.keys(marks)).toHaveLength(10);
+    expect(Object.keys(marks)).toHaveLength(11);
     expect(detect).toHaveBeenCalledTimes(6);
     expect(onPrepared.mock.calls[0][0].every((face: { detected: boolean }) => face.detected)).toBe(true);
 });
@@ -125,7 +126,8 @@ it("detects only profile points when an independent portrait supplies the front"
     const detect = vi.fn().mockReturnValue(detectedFace());
     const prepared = vi.fn();
     const points = prepareAndMarkThreeView(sourceImage(), detect, prepared, ["side"]);
-    expect(Object.keys(points)).toHaveLength(3);
+    expect(Object.keys(points)).toHaveLength(4);
+    expect(points.sideNoseRoot).toBeDefined();
     expect(points.frontLeftCheek).toBeUndefined();
     expect(detect).toHaveBeenCalledTimes(2);
     expect(prepared.mock.calls[0][0].map((face: { view: string }) => face.view)).toEqual(["side"]);
