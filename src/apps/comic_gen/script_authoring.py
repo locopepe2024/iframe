@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import hashlib
 import json
+import logging
 from pathlib import Path
 import re
 import shutil
@@ -16,6 +17,7 @@ from fastapi import HTTPException
 from .models import ScriptWritingPlanDraft
 
 _LOCK = RLock()
+logger = logging.getLogger(__name__)
 _EMPTY_DOCUMENT = {"type": "doc", "content": [{"type": "action", "content": []}]}
 
 
@@ -59,6 +61,43 @@ class ScriptAuthoringStore:
         if not directory.is_dir():
             raise HTTPException(404, "剧本文档不存在")
         return directory
+
+    def delete(self, document_id: str) -> dict:
+        """Remove a root and its owned episode documents as one library action."""
+        with _LOCK:
+            root = self.directory(document_id)
+            metadata = _read(root / "metadata.json")
+            if metadata.get("authoring_parent_id"):
+                raise HTTPException(409, "请在剧本库删除所属总纲，不能单独删除分集正文")
+            # Scan parent metadata, including empty episodes removed from an old
+            # plan. Never trust document IDs supplied by the client or plan file.
+            directories = []
+            for candidate in self.owner_directory.iterdir():
+                if candidate == root or not (candidate / "metadata.json").is_file():
+                    continue
+                if _read(candidate / "metadata.json").get("authoring_parent_id") == metadata["id"]:
+                    directories.append(candidate)
+            directories.append(root)
+            staging = self.owner_directory / f".deleted-{uuid4().hex}"
+            moved = []
+            try:
+                staging.mkdir()
+                for directory in directories:
+                    directory.rename(staging / directory.name)
+                    moved.append(directory)
+            except OSError as exc:
+                for directory in reversed(moved):
+                    (staging / directory.name).rename(directory)
+                if staging.exists():
+                    staging.rmdir()
+                raise HTTPException(500, "删除剧本失败，请重试") from exc
+            # All documents are now inaccessible through the owner UUID API.
+            # A cleanup failure must not undo a deletion after a partial purge.
+            try:
+                shutil.rmtree(staging)
+            except OSError:
+                logger.warning("Deleted screenplay files await cleanup: %s", staging.name)
+            return {"status": "deleted", "id": metadata["id"], "title": metadata["title"]}
 
     def workspace(self, document_id: str) -> dict:
         directory = self.directory(document_id)

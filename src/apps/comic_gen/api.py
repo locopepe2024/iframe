@@ -9667,6 +9667,11 @@ def load_script_document(document_id: str, user: UserContext = Depends(require_s
     return _script_document_response(_script_document_dir(user.owner_profile_id, document_id))
 
 
+@app.delete("/script-documents/{document_id}")
+def delete_script_document(document_id: str, user: UserContext = Depends(require_studio_user)):
+    return _authoring_store(user).delete(document_id)
+
+
 @app.put("/script-documents/{document_id}")
 def save_script_document(
     document_id: str,

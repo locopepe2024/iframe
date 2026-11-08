@@ -134,3 +134,40 @@ def test_owner_boundary_for_planning_analysis_and_episode_writing(client):
         assert client.post(path + '/outline-analysis', headers=headers).status_code == 404
         assert client.get(path + '/outline-analysis/jobs/test-job', headers=headers).status_code == 404
         assert client.post('/script-writing/generate', json={'script_document_id': id, 'mode': 'expand_outline', 'source_text': '文本'}, headers=headers).status_code == 404
+
+
+def test_delete_root_removes_owned_episodes_and_snapshots_only(client):
+    root, ws, _ = create_plan(client)
+    child = ws['plan']['episodes'][0]['document_id']
+    unrelated = client.post('/script-documents', json={'title': '保留剧本', 'content': content('保留正文')}).json()['id']
+    saved = client.put(f'/script-documents/{child}', json={'content': content('已写正文'), 'create_snapshot': True}).json()
+    assert saved['snapshot_created']
+    assert client.delete(f'/script-documents/{root}', headers={'Authorization': 'Bearer other'}).status_code == 404
+    assert client.delete(f'/script-documents/{child}').status_code == 409
+    assert client.get(f'/script-documents/{child}').status_code == 200
+    result = client.delete(f'/script-documents/{root}')
+    assert result.status_code == 200 and result.json()['status'] == 'deleted'
+    assert client.get(f'/script-documents/{root}').status_code == 404
+    for episode in ws['plan']['episodes']:
+        assert client.get(f"/script-documents/{episode['document_id']}").status_code == 404
+    assert client.get(f'/script-documents/{child}/snapshots').status_code == 404
+    assert client.get(f'/script-documents/{unrelated}').json()['content'] == content('保留正文')
+    assert [item['id'] for item in client.get('/script-documents').json()] == [unrelated]
+    assert client.delete(f'/script-documents/{root}').status_code == 404
+
+
+def test_failed_delete_restores_root_and_all_episode_bodies(client, monkeypatch):
+    from pathlib import Path
+    root, ws, _ = create_plan(client)
+    child = ws['plan']['episodes'][0]['document_id']
+    client.put(f'/script-documents/{child}', json={'content': content('不可丢失的正文')})
+    rename = Path.rename
+    def fail_root_move(path, destination):
+        if path.name == root and path.parent.name.startswith('.deleted-') is False:
+            raise OSError('simulated disk error')
+        return rename(path, destination)
+    monkeypatch.setattr(Path, 'rename', fail_root_move)
+    assert client.delete(f'/script-documents/{root}').status_code == 500
+    assert client.get(f'/script-documents/{root}').status_code == 200
+    assert client.get(f'/script-documents/{child}').json()['content'] == content('不可丢失的正文')
+    assert len(client.get(f'/script-documents/{root}/writing-plan').json()['plan']['episodes']) == 24
