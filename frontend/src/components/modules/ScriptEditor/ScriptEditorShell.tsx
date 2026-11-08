@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { EditorContent } from '@tiptap/react';
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X, ListPlus } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X, ListPlus, FolderPlus, Library } from 'lucide-react';
 import { api } from '@/lib/api';
 import ImportFileDialog from '@/components/series/ImportFileDialog';
 import { useEditorStore } from '@/store/editorStore';
+import { toast } from '@/store/toastStore';
 import { useEditorSetup } from './hooks/useEditorSetup';
 import FormatToolbar from './toolbar/FormatToolbar';
 import { usePasteHandler } from './hooks/usePasteHandler';
@@ -30,12 +31,14 @@ import StoryboardView from './views/StoryboardView';
 export interface ScriptEditorShellProps {
   mode?: 'full' | 'embedded' | 'focus';
   projectId?: string;
+  scriptDocumentId?: string;
   initialContent?: string | Record<string, unknown> | null;
 }
 
 export default function ScriptEditorShell({
   mode = 'full',
   projectId,
+  scriptDocumentId,
   initialContent,
 }: ScriptEditorShellProps) {
   const t = useTranslations('scriptEditor');
@@ -46,16 +49,35 @@ export default function ScriptEditorShell({
   const [seriesSourceText, setSeriesSourceText] = useState('');
   const [projectTitle, setProjectTitle] = useState('');
   const [seriesImportError, setSeriesImportError] = useState('');
-  const [documentLoading, setDocumentLoading] = useState(Boolean(projectId));
+  const [documentLoading, setDocumentLoading] = useState(Boolean(projectId || scriptDocumentId));
+  const [documentLoadFailed, setDocumentLoadFailed] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
   const { showHint, analysis, applyFormatting, dismissHint } = usePasteHandler(editor);
   const { showShortcutHelp, closeShortcutHelp } = useKeyboardShortcuts(editor);
   const continuityReport = useContinuityCheck(editor);
   const { enabled: foldingEnabled, isAllExpanded, totalScenes: foldingTotal } = useSceneFolding(editor);
   const { mode: viewMode, setMode: setViewMode, isReadOnly, showToolbar, showSidebars } = useViewMode();
-  const { hasNewerLocal, restoreFromLocal, dismissLocalRestore, isOffline } = useOfflineCache(projectId, editor);
-  const { save } = useAutoSave(editor, projectId ?? null);
+  const documentKey = scriptDocumentId || projectId;
+  const { hasNewerLocal, restoreFromLocal, dismissLocalRestore, isOffline } = useOfflineCache(documentKey, editor);
+  const canPersist = Boolean(documentKey) && !documentLoading && !documentLoadFailed;
+  const { save } = useAutoSave(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined, projectTitle);
   const refreshDerivation = useDerivation(editor);
-  useL3Completion(editor, projectId ?? null);
+  useL3Completion(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined);
+
+  const handleSaveSnapshot = useCallback(async () => {
+    const result = await save(true);
+    if (!result) {
+      toast.error(t('toolbar.saveFailed'), { body: t('toolbar.saveFailedHint') });
+      return;
+    }
+    if (result.snapshot_created) {
+      toast.success(t('toolbar.saveSuccess'));
+    } else {
+      toast.warning(t('toolbar.saveWithoutSnapshot'), {
+        body: t('toolbar.saveWithoutSnapshotHint'),
+      });
+    }
+  }, [save, t]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -81,25 +103,36 @@ export default function ScriptEditorShell({
     if (!editor) return;
     const store = useEditorStore.getState();
     store.setProjectId(projectId ?? null);
+    store.setEditorMode(mode);
+    store.setViewMode('edit');
+    store.setL3Results(null);
+    store.setL3Status('idle');
+    store.setL3LastFetchTime(null);
     let cancelled = false;
 
-    if (!projectId) {
+    if (!projectId && !scriptDocumentId) {
       setDocumentLoading(false);
       return () => { cancelled = true; };
     }
 
     setDocumentLoading(true);
+    setDocumentLoadFailed(false);
     store.setLoading(true);
-    scriptEditorApi.loadDocument(projectId)
+    (scriptDocumentId ? scriptEditorApi.loadScriptDocument(scriptDocumentId) : scriptEditorApi.loadDocument(projectId!))
       .then((response) => {
         if (cancelled) return;
+        if (response.title) setProjectTitle(response.title);
         editor.commands.setContent(response.content, { emitUpdate: false });
         refreshDerivation();
         store.setDirty(false);
         store.setLastSavedAt(response.updated_at ? new Date(response.updated_at) : null);
       })
       .catch((error) => {
-        if (!cancelled) console.error('[ScriptEditorShell] Failed to load document:', error);
+        if (!cancelled) {
+          setDocumentLoadFailed(true);
+          toast.error(t('document.loadFailed'));
+          console.error('[ScriptEditorShell] Failed to load document:', error);
+        }
       })
       .finally(() => {
         if (!cancelled) {
@@ -109,7 +142,11 @@ export default function ScriptEditorShell({
       });
 
     return () => { cancelled = true; };
-  }, [editor, projectId, refreshDerivation]);
+  }, [editor, projectId, scriptDocumentId, mode, refreshDerivation, t]);
+
+  useEffect(() => {
+    editor?.setEditable(canPersist && !isReadOnly && !creatingProject);
+  }, [editor, canPersist, isReadOnly, creatingProject]);
 
   const handleRestore = useCallback((content: object) => {
     if (!editor) return;
@@ -120,13 +157,13 @@ export default function ScriptEditorShell({
   }, [editor, refreshDerivation]);
 
   const beginSeriesImport = useCallback(async () => {
-    if (!editor || !projectId || seriesImportSaving) return;
+    if (!editor || !canPersist || seriesImportSaving) return;
     setSeriesImportError('');
     setSeriesImportSaving(true);
     try {
       const source = editor.getText({ blockSeparator: '\n' });
       if (!source.trim()) throw new Error('请先整理剧本内容');
-      await scriptEditorApi.saveDocument(projectId, editor.getJSON(), true);
+      if (!await save(true)) throw new Error(t('toolbar.saveFailed'));
       useEditorStore.getState().setDirty(false);
       useEditorStore.getState().setLastSavedAt(new Date());
       setSeriesSourceText(source);
@@ -136,7 +173,33 @@ export default function ScriptEditorShell({
     } finally {
       setSeriesImportSaving(false);
     }
-  }, [editor, projectId, seriesImportSaving]);
+  }, [editor, canPersist, seriesImportSaving, save, t]);
+
+  const handleCreateProject = useCallback(async () => {
+    if (!editor || !scriptDocumentId || !canPersist || creatingProject) return;
+    setCreatingProject(true);
+    try {
+      const content = editor.getJSON();
+      const title = projectTitle.trim() || t('document.untitled');
+      const saved = await scriptEditorApi.saveScriptDocument(scriptDocumentId, content, title);
+      useEditorStore.getState().setDirty(false);
+      useEditorStore.getState().setLastSavedAt(saved.updated_at ? new Date(saved.updated_at) : new Date());
+      const project = await api.createProject(title, editor.getText({ blockSeparator: '\n' }), true, 'r2v', undefined, scriptDocumentId);
+      window.location.hash = `#/project/${project.id}/editor`;
+    } catch (error) {
+      toast.error(t('document.createFailed'), { body: error instanceof Error ? error.message : t('toolbar.saveFailedHint') });
+    } finally {
+      setCreatingProject(false);
+    }
+  }, [editor, scriptDocumentId, canPersist, creatingProject, projectTitle, t]);
+
+  const backToLibrary = useCallback(async () => {
+    if (useEditorStore.getState().isDirty && !await save(false)) {
+      toast.error(t('toolbar.saveFailed'));
+      return;
+    }
+    window.location.hash = '#/studio/editor';
+  }, [save, t]);
 
   const showLeft = mode === 'full' && !leftCollapsed && showSidebars;
   const showRight = mode === 'full' && !rightCollapsed && showSidebars;
@@ -169,9 +232,9 @@ export default function ScriptEditorShell({
           editor={editor}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
-          onSave={() => { void save(true); }}
+          onSave={() => { void handleSaveSnapshot(); }}
           onOpenHistory={() => setHistoryOpen(true)}
-          canPersist={Boolean(projectId) && !documentLoading}
+          canPersist={canPersist}
         />
       )}
 
@@ -192,12 +255,35 @@ export default function ScriptEditorShell({
             <span className="text-sm font-medium text-foreground">
               {t('shell.title')}
             </span>
-            {projectId && (
-              <span className="text-xs text-text-muted">{projectId}</span>
+            {projectId && <span className="text-xs text-text-muted">{t('document.production')} · {projectTitle}</span>}
+            {scriptDocumentId && (
+              <label className="flex items-center gap-2 text-xs text-text-muted">
+                <span>{t('document.authoring')}</span>
+                <input aria-label={t('document.title')} value={projectTitle} disabled={!canPersist || creatingProject}
+                  onChange={(event) => {
+                    setProjectTitle(event.target.value);
+                    useEditorStore.getState().setDirty(true);
+                  }}
+                  className="h-7 w-48 rounded border border-white/10 bg-transparent px-2 text-sm text-foreground outline-none focus:border-primary/60"
+                  maxLength={160} />
+              </label>
             )}
           </div>
           <div className="flex items-center gap-3">
-            {projectId && editor && !documentLoading && (
+            {scriptDocumentId && editor && !documentLoading && (
+              <>
+                <button type="button" onClick={() => { void backToLibrary(); }} disabled={creatingProject}
+                  className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50">
+                  <Library size={14} /> {t('document.library')}
+                </button>
+                <button type="button" onClick={() => { void handleCreateProject(); }}
+                  disabled={!canPersist || creatingProject || wordCount === 0}
+                  className="flex items-center gap-1 rounded border border-primary/50 bg-primary/15 px-2 py-1 text-xs text-foreground hover:bg-primary/25 disabled:opacity-50">
+                  <FolderPlus size={14} /> {t(creatingProject ? 'document.creating' : 'document.createProject')}
+                </button>
+              </>
+            )}
+            {documentKey && editor && canPersist && (
               <button type="button" onClick={() => { void beginSeriesImport(); }}
                 disabled={seriesImportSaving}
                 className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10"
@@ -309,6 +395,10 @@ export default function ScriptEditorShell({
               editor={editor}
               mode={mode}
               projectId={projectId}
+              onEnterPipeline={() => {
+                if (projectId) { window.location.hash = `#/project/${projectId}`; }
+                else { void handleCreateProject(); }
+              }}
             />
           </aside>
         )}
@@ -353,6 +443,14 @@ export default function ScriptEditorShell({
           open={historyOpen}
           onClose={() => setHistoryOpen(false)}
           projectId={projectId}
+          onRestore={handleRestore}
+        />
+      )}
+      {scriptDocumentId && (
+        <SnapshotListDialog
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          documentId={scriptDocumentId}
           onRestore={handleRestore}
         />
       )}

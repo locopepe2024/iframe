@@ -3,9 +3,8 @@
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { motion } from 'framer-motion';
-import { Film, TreePine, Search } from 'lucide-react';
+import { TreePine, Search } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
-import SceneNavigator from './SceneNavigator';
 import OutlineView from './OutlineView';
 import SearchPanel from './SearchPanel';
 
@@ -14,14 +13,13 @@ export interface LeftSidebarProps {
   collapsed?: boolean;
 }
 
-type SidebarTab = 'scenes' | 'outline' | 'search';
+type SidebarTab = 'outline' | 'search';
 
 export default function LeftSidebar({ editor, collapsed = false }: LeftSidebarProps) {
   const t = useTranslations('scriptEditor');
-  const [activeTab, setActiveTab] = useState<SidebarTab>('scenes');
+  const [activeTab, setActiveTab] = useState<SidebarTab>('outline');
 
   const TABS: { id: SidebarTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'scenes', label: t('sidebar.scenes'), icon: <Film size={16} /> },
     { id: 'outline', label: t('sidebar.outline'), icon: <TreePine size={16} /> },
     { id: 'search', label: t('sidebar.search'), icon: <Search size={16} /> },
   ];
@@ -79,7 +77,6 @@ export default function LeftSidebar({ editor, collapsed = false }: LeftSidebarPr
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'scenes' && <SceneNavigator editor={editor} />}
         {activeTab === 'outline' && <OutlineView editor={editor} />}
         {activeTab === 'search' && <SearchPanel editor={editor} />}
       </div>

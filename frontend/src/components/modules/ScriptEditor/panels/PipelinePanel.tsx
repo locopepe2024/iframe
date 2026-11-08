@@ -86,7 +86,7 @@ export default function PipelinePanel({ projectId, onEnterPipeline }: PipelinePa
           onClick={onEnterPipeline}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-purple-900/30 hover:shadow-purple-900/50 transition-shadow"
         >
-          {t('panels.enterPipeline')}
+          {t(projectId ? 'panels.enterPipeline' : 'document.createProject')}
           <ArrowRight size={16} />
         </motion.button>
       )}

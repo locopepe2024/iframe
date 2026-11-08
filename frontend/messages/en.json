@@ -3117,6 +3117,24 @@
     }
   },
   "scriptEditor": {
+    "document": {
+      "production": "Production draft",
+      "authoring": "Authoring script",
+      "title": "Script title",
+      "untitled": "Untitled script",
+      "library": "Script library",
+      "new": "New script",
+      "import": "Import script",
+      "refresh": "Refresh scripts",
+      "listFailed": "Could not load the script library",
+      "newFailed": "Could not create the script",
+      "loading": "Loading…",
+      "empty": "No scripts yet",
+      "createProject": "Create project",
+      "creating": "Creating…",
+      "createFailed": "Project creation failed",
+      "loadFailed": "The script could not be loaded. Return to the library and try again."
+    },
     "shell": {
       "title": "Script Editor",
       "loading": "Loading editor..."
@@ -3128,6 +3146,11 @@
       "redo": "Redo",
       "ai": "AI Tools",
       "save": "Save snapshot",
+      "saveSuccess": "Snapshot saved",
+      "saveFailed": "Snapshot save failed",
+      "saveFailedHint": "Check your network connection and try again.",
+      "saveWithoutSnapshot": "Document saved without a snapshot",
+      "saveWithoutSnapshotHint": "This was the first save. Save again to create a snapshot.",
       "history": "Version history",
       "view": "View",
       "export": "Export"
@@ -3144,6 +3167,7 @@
       "cjk_ja": "Japanese (Mincho)"
     },
     "panels": {
+      "entities": "Entities",
       "characters": "Characters",
       "shots": "Shots",
       "pipeline": "Pipeline",
@@ -3234,7 +3258,8 @@
       "resultsCount": "{count} results",
       "actLabel": "Act {number}",
       "sceneLabel": "Scene {number}",
-      "noOutline": "No outline structure yet"
+      "noOutline": "No outline structure yet",
+      "addScene": "New scene"
     },
     "views": {
       "edit": "Edit",

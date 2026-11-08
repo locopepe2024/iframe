@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { Editor } from '@tiptap/react';
-import { scriptEditorApi } from '@/lib/scriptEditorApi';
+import { scriptEditorApi, type SaveDocumentResponse } from '@/lib/scriptEditorApi';
 import { useEditorStore } from '@/store/editorStore';
 
 const AUTOSAVE_INTERVAL_MS = 30_000; // 30 seconds
@@ -11,31 +11,45 @@ const AUTOSAVE_INTERVAL_MS = 30_000; // 30 seconds
  * - Cmd+S / Ctrl+S 手动保存 + 创建快照
  * - beforeunload 事件拦截（离开页面前提醒保存）
  */
-export function useAutoSave(editor: Editor | null, projectId: string | null) {
-  const { isDirty, setDirty, setLastSavedAt } = useEditorStore();
-  const isSavingRef = useRef(false);
+export function useAutoSave(editor: Editor | null, projectId: string | null, documentId?: string, title?: string) {
+  const { setDirty, setLastSavedAt } = useEditorStore();
+  const pendingSaveRef = useRef<Promise<SaveDocumentResponse | null>>(Promise.resolve(null));
+  const mountedRef = useRef(true);
+  const latestTitleRef = useRef(title);
+  latestTitleRef.current = title;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // 核心保存逻辑
   const save = useCallback(
-    async (createSnapshot = false) => {
-      if (!editor || !projectId) return;
-      if (isSavingRef.current) return;
+    (createSnapshot = false): Promise<SaveDocumentResponse | null> => {
+      const operation = pendingSaveRef.current.then(async () => {
+        if (!editor || editor.isDestroyed || (!projectId && !documentId)) return null;
+        const content = editor.getJSON();
 
-      const content = editor.getJSON();
-      isSavingRef.current = true;
-
-      try {
-        await scriptEditorApi.saveDocument(projectId, content, createSnapshot);
-        setDirty(false);
-        setLastSavedAt(new Date());
-      } catch (err) {
-        console.error('[useAutoSave] Save failed:', err);
-      } finally {
-        isSavingRef.current = false;
-      }
+        try {
+          const result = documentId
+            ? await scriptEditorApi.saveScriptDocument(documentId, content, title, createSnapshot)
+            : await scriptEditorApi.saveDocument(projectId!, content, createSnapshot);
+          // Edits made while the request was in flight still need another save.
+          if (mountedRef.current && !editor.isDestroyed) {
+            if (latestTitleRef.current === title && JSON.stringify(editor.getJSON()) === JSON.stringify(content)) setDirty(false);
+            setLastSavedAt(new Date());
+          }
+          return result;
+        } catch (err) {
+          console.error('[useAutoSave] Save failed:', err);
+          return null;
+        }
+      });
+      pendingSaveRef.current = operation;
+      return operation;
     },
-    [editor, projectId, setDirty, setLastSavedAt]
+    [editor, projectId, documentId, title, setDirty, setLastSavedAt]
   );
 
   // 30s 周期自动保存
@@ -72,21 +86,13 @@ export function useAutoSave(editor: Editor | null, projectId: string | null) {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (useEditorStore.getState().isDirty) {
         e.preventDefault();
-        // 尝试在卸载前保存
-        if (editor && projectId) {
-          const content = editor.getJSON();
-          // 使用 sendBeacon 或同步请求不可靠，这里仅做拦截提醒
-          navigator.sendBeacon?.(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:17177'}/projects/${projectId}/document`,
-            JSON.stringify({ content, create_snapshot: false })
-          );
-        }
+        e.returnValue = '';
       }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [editor, projectId]);
+  }, []);
 
   return { save };
 }

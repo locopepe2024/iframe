@@ -9,7 +9,8 @@ import { scriptEditorApi, SnapshotResponse } from '@/lib/scriptEditorApi';
 export interface SnapshotListDialogProps {
   open: boolean;
   onClose: () => void;
-  projectId: string;
+  projectId?: string;
+  documentId?: string;
   onRestore: (content: any) => void;
 }
 
@@ -46,6 +47,7 @@ export default function SnapshotListDialog({
   open,
   onClose,
   projectId,
+  documentId,
   onRestore,
 }: SnapshotListDialogProps) {
   const t = useTranslations('scriptEditor');
@@ -56,10 +58,9 @@ export default function SnapshotListDialog({
 
   // Fetch snapshots when dialog opens
   useEffect(() => {
-    if (!open || !projectId) return;
+    if (!open || (!projectId && !documentId)) return;
     setLoading(true);
-    scriptEditorApi
-      .listSnapshots(projectId)
+    (documentId ? scriptEditorApi.listScriptDocumentSnapshots(documentId) : scriptEditorApi.listSnapshots(projectId!))
       .then((list) => {
         // Sort by created_at descending (newest first)
         const sorted = [...list].sort(
@@ -71,13 +72,15 @@ export default function SnapshotListDialog({
         console.error('[SnapshotListDialog] Failed to load snapshots:', err);
       })
       .finally(() => setLoading(false));
-  }, [open, projectId]);
+  }, [open, projectId, documentId]);
 
   const handleRestore = useCallback(
     async (timestamp: string) => {
       setRestoring(true);
       try {
-        const result = await scriptEditorApi.restoreSnapshot(projectId, timestamp);
+        const result = documentId
+          ? await scriptEditorApi.restoreScriptDocumentSnapshot(documentId, timestamp)
+          : await scriptEditorApi.restoreSnapshot(projectId!, timestamp);
         onRestore(result.content);
         onClose();
       } catch (err) {
@@ -87,7 +90,7 @@ export default function SnapshotListDialog({
         setConfirmingTimestamp(null);
       }
     },
-    [projectId, onRestore, onClose]
+    [projectId, documentId, onRestore, onClose]
   );
 
   if (!open) return null;

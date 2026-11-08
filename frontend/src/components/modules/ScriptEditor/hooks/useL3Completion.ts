@@ -24,7 +24,7 @@ const CONFIDENCE_THRESHOLD = 0.7;
  * - L3 失败不阻塞编辑流
  * - 结果缓存 5 分钟，避免频繁调用
  */
-export function useL3Completion(editor: Editor | null, projectId: string | null) {
+export function useL3Completion(editor: Editor | null, projectId: string | null, scriptDocumentId?: string) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -42,7 +42,7 @@ export function useL3Completion(editor: Editor | null, projectId: string | null)
    */
   const shouldFetch = useCallback((): boolean => {
     // 无 projectId → 不触发
-    if (!projectId) return false;
+    if (!projectId && !scriptDocumentId) return false;
 
     // 已经在 loading → 不重复触发
     if (l3Status === 'loading') return false;
@@ -54,13 +54,13 @@ export function useL3Completion(editor: Editor | null, projectId: string | null)
     if (l3LastFetchTime && Date.now() - l3LastFetchTime < CACHE_TTL_MS) return false;
 
     return true;
-  }, [projectId, l3Status, confidenceScore, l3LastFetchTime]);
+  }, [projectId, scriptDocumentId, l3Status, confidenceScore, l3LastFetchTime]);
 
   /**
    * 执行 L3 请求
    */
   const fetchL3 = useCallback(async () => {
-    if (!shouldFetch() || !projectId) return;
+    if (!shouldFetch() || (!projectId && !scriptDocumentId)) return;
 
     // 取消之前的请求
     if (abortRef.current) {
@@ -76,10 +76,11 @@ export function useL3Completion(editor: Editor | null, projectId: string | null)
         characters: derivedCharacters.map((c) => c.name),
       };
 
-      const response = await scriptEditorApi.deriveGaps(projectId, {
+      const response = await scriptEditorApi.deriveGaps(projectId || '', {
         already_extracted: alreadyExtracted,
         gaps: ['props', 'beats', 'locations'],
-      });
+        raw_text_blocks: editor?.getText({ blockSeparator: '\n' }).split('\n'),
+      }, scriptDocumentId);
 
       // 请求成功
       // Backend names this field `entities`; accept `results` too so the
@@ -98,6 +99,8 @@ export function useL3Completion(editor: Editor | null, projectId: string | null)
   }, [
     shouldFetch,
     projectId,
+    scriptDocumentId,
+    editor,
     derivedScenes,
     derivedCharacters,
     setL3Status,

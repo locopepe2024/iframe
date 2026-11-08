@@ -35,6 +35,7 @@ const DirectorWorkbench = dynamic(() => import("@/components/director3d/Director
   loading: () => <div className="grid h-full place-items-center text-sm text-text-secondary" role="status">正在加载 3D 导演台…</div>,
 });
 const ScriptEditorShell = dynamic(() => import("@/components/modules/ScriptEditor/ScriptEditorShell"), { ssr: false });
+const ScriptDocumentLibrary = dynamic(() => import("@/components/modules/ScriptEditor/ScriptDocumentLibrary"), { ssr: false });
 
 // ── Create Series Dialog ──
 function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -471,13 +472,14 @@ export default function Home() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
   const [openSeriesMenuId, setOpenSeriesMenuId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'editing' | 'director3d' | 'studio/editor' | 'project-editor'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'editing' | 'director3d' | 'studio/editor' | 'script-document-editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
   const [wsStatus, setWsStatus] = useState<DerivedStatus | "all">("all");
   const [viewMode, setViewMode] = useState<"gallery" | "list">("gallery");
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [scriptDocumentId, setScriptDocumentId] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [standaloneDirectorMindMap, setStandaloneDirectorMindMap] = useState(false);
@@ -628,7 +630,18 @@ export default function Home() {
         setStandaloneDirectorMindMap(false);
         return;
       }
+      const scriptDocumentMatch = hash.match(/^#\/studio\/editor\/([^/?]+)$/);
+      if (scriptDocumentMatch) {
+        setScriptDocumentId(scriptDocumentMatch[1]);
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        setCurrentView('script-document-editor');
+        setActiveTab('editor' as GlobalTab);
+        return;
+      }
       if (hash === '#/studio/editor') {
+        setScriptDocumentId(null);
         setCurrentView('studio/editor');
         setActiveTab('editor' as GlobalTab);
         setProjectId(null);
@@ -801,10 +814,13 @@ export default function Home() {
       return <ImageEditorPage />;
     }
     if (currentView === 'studio/editor') {
-      return <ScriptEditorShell mode="full" />;
+      return <ScriptDocumentLibrary />;
+    }
+    if (currentView === 'script-document-editor' && scriptDocumentId) {
+      return <ScriptEditorShell key={`script:${scriptDocumentId}`} mode="full" scriptDocumentId={scriptDocumentId} />;
     }
     if (currentView === 'project-editor' && projectId) {
-      return <ScriptEditorShell mode="embedded" projectId={projectId} />;
+      return <ScriptEditorShell key={`project:${projectId}`} mode="full" projectId={projectId} />;
     }
 
     // Workspace view — Line B skeleton

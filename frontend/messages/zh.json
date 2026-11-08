@@ -3117,6 +3117,24 @@
     }
   },
   "scriptEditor": {
+    "document": {
+      "production": "制作稿",
+      "authoring": "创作稿",
+      "title": "剧本标题",
+      "untitled": "未命名剧本",
+      "library": "剧本库",
+      "new": "新建剧本",
+      "import": "导入剧本",
+      "refresh": "刷新剧本列表",
+      "listFailed": "剧本列表加载失败",
+      "newFailed": "新建剧本失败",
+      "loading": "正在加载…",
+      "empty": "还没有剧本",
+      "createProject": "创建项目",
+      "creating": "正在创建…",
+      "createFailed": "创建项目失败",
+      "loadFailed": "剧本加载失败，请返回剧本库重试。"
+    },
     "shell": {
       "title": "剧本编辑器",
       "loading": "编辑器加载中..."
@@ -3128,6 +3146,11 @@
       "redo": "重做",
       "ai": "AI 工具",
       "save": "保存快照",
+      "saveSuccess": "快照已保存",
+      "saveFailed": "快照保存失败",
+      "saveFailedHint": "请检查网络连接后重试。",
+      "saveWithoutSnapshot": "文档已保存，但没有生成快照",
+      "saveWithoutSnapshotHint": "这是该文档的首次保存，请再次点击保存快照。",
       "history": "版本历史",
       "view": "视图",
       "export": "导出"
@@ -3144,6 +3167,7 @@
       "cjk_ja": "日本語 (明朝)"
     },
     "panels": {
+      "entities": "实体",
       "characters": "角色",
       "shots": "镜头",
       "pipeline": "管线",
@@ -3234,7 +3258,8 @@
       "resultsCount": "{count} 个结果",
       "actLabel": "幕 {number}",
       "sceneLabel": "场景 {number}",
-      "noOutline": "暂无大纲结构"
+      "noOutline": "暂无大纲结构",
+      "addScene": "新建场景"
     },
     "views": {
       "edit": "编辑",
