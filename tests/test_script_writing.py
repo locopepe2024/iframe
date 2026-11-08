@@ -93,3 +93,35 @@ def test_script_writing_endpoint_rejects_foreign_project(monkeypatch):
         api.app.dependency_overrides.pop(api.require_studio_user, None)
 
     assert response.status_code == 404
+
+
+def test_writing_http_routes_receive_authenticated_owner_context(tmp_path, monkeypatch):
+    from pathlib import Path
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+
+    owner = UserContext("writer", "writer-profile", "Writer", "")
+    other = UserContext("other", "other-profile", "Other", "")
+    monkeypatch.setattr(api, "_TRON_SCRIPT_DOCUMENTS_DIR", Path(tmp_path) / "documents")
+    monkeypatch.setattr(api, "_resolve_request_context", lambda auth, *_: (
+        other if auth == "Bearer other" else owner, False,
+    ))
+    seen = []
+
+    def start(profile, resource, _fingerprint, _work, **_kwargs):
+        seen.append((profile, resource))
+        return {"id": "job-http", "status": "running"}
+
+    monkeypatch.setattr(api.extraction_jobs, "start", start)
+    monkeypatch.setattr(api.extraction_jobs, "get", lambda profile, resource, job: {
+        "id": job, "status": "completed", "result": {"draft": profile + resource},
+    })
+    client = TestClient(api.app)
+    document = client.post("/script-documents", json={"title": "大纲"}).json()
+    payload = {"script_document_id": document["id"], "mode": "expand_outline", "source_text": "女孩出发。"}
+    assert client.post("/script-writing/generate", json=payload).status_code == 202
+    assert seen == [(owner.owner_profile_id, "script-writing:document:" + document["id"])]
+    assert client.post("/script-writing/generate", json=payload, headers={"Authorization": "Bearer other"}).status_code == 404
+    job = client.get("/script-writing/jobs/job-http", params={"script_document_id": document["id"]})
+    assert job.status_code == 200
+    assert job.json()["result"]["draft"].startswith(owner.owner_profile_id)

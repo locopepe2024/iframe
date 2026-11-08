@@ -495,6 +495,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path.startswith("/projects/")
         or path == "/script-documents"
         or path.startswith("/script-documents/")
+        or path.startswith("/script-writing/")
         or path == "/series"
         or path.startswith("/series/")
         or path.startswith("/recreation/")
