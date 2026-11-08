@@ -234,6 +234,22 @@ it("requires both independent photos, saves crop provenance and restores sources
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
     expect(onSaved.mock.calls[1][2].calibration.landmarks.sideNoseRoot).toEqual({ x: .19, y: .35 });
     expect(onSaved.mock.calls[1][2].noseBridgeHeight).toBe(shape.noseBridgeHeight);
+    const root = screen.getByLabelText("鼻根前突");
+    expect(root).toHaveAttribute("min", "50");
+    expect(root).toHaveAttribute("max", "150");
+    expect(screen.getByLabelText("鼻梁高度")).toHaveAttribute("min", "90");
+    expect(screen.getByLabelText("鼻梁高度")).toHaveAttribute("max", "110");
+    for (const [index, value] of [[0, 50], [1, 150]]) {
+        fireEvent.change(root, { target: { value: String(value) } });
+        fireEvent.click(screen.getByRole("checkbox", { name: /已核对正面与侧面白模及同一角色身份/ }));
+        fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
+        await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(index + 3));
+        const saved = onSaved.mock.calls[index + 2][2];
+        expect(saved).toEqual({ ...shape, noseRootHeight: value, calibration: { ...shape.calibration,
+            landmarks: { ...shape.calibration.landmarks, sideNoseRoot: { x: .19, y: .35 } } } });
+        view.rerender(<WhiteFaceModel characterName="苏砚" initialShape={saved} onSaved={onSaved} />);
+        expect(screen.getByLabelText("鼻根前突")).toHaveValue(String(value));
+    }
     fireEvent.click(screen.getByRole("button", { name: "correct front" }));
     expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
     expect(screen.getByRole("checkbox", { name: /已核对正面与侧面白模及同一角色身份/ })).toBeDisabled();

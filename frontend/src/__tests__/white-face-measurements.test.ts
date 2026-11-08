@@ -66,7 +66,7 @@ it("measures nasal-root projection independently and keeps legacy calibrated sha
     expect(root.label).toBe("鼻根前突");
     expect(root.unit).toBe("position");
     expect(root.target).toBeGreaterThan(0);
-    for (const value of [75, 125]) for (const m of faceShapeMeasurements({ ...DEFAULT_FACE_SHAPE, noseRootHeight: value })) {
+    for (const value of [50, 75, 125, 150]) for (const m of faceShapeMeasurements({ ...DEFAULT_FACE_SHAPE, noseRootHeight: value })) {
         if (m.key !== "noseRootHeight") expect(m.target).toBe(m.baseline);
     }
 
