@@ -192,7 +192,13 @@ class ScriptAuthoringStore:
         outline = (f"第 {selected} 集《{episode['title']}》\n本集大纲：{episode['outline']}\n"
                    f"开场状态：{episode['opening_state']}\n结尾状态：{episode['ending_state']}\n"
                    f"出场人物：{episode['characters']}")
+        if episode.get("source_excerpt"):
+            outline += "\n本集原文素材（保留对白、动作和情感节点）：\n" + episode["source_excerpt"]
         body = document_text(_read(self.directory(document_id) / "document.json"))
+        effective_mode = "expand_outline" if not body.strip() else mode
+        reference = ("\n原始总纲参考（仅提取属于当前第 " + str(selected) +
+                     " 集的细节与共用设定，不写其他集剧情；用户确认的规划优先）：\n<original_outline>\n" +
+                     workspace["source_text"] + "\n</original_outline>")
         previous_context = ""
         if selected > 1:
             previous = plan["episodes"][selected - 2]
@@ -200,8 +206,9 @@ class ScriptAuthoringStore:
             previous_context = (f"上一集《{previous['title']}》已保存正文结尾：\n{previous_body[-2400:]}"
                                 if previous_body.strip() else
                                 f"上一集尚无正文，以下仅为已确认规划的结尾：{previous['ending_state']}")
-        return {"title": episode["title"], "source_text": outline if mode == "expand_outline" else body,
-                "series_context": series_context + "\n本集已确认规划：\n" + outline,
+        return {"title": episode["title"], "source_text": outline if effective_mode == "expand_outline" else body,
+                "mode": effective_mode,
+                "series_context": series_context + "\n本集已确认规划：\n" + outline + reference,
                 "previous_episode_context": previous_context,
                 "episode_number": selected, "plan_revision": plan["revision"]}
 
@@ -213,6 +220,8 @@ def analyze_outline(llm: Any, text: str) -> dict:
             "你是剧本写作规划助手。解析用户的全剧总纲，提取已确定的世界观、叙事风格、视角、人物和创作约束，"
             "整理完整分集目录。当前是写作阶段，不做导演分析、分镜、镜头时长或资产生成。"
             "保留原文既定集数、每集标题、关键事件、人物动机和结尾，不把总纲当成第一集正文。"
+            "source_excerpt保留属于本集的原文段落、具体动作、对白、恋爱或情绪节点与信物，不能仅用一句摘要代替。"
+            "共用人物与世界观归入全局设定；同一角色的两集情节必须按集数分别归属，不把第二集破局写入第一集。"
             "原文有24集就输出全部24集，不能只输出第一集或把两集合为一集。"
             "缺失设定留空并写入missing_information；补充建议仅放suggestions，不混入已确认事实。"
             "target_word_count默认2000，仅在原文明确单集字数时覆盖，不从分钟换算。"

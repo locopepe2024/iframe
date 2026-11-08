@@ -3420,6 +3420,7 @@ class ScriptEpisodeOutline(BaseModel):
     opening_state: str = Field(default="", max_length=4000)
     ending_state: str = Field(default="", max_length=4000)
     characters: str = Field(default="", max_length=4000)
+    source_excerpt: str = Field(default="", max_length=16000, description="本集原文素材，保留既有对白、情感节点、动作及信物")
     target_word_count: int = Field(default=2000, ge=100, le=20000)
 
 

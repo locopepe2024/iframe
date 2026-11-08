@@ -121,7 +121,12 @@ def test_writing_resolves_selected_title_globals_and_saved_previous_body(client,
     prompt = calls[-1]['messages'][1]['content']
     assert '上一集真正结尾' in prompt and '尚无正文' not in prompt
     continued = client.post('/script-writing/generate', json={'script_document_id': second, 'mode': 'continue', 'source_text': '伪造正文'})
-    assert continued.status_code == 422  # Empty saved body cannot be continued.
+    assert continued.status_code == 202
+    assert continued.json()['result']['mode'] == 'expand_outline'
+    client.put(f'/script-documents/{second}', json={'content': content('第二集已有正文结尾')})
+    continued = client.post('/script-writing/generate', json={'script_document_id': second, 'mode': 'continue', 'source_text': '伪造正文'})
+    assert continued.json()['result']['mode'] == 'continue'
+    assert '第二集已有正文结尾' in calls[-1]['messages'][1]['content']
 
 
 def test_owner_boundary_for_planning_analysis_and_episode_writing(client):
@@ -172,3 +177,25 @@ def test_failed_delete_restores_root_and_all_episode_bodies(client, monkeypatch)
     assert client.get(f'/script-documents/{root}').status_code == 200
     assert client.get(f'/script-documents/{child}').json()['content'] == content('不可丢失的正文')
     assert len(client.get(f'/script-documents/{root}/writing-plan').json()['plan']['episodes']) == 24
+
+
+def test_episode_original_dialogue_and_emotional_beats_reach_writing_prompt(client, monkeypatch):
+    from src.apps.comic_gen import api
+    original = '第2集：你故意输掉一局。她挥拳瞬间，你抬起流血的掌心。你说：“这个梦里的血是假的，但你在抖，是真的。”恋爱节点：她抓住你的衣襟，声音变成哀求。'
+    root = client.post('/script-documents', json={'title': '完整总纲', 'content': content(original)}).json()['id']
+    ws = client.get(f'/script-documents/{root}/writing-plan').json()
+    draft = plan(2)
+    draft['episodes'][1]['source_excerpt'] = original
+    saved = client.put(f'/script-documents/{root}/writing-plan', json={'draft': draft, 'source_hash': ws['source_hash']}).json()
+    child = saved['plan']['episodes'][1]['document_id']
+    assert client.get(f'/script-documents/{child}/writing-plan').json()['plan']['episodes'][1]['source_excerpt'] == original
+    calls = []
+    monkeypatch.setattr(api.pipeline.script_processor.llm, 'chat', lambda **kw: calls.append(kw) or '本集正文')
+    result = client.post('/script-writing/generate', json={'script_document_id': child, 'mode': 'continue', 'source_text': '空白占位'})
+    assert result.status_code == 202 and result.json()['result']['mode'] == 'expand_outline'
+    prompt = calls[-1]['messages'][1]['content']
+    assert original in prompt and '本集原文素材' in prompt
+    assert '开场状态' in prompt and '结尾状态' in prompt
+    assert '不写其他集剧情' in prompt
+    assert client.get(f'/script-documents/{root}').json()['content'] == content(original)
+    assert document_text(client.get(f'/script-documents/{child}').json()['content']) == ''

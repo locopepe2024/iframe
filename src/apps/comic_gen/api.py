@@ -9533,7 +9533,7 @@ def start_script_writing(
             title = context["title"]
             series_context = context["series_context"]
             previous_context = context["previous_episode_context"]
-            request = request.model_copy(update={"source_text": context["source_text"]})
+            request = request.model_copy(update={"source_text": context["source_text"], "mode": context["mode"]})
         resource_key = "document:" + (request.script_document_id or "")
 
     if not request.source_text.strip():
