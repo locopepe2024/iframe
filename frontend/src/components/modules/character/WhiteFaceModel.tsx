@@ -109,9 +109,9 @@ export default function WhiteFaceModel({ characterName, initialShape, portraitSo
     const pairKey = JSON.stringify(pair);
     const calibrationCurrent = !!(shape.calibration?.referencePair && pair
         && JSON.stringify(shape.calibration.referencePair) === pairKey
-        && FACE_FIT_MARKS.every(([key]) => fitPoints[key]
+        && FACE_FIT_MARKS.every(([key]) => key === "sideNoseRoot" || (fitPoints[key]
             && fitPoints[key]?.x === shape.calibration?.landmarks[key]?.x
-            && fitPoints[key]?.y === shape.calibration?.landmarks[key]?.y));
+            && fitPoints[key]?.y === shape.calibration?.landmarks[key]?.y)));
     const referenceDraft = !!(front || side) && (!initialPair || JSON.stringify(initialPair) !== pairKey
         || FACE_FIT_MARKS.some(([key]) => fitPoints[key]?.x !== initialShape?.calibration?.landmarks[key]?.x
             || fitPoints[key]?.y !== initialShape?.calibration?.landmarks[key]?.y));
@@ -176,7 +176,8 @@ export default function WhiteFaceModel({ characterName, initialShape, portraitSo
         setSavedShape("");
         setError("");
         try {
-            const savedShape = shape.calibration ? { ...shape, calibration: { ...shape.calibration, reviewed: fitReviewed } } : shape;
+            const savedShape = shape.calibration ? { ...shape, calibration: { ...shape.calibration, reviewed: fitReviewed,
+                landmarks: { ...shape.calibration.landmarks, ...fitPoints } } } : shape;
             const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("无法导出白模图")), "image/png"));
             const uploaded = await api.uploadLibraryImage(new File([blob], "white-face-reference.png", { type: "image/png" }));
             const asset = await api.createLibraryAsset("prop", {
@@ -220,10 +221,10 @@ export default function WhiteFaceModel({ characterName, initialShape, portraitSo
                     portrait={portraitSource ? { asset_type: "character", asset_id: portraitSource.assetId, variant_id: portraitSource.variantId,
                         source_scope: portraitSource.scope, source_container_id: portraitSource.containerId } : undefined}
                     points={fitPoints} onBusy={setFrontBusy} onChange={(reference, points) => referenceChange("front", reference, points)}
-                    onMark={(key, point) => { setFitPoints(current => ({ ...current, [key]: point })); setFitReviewed(false); }} />
+                    onMark={(key, point) => { setFitPoints(current => ({ ...current, [key]: point })); if (key !== "sideNoseRoot") setFitReviewed(false); }} />
                 <FacePhotoInput view="side" characterName={characterName} initial={initialPair?.side} points={fitPoints}
                     onBusy={setSideBusy} onChange={(reference, points) => referenceChange("side", reference, points)}
-                    onMark={(key, point) => { setFitPoints(current => ({ ...current, [key]: point })); setFitReviewed(false); }} />
+                    onMark={(key, point) => { setFitPoints(current => ({ ...current, [key]: point })); if (key !== "sideNoseRoot") setFitReviewed(false); }} />
             </div>
             <button type="button" disabled={detecting || !front || !side || !meshData} onClick={fit} className="min-h-11 rounded border border-glass-border px-3 text-xs disabled:opacity-50">拟合白模</button>
             {shape.calibration && <div className="space-y-2 text-xs text-text-secondary">

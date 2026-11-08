@@ -6,12 +6,13 @@ export const FACE_FIT_MARKS = [
     ["frontLeftJaw", "正面画面左下颌"], ["frontRightJaw", "正面画面右下颌"],
     ["frontLeftEye", "正面画面左眼中心"], ["frontRightEye", "正面画面右眼中心"],
     ["frontChin", "正面下巴最低点"], ["sideEye", "侧面眼中心"],
-    ["sideNose", "侧面鼻尖"], ["sideChin", "侧面下巴前端"],
+    ["sideNoseRoot", "侧面鼻根（山根）"], ["sideNose", "侧面鼻尖"], ["sideChin", "侧面下巴前端"],
 ] as const;
 
 export type FaceFitMark = typeof FACE_FIT_MARKS[number][0];
+export type RequiredFaceFitMark = Exclude<FaceFitMark, "sideNoseRoot">;
 export type FaceFitPoint = { x: number; y: number };
-export type FaceFitLandmarks = Record<FaceFitMark, FaceFitPoint>;
+export type FaceFitLandmarks = Record<RequiredFaceFitMark, FaceFitPoint> & Partial<Pick<Record<FaceFitMark, FaceFitPoint>, "sideNoseRoot">>;
 export const FACE_FIT_LANDMARK_CONVENTION = "eye-center-chin-front.v2";
 export const FACE_FIT_OBJECTIVE = "ratios-and-heights.v1";
 export type FitHeightMetric = "cheekHeight" | "jawHeight" | "noseTipHeight";
@@ -42,6 +43,7 @@ export function imageFaceMetrics(points: FaceFitLandmarks, imageAspect: FaceFitI
     if (aspects.some(aspect => !Number.isFinite(aspect) || aspect <= 0)) throw new Error("参考图尺寸无效");
     for (const [key] of FACE_FIT_MARKS) {
         const point = points[key];
+        if (key === "sideNoseRoot" && !point) continue;
         if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)
             || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) {
             throw new Error(`面部标记点无效：${key}`);
@@ -82,7 +84,7 @@ export const FACE_MESH_LANDMARK_VERTICES = {
     frontLeftCheek: [269], frontRightCheek: [7038],
     frontLeftJaw: [894], frontRightJaw: [7596],
     frontLeftEye: [70, 86], frontRightEye: [6854, 6870],
-    frontChin: [5225], sideEye: [6854, 6870], sideNose: [297], sideChin: [5162],
+    frontChin: [5225], sideEye: [6854, 6870], sideNoseRoot: [134], sideNose: [297], sideChin: [5162],
 } as const;
 
 /** Orthographic front and left-facing profile projections in mesh units. */

@@ -22,7 +22,7 @@ vi.mock("./FacePhotoInput", () => ({ default: ({ view, initial, onChange, onMark
         sourceWidth: view === "front" ? 800 : 600, sourceHeight: 1000,
         preparation: { view, crop: { x: 0, y: 0, width: 500, height: 500 }, detected: true, sourceFaceHeight: 350 } }, view === "front" ? portraitPoints : profilePoints)}>load {view}</button>
     <button onClick={() => onChange()}>clear {view}</button>
-    <button onClick={() => onMark(view === "front" ? "frontLeftCheek" : "sideNose", { x: .19, y: .35 })}>correct {view}</button>
+    <button onClick={() => onMark(view === "front" ? "frontLeftCheek" : "sideNoseRoot", { x: .19, y: .35 })}>correct {view}</button>
     {initial && <span>{initial.source.variant_id}</span>}
 </div> }));
 vi.mock("@/lib/mediaDelivery", () => ({ resolveAssetVariantDelivery }));
@@ -49,7 +49,7 @@ const portraitPoints = {
     frontLeftJaw: { x: .23, y: .45 }, frontRightJaw: { x: .42, y: .45 },
     frontLeftEye: { x: .26, y: .33 }, frontRightEye: { x: .38, y: .33 }, frontChin: { x: .32, y: .55 },
 };
-const profilePoints = { sideEye: { x: .55, y: .12 }, sideNose: { x: .51, y: .16 }, sideChin: { x: .53, y: .25 } };
+const profilePoints = { sideEye: { x: .55, y: .12 }, sideNoseRoot: { x: .52, y: .145 }, sideNose: { x: .51, y: .16 }, sideChin: { x: .53, y: .25 } };
 const sheetSource = { scope: "series" as const, containerId: "series-1", assetId: "su-yan", variantId: "three-view-1" };
 const portraitSource = { ...sheetSource, variantId: "avatar-1" };
 
@@ -227,6 +227,13 @@ it("requires both independent photos, saves crop provenance and restores sources
     expect(screen.getByText("front-v1")).toBeVisible(); expect(screen.getByText("side-v1")).toBeVisible();
     expect(screen.getByRole("checkbox", { name: /已核对正面与侧面白模及同一角色身份/ })).toBeChecked();
     expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "correct side" }));
+    expect(screen.getByRole("checkbox", { name: /已核对正面与侧面白模及同一角色身份/ })).toBeChecked();
+    expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "保存骨相参数" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(2));
+    expect(onSaved.mock.calls[1][2].calibration.landmarks.sideNoseRoot).toEqual({ x: .19, y: .35 });
+    expect(onSaved.mock.calls[1][2].noseBridgeHeight).toBe(shape.noseBridgeHeight);
     fireEvent.click(screen.getByRole("button", { name: "correct front" }));
     expect(screen.getByRole("button", { name: "保存骨相参数" })).toBeDisabled();
     expect(screen.getByRole("checkbox", { name: /已核对正面与侧面白模及同一角色身份/ })).toBeDisabled();

@@ -46,6 +46,27 @@ it("restores the original without overwriting saved manual marks or writing asse
     expect(mocks.resolveAssetVariantDelivery).toHaveBeenCalledWith(expect.objectContaining({ scope: "global", assetType: "prop", variantId: "v1" }));
 });
 
+it("shows the detected nasal-root point on restored legacy profile photos and lets it be corrected", async () => {
+    const sideInitial: FacePhotoReference = { ...initial, view: "side" };
+    const saved = { sideEye: { x: .6, y: .2 }, sideNose: { x: .5, y: .3 }, sideChin: { x: .55, y: .7 } };
+    const detected = { ...saved, sideNoseRoot: { x: .54, y: .27 } };
+    mocks.autoMarkFacePhoto.mockResolvedValueOnce({ points: detected,
+        prepared: { ...preparation, view: "side", canvas: { toDataURL: () => "data:image/png;base64,crop" } } });
+    const p = { ...props(), view: "side" as const, points: saved };
+    const view = render(<FacePhotoInput {...p} initial={sideInitial} />);
+    await screen.findByText(/侧脸照已通过检查/);
+    fireEvent.click(screen.getByText("查看512×512标准化裁剪和校正点位"));
+    const rootButton = screen.getByRole("button", { name: "侧面鼻根（山根）" });
+    expect(rootButton).toHaveAttribute("aria-pressed", "false");
+    const image = screen.getByAltText("苏砚侧脸拟合原图");
+    image.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100, toJSON: () => ({}) });
+    fireEvent.click(rootButton);
+    fireEvent.click(image, { clientX: 43, clientY: 29 });
+    expect(p.onMark).toHaveBeenCalledWith("sideNoseRoot", { x: .43, y: .29 });
+    expect(mocks.uploadLibraryImage).not.toHaveBeenCalled();
+    view.unmount();
+});
+
 it("invalidates saved references whose original dimensions no longer match", async () => {
     const p = props(); render(<FacePhotoInput {...p} initial={{ ...initial, sourceWidth: 900 }} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("尺寸与保存记录不一致");

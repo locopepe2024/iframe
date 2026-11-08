@@ -16,6 +16,7 @@ export default function FacePhotoInput({ view, characterName, initial, portrait,
     const [url, setUrl] = useState("");
     const [crop, setCrop] = useState("");
     const [reference, setReference] = useState<FacePhotoReference>();
+    const [detectedPoints, setDetectedPoints] = useState<Partial<FaceFitLandmarks>>({});
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [selected, setSelected] = useState<FaceFitMark>();
@@ -30,7 +31,7 @@ export default function FacePhotoInput({ view, characterName, initial, portrait,
         const request = ++sequence.current;
         const current = () => request === sequence.current;
         setBusy(true); callbacks.current.onBusy(true); if (!restoring) callbacks.current.onChange();
-        setError(""); setReference(undefined); setCrop(""); setSelected(undefined); replaceUrl("");
+        setError(""); setReference(undefined); setCrop(""); setSelected(undefined); setDetectedPoints({}); replaceUrl("");
         try {
             let blob: Blob;
             if (file) {
@@ -73,6 +74,7 @@ export default function FacePhotoInput({ view, characterName, initial, portrait,
             if (restoring) {
                 if (restoring.sourceWidth !== image.naturalWidth || restoring.sourceHeight !== image.naturalHeight) throw new Error("参考原图尺寸与保存记录不一致，请重新拟合");
                 setReference(restoring);
+                setDetectedPoints(result.points);
             } else { setReference(next); callbacks.current.onChange(next, result.points); }
         } catch (cause) {
             if (current()) { setError(cause instanceof Error ? cause.message : "参考图处理失败"); callbacks.current.onChange(); }
@@ -89,7 +91,7 @@ export default function FacePhotoInput({ view, characterName, initial, portrait,
     const marks = FACE_FIT_MARKS.filter(([key]) => key.startsWith(view));
     return <section aria-label={`${label}参考原图`} className="min-w-0 space-y-2 rounded border border-glass-border p-3">
         <h4 className="text-sm font-medium">{label}照 · 必填</h4>
-        <p className="text-xs text-text-secondary">{view === "front" ? "单人平视镜头，双眼、鼻部和下巴完整。" : "单人接近90°侧脸，只露出一侧眼睛，鼻尖与下巴轮廓清楚；朝左、朝右均可。"}</p>
+        <p className="text-xs text-text-secondary">{view === "front" ? "单人平视镜头，双眼、鼻部和下巴完整。" : "单人接近90°侧脸，只露出一侧眼睛；鼻根、鼻尖与下巴轮廓清楚，朝左、朝右均可。"}</p>
         <label className="block text-xs text-text-secondary">上传{label}照
             <input aria-label={`上传${label}照`} type="file" accept="image/png,image/jpeg,image/webp" disabled={busy}
                 className="mt-1 block min-h-11 w-full max-w-full rounded border border-glass-border p-2 text-xs"
@@ -103,7 +105,10 @@ export default function FacePhotoInput({ view, characterName, initial, portrait,
                 callbacks.current.onMark(selected, { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
                     y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) }); setSelected(undefined);
             }} />
-            {reference && marks.map(([key, name]) => points[key] ? <span key={key} title={name} className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black bg-lime-300" style={{ left: `${points[key]!.x * 100}%`, top: `${points[key]!.y * 100}%` }} /> : null)}
+            {reference && marks.map(([key, name]) => {
+                const point = points[key] || detectedPoints[key];
+                return point ? <span key={key} title={name} className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black bg-lime-300" style={{ left: `${point.x * 100}%`, top: `${point.y * 100}%` }} /> : null;
+            })}
         </div>}
         {busy && <p role="status" className="text-xs text-text-secondary">正在裁剪、检查{label}并识别点位…</p>}
         {error && <p role="alert" className="text-xs text-red-400">{error}</p>}
