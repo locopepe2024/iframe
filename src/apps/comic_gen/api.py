@@ -9408,6 +9408,116 @@ class UpdateScriptDocumentRequest(BaseModel):
     create_snapshot: bool = False
 
 
+class ScriptWritingRequest(BaseModel):
+    mode: Literal["expand_outline", "continue"]
+    project_id: Optional[str] = None
+    script_document_id: Optional[str] = None
+    title: str = Field("未命名剧本", max_length=160)
+    source_text: str = Field(min_length=1, max_length=80000)
+    duration_minutes: int = Field(5, ge=1, le=30)
+    instruction: str = Field("", max_length=4000)
+
+
+def _series_writing_context(script: Script, owner_profile_id: str) -> tuple[str, str]:
+    if not script.series_id:
+        return "", ""
+    series = pipeline.get_series(script.series_id, owner_profile_id)
+    if not series:
+        return "", ""
+    source_context = series.source_context if isinstance(series.source_context, dict) else {}
+    series_parts = [str(source_context.get(key) or "").strip()
+                    for key in ("preamble", "synopsis")]
+    series_context = "\n\n".join(dict.fromkeys(part for part in series_parts if part))
+    previous_context = ""
+    if script.episode_number:
+        previous = next((episode for episode in pipeline.get_series_episodes(series.id)
+                         if episode.episode_number == script.episode_number - 1), None)
+        if previous:
+            previous_context = (
+                f"第 {previous.episode_number} 集《{previous.title}》结尾：\n"
+                + (previous.original_text or "")[-1800:]
+            )
+    return series_context[:18000], previous_context
+
+
+def _run_script_writing(request: ScriptWritingRequest, series_context: str,
+                        previous_episode_context: str) -> dict[str, str]:
+    from ..agent_skills import catalog as skill_catalog
+    from .script_writing import generate_episode_text
+
+    skill = next((package for package in skill_catalog()
+                  if package["id"] == "em-outline-to-script"), None)
+    return generate_episode_text(
+        pipeline.script_processor.llm,
+        mode=request.mode,
+        title=request.title,
+        source_text=request.source_text,
+        duration_minutes=request.duration_minutes,
+        series_context=series_context,
+        previous_episode_context=previous_episode_context,
+        instruction=request.instruction,
+        skill_instructions=skill["instructions"] if skill else "",
+    )
+
+
+@app.post("/script-writing/generate", status_code=202)
+def start_script_writing(
+    request: ScriptWritingRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if bool(request.project_id) == bool(request.script_document_id):
+        raise HTTPException(422, "必须且只能指定一个剧本或制作项目")
+    if not request.source_text.strip():
+        raise HTTPException(422, "请先输入本集大纲或剧本正文")
+
+    series_context = previous_context = ""
+    title = request.title.strip()
+    if request.project_id:
+        script = pipeline.get_script(request.project_id, user.owner_profile_id)
+        if not script:
+            raise HTTPException(404, "剧本项目不存在")
+        title = title if title and title != "未命名剧本" else script.title
+        series_context, previous_context = _series_writing_context(script, user.owner_profile_id)
+        resource_key = "project:" + request.project_id
+    else:
+        document_dir = _script_document_dir(user.owner_profile_id, request.script_document_id or "")
+        metadata = _script_document_metadata(document_dir)
+        title = title if title and title != "未命名剧本" else metadata.get("title", title)
+        resource_key = "document:" + (request.script_document_id or "")
+
+    normalized = request.model_copy(update={"title": title})
+    llm = pipeline.script_processor.llm
+    fingerprint = hashlib.sha256(json.dumps([
+        normalized.mode, resource_key, normalized.title, normalized.source_text,
+        normalized.duration_minutes, normalized.instruction,
+        llm.provider, llm._get_default_model(), series_context, previous_context,
+    ], ensure_ascii=False).encode()).hexdigest()
+    return extraction_jobs.start(
+        user.owner_profile_id,
+        "script-writing:" + resource_key,
+        fingerprint,
+        lambda: _run_script_writing(normalized, series_context, previous_context),
+        reuse_running=True,
+    )
+
+
+@app.get("/script-writing/jobs/{job_id}")
+def get_script_writing_job(
+    job_id: str,
+    project_id: Optional[str] = None,
+    script_document_id: Optional[str] = None,
+    user: UserContext = Depends(require_studio_user),
+):
+    if bool(project_id) == bool(script_document_id):
+        raise HTTPException(422, "必须且只能指定一个剧本或制作项目")
+    resource_key = "project:" + project_id if project_id else "document:" + (script_document_id or "")
+    return extraction_jobs.get(
+        user.owner_profile_id,
+        "script-writing:" + resource_key,
+        job_id,
+    )
+
+
 def _script_documents_owner_dir(owner_profile_id: str) -> Path:
     return _TRON_SCRIPT_DOCUMENTS_DIR / studio_owner_key(owner_profile_id)
 

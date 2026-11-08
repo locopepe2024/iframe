@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { EditorContent } from '@tiptap/react';
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X, ListPlus, FolderPlus, Library } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X, ListPlus, FolderPlus, Library, WandSparkles, TextCursorInput } from 'lucide-react';
 import { api } from '@/lib/api';
 import ImportFileDialog from '@/components/series/ImportFileDialog';
 import { useEditorStore } from '@/store/editorStore';
@@ -21,6 +21,8 @@ import { useDerivation } from './hooks/useDerivation';
 import { useL3Completion } from './hooks/useL3Completion';
 import { scriptEditorApi } from '@/lib/scriptEditorApi';
 import SnapshotListDialog from './dialogs/SnapshotListDialog';
+import ScriptWritingDialog from './dialogs/ScriptWritingDialog';
+import type { ScriptWritingMode } from '@/lib/scriptEditorApi';
 import { PasteHintBar } from './components/PasteHintBar';
 import { ShortcutHelpPanel } from './components/ShortcutHelpPanel';
 import { ContinuityIndicator } from './components/ContinuityIndicator';
@@ -45,6 +47,8 @@ export default function ScriptEditorShell({
   const { editor, isReady } = useEditorSetup({ content: initialContent });
   const [historyOpen, setHistoryOpen] = useState(false);
   const [seriesImportOpen, setSeriesImportOpen] = useState(false);
+  const [scriptWritingOpen, setScriptWritingOpen] = useState(false);
+  const [scriptWritingMode, setScriptWritingMode] = useState<ScriptWritingMode>('expand_outline');
   const [seriesImportSaving, setSeriesImportSaving] = useState(false);
   const [seriesSourceText, setSeriesSourceText] = useState('');
   const [projectTitle, setProjectTitle] = useState('');
@@ -198,6 +202,32 @@ export default function ScriptEditorShell({
     window.location.hash = '#/studio/editor';
   }, [save, t]);
 
+  const handleOpenScriptWriting = useCallback(async (nextMode: ScriptWritingMode) => {
+    if (isDirty && !await save(false)) {
+      toast.error(t('toolbar.saveFailed'));
+      return;
+    }
+    setScriptWritingMode(nextMode);
+    setScriptWritingOpen(true);
+  }, [isDirty, save, t]);
+
+  const handleApplyScriptDraft = useCallback(async (draftMode: ScriptWritingMode, draft: string) => {
+    if (!editor || !canPersist) throw new Error(t('toolbar.saveFailed'));
+    const file = new File([draft], `${projectTitle || '剧本'}.fountain`, { type: 'text/plain' });
+    const parsed = await scriptEditorApi.importDocument(file);
+    const blocks = parsed?.content?.content;
+    if (!Array.isArray(blocks) || blocks.length === 0) throw new Error(t('writing.parseFailed'));
+    if (!await save(true)) throw new Error(t('toolbar.saveFailed'));
+    if (draftMode === 'expand_outline') {
+      editor.commands.setContent(parsed.content);
+    } else {
+      const end = Math.max(1, editor.state.doc.content.size - 1);
+      editor.chain().focus().insertContentAt(end, blocks).run();
+    }
+    refreshDerivation();
+    toast.success(t('writing.applied'));
+  }, [editor, canPersist, projectTitle, save, refreshDerivation, t]);
+
   const showLeft = mode === 'full' && !leftCollapsed && showSidebars;
   const showRight = mode === 'full' && !rightCollapsed && showSidebars;
   const hideAllSidebars = mode === 'focus' || viewMode === 'focus';
@@ -281,12 +311,26 @@ export default function ScriptEditorShell({
               </>
             )}
             {documentKey && editor && canPersist && (
-              <button type="button" onClick={() => { void beginSeriesImport(); }}
-                disabled={seriesImportSaving}
-                className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10"
-                title="按当前编辑内容预览并创建系列">
-                <ListPlus size={14} /> 创建系列
-              </button>
+              <>
+                <button type="button" onClick={() => { void handleOpenScriptWriting('expand_outline'); }}
+                  disabled={isOffline || documentLoading}
+                  className="flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-1 text-xs text-foreground hover:bg-primary/20 disabled:opacity-50"
+                  title={t('writing.expandTitle')}>
+                  <WandSparkles size={14} /> {t('writing.expand')}
+                </button>
+                <button type="button" onClick={() => { void handleOpenScriptWriting('continue'); }}
+                  disabled={isOffline || documentLoading}
+                  className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50"
+                  title={t('writing.continueTitle')}>
+                  <TextCursorInput size={14} /> {t('writing.continue')}
+                </button>
+                <button type="button" onClick={() => { void beginSeriesImport(); }}
+                  disabled={seriesImportSaving}
+                  className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50"
+                  title="按当前编辑内容预览并创建系列">
+                  <ListPlus size={14} /> 创建系列
+                </button>
+              </>
             )}
             <span className="text-xs text-text-muted">
               {isDirty ? t('status.unsaved') : lastSavedAt ? t('status.savedAt', { time: lastSavedAt.toLocaleTimeString() }) : ''}
@@ -443,6 +487,16 @@ export default function ScriptEditorShell({
           onRestore={handleRestore}
         />
       )}
+      <ScriptWritingDialog
+        open={scriptWritingOpen}
+        onClose={() => setScriptWritingOpen(false)}
+        onApply={handleApplyScriptDraft}
+        mode={scriptWritingMode}
+        projectId={projectId}
+        scriptDocumentId={scriptDocumentId}
+        title={projectTitle || t('document.untitled')}
+        sourceText={editor?.getText({ blockSeparator: '\n' }) || ''}
+      />
       {scriptDocumentId && (
         <SnapshotListDialog
           open={historyOpen}

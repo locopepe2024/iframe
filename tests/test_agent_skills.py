@@ -176,7 +176,7 @@ def test_asset_refine_rejects_changed_saved_asset_and_foreign_project(ctx, monke
 
 def test_catalog_is_self_contained_and_attributed():
     packages = skills.catalog()
-    assert len(packages) == len({p['id'] for p in packages}) == 19
+    assert len(packages) == len({p['id'] for p in packages}) == 20
     for p in packages:
         assert len(p['revision']) == 64
         assert len(p['source_revision']) == 40
@@ -184,6 +184,14 @@ def test_catalog_is_self_contained_and_attributed():
         assert p['source'].startswith('https://github.com/')
         assert p['license_text'] and p['adaptation'] and p['instructions']
         assert '[ref:' not in p['instructions']
+
+
+def test_episode_outline_expansion_skill_is_attributed_and_scoped():
+    package = next(p for p in skills.catalog() if p['id'] == 'em-outline-to-script')
+    assert package['targets'] == ['Script Editor']
+    assert package['source_revision'] in package['source']
+    assert '不靠新增身份、伤害或阴谋' in package['instructions']
+    assert 'MIT License' in package['license_text']
 
 
 def test_open_ai_canvas_cards_are_curated_as_scoped_skills():

@@ -56,6 +56,15 @@ export interface ScriptDocumentResponse extends DocumentResponse {
   title: string;
 }
 
+export type ScriptWritingMode = 'expand_outline' | 'continue';
+
+export interface ScriptWritingJob {
+  id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  result?: { draft: string; mode: ScriptWritingMode; title: string } | null;
+  error?: string | null;
+}
+
 export const scriptEditorApi = {
   /** Independent authoring documents */
   createScriptDocument: async (title: string, content?: object): Promise<ScriptDocumentResponse> => {
@@ -142,6 +151,24 @@ export const scriptEditorApi = {
       content: base64,
       file_type: fileType,
     });
+    return res.data;
+  },
+
+  startScriptWriting: async (data: {
+    mode: ScriptWritingMode;
+    project_id?: string;
+    script_document_id?: string;
+    title: string;
+    source_text: string;
+    duration_minutes: number;
+    instruction?: string;
+  }): Promise<ScriptWritingJob> => {
+    const res = await axios.post(`${API_BASE}/script-writing/generate`, data);
+    return res.data;
+  },
+
+  getScriptWritingJob: async (jobId: string, resource: { project_id?: string; script_document_id?: string }): Promise<ScriptWritingJob> => {
+    const res = await axios.get(`${API_BASE}/script-writing/jobs/${jobId}`, { params: resource });
     return res.data;
   },
 
