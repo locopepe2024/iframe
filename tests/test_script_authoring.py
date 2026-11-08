@@ -53,6 +53,7 @@ def test_analysis_keeps_all_24_episodes_and_source_facts():
     assert result['draft']['episodes'][23]['title'] == '既定标题24'
     assert result['draft']['suggestions'] == ['可增加环境声']
     assert calls[0]['timeout_seconds'] == 900
+    assert calls[0]['stream'] is True
     with pytest.raises(RuntimeError, match='24 集'):
         analyze_outline(SimpleNamespace(chat=lambda **_: json.dumps(plan(1))), '共24集')
     wrong = plan(2)

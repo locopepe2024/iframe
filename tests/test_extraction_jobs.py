@@ -386,3 +386,24 @@ def test_refinement_prompt_contains_source_draft_and_all_user_constraints():
     assert '1. 删除路人' in prompt and '2. 增加产品别名穿心莲' in prompt
     assert '用户明确确认的地点身份与空间关系' in prompt
     assert result.characters == []
+
+
+@pytest.mark.parametrize('resource,label', [('script-outline:document:root', '总纲解析'), ('script-writing:document:episode', '剧本写作')])
+@pytest.mark.parametrize('reason', ['Request timed out', 'OpenAI API error status=524: upstream timeout', '总纲约定24集，解析只返回1集'])
+def test_authoring_errors_are_not_reported_as_director_failures(tmp_path, resource, label, reason):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+        def fail(): raise RuntimeError(reason)
+        job = store.start('owner', resource, 'random-source-hash', fail)
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            done = store.get('owner', resource, job['id'])
+            if done['status'] != 'running': break
+            time.sleep(.01)
+        assert done['status'] == 'failed'
+        assert label in done['error']
+        assert '导演' not in done['error'] and 'Director' not in done['error']
+        if 'timeout' in reason.lower() or 'timed out' in reason.lower():
+            assert '超时' in done['error']
+        else:
+            assert reason in done['error']

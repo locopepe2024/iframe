@@ -269,7 +269,7 @@ class ExtractionJobs:
         except Exception as exc:
             logger.error('Script extraction %s failed (%s)', job_id, type(exc).__name__)
             with closing(self.connect()) as db:
-                row = db.execute('SELECT fingerprint FROM jobs WHERE id=?', (job_id,)).fetchone()
+                row = db.execute('SELECT fingerprint, project FROM jobs WHERE id=?', (job_id,)).fetchone()
             message = (
                 '分镜分析失败；已完成的分段已保存，重试会从未完成段继续。'
                 if row and row['fingerprint'].startswith('storyboard:')
@@ -281,7 +281,14 @@ class ExtractionJobs:
             )
             if row and row['fingerprint'].startswith('director_shooting_plan:') and isinstance(exc, DirectorShootingChunkError):
                 message = f'导演拍摄计划生成失败（{exc.category}）：{exc.public_reason}；请重试或调整本段内容。'
-            if row and not row['fingerprint'].startswith(('storyboard:', 'director_shooting_plan:')):
+            if row and row['project'].startswith(('script-outline:document:', 'script-writing:')):
+                detail = str(exc).strip()
+                label = '总纲解析' if row['project'].startswith('script-outline:') else '剧本写作'
+                if 'timed out' in detail.lower() or 'timeout' in detail.lower() or 'status=524' in detail:
+                    message = f'{label}请求超时，请稍后重试；已保存的内容不会受影响。'
+                elif detail:
+                    message = f'{label}失败：{detail[:300]}'
+            elif row and not row['fingerprint'].startswith(('storyboard:', 'director_shooting_plan:')):
                 detail = str(exc).strip()
                 if 'timed out' in detail.lower() or 'timeout' in detail.lower():
                     message = '导演分析请求超时；请稍后重试，已保留当前 Director 草稿。'

@@ -219,7 +219,7 @@ def analyze_outline(llm: Any, text: str) -> dict:
             "只输出符合以下schema的JSON对象，不输出代码围栏：\n" + json.dumps(schema, ensure_ascii=False))},
         {"role": "user", "content": "请解析以下完整总纲：\n<source_outline>\n" + text + "\n</source_outline>"},
     ]
-    output = llm.chat(messages=messages, timeout_seconds=900, max_retries=1).strip()
+    output = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True).strip()
     if output.startswith("```"):
         output = output.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     try:
