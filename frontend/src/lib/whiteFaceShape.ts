@@ -19,6 +19,7 @@ export type FaceShapeNumbers = FaceHeightControls & {
     chinWidth: number;
     chinProjection: number;
     noseBridgeHeight: number;
+    noseRootHeight: number;
     noseBridgeWidth: number;
     noseTipWidth: number;
     nostrilWidth: number;
@@ -37,7 +38,7 @@ export type FaceShapeCalibration = {
     schema: "iframe.white-face-fit.v1";
     source: { asset_type: "character" | "prop"; asset_id: string; variant_id: string; source_scope?: "series" | "project" | "global"; source_container_id?: string };
     referencePair?: import("./whiteFaceImage").FaceReferencePair;
-    baseline: Omit<FaceShapeNumbers, keyof FaceHeightControls> & Partial<FaceHeightControls>;
+    baseline: Omit<FaceShapeNumbers, keyof FaceHeightControls | "noseRootHeight"> & Partial<FaceHeightControls & Pick<FaceShapeNumbers, "noseRootHeight">>;
     landmarks: Record<string, { x: number; y: number }>;
     residual: number;
     reviewed?: boolean;
@@ -74,7 +75,7 @@ export const DEFAULT_FACE_SHAPE: FaceShape = {
     faceLength: 100, faceWidth: 100, cheekWidth: 100,
     jawWidth: 100, eyeSpacing: 100, noseProjection: 100,
     foreheadWidth: 100, chinWidth: 100, chinProjection: 100,
-    noseBridgeHeight: 100, noseBridgeWidth: 100, noseTipWidth: 100, nostrilWidth: 100,
+    noseBridgeHeight: 100, noseRootHeight: 100, noseBridgeWidth: 100, noseTipWidth: 100, nostrilWidth: 100,
     eyeSize: 100, eyeDepth: 100, eyeTilt: 100, browEyeDistance: 100,
     mouthWidth: 100, upperLipThickness: 100, lowerLipThickness: 100,
     philtrumLength: 100, mouthCornerTilt: 100,
@@ -92,8 +93,9 @@ export function effectiveFaceShape(shape: FaceShape): FaceShape {
     const value = normalizeFaceShape(shape);
     if (!value.calibration) return value;
     const effective = { ...value };
-    // Baselines saved before height controls were introduced retain neutral y deformation.
-    const baseline = { cheekHeight: 100, jawHeight: 100, noseTipHeight: 100, ...value.calibration.baseline };
+    // Older saves retain neutral values for controls absent from their fitted baseline.
+    const baseline = { cheekHeight: 100, jawHeight: 100, noseTipHeight: 100, ...value.calibration.baseline,
+        noseRootHeight: value.calibration.baseline.noseRootHeight ?? 100 };
     for (const key of Object.keys(DEFAULT_FACE_SHAPE) as Array<keyof FaceShape>) {
         if (key === "basePreset" || key === "calibration") continue;
         const numericKey = key as keyof FaceShapeNumbers;

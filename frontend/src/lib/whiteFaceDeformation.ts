@@ -1,6 +1,7 @@
 import type { FaceShapeNumbers } from "./whiteFaceShape";
 
 const bell = (value: number, center: number, spread: number) => Math.exp(-0.5 * ((value - center) / spread) ** 2);
+const compact = (value: number, center: number, radius: number) => Math.max(0, 1 - ((value - center) / radius) ** 2) ** 2;
 
 
 /** Shared source-space deformation for the rendered mesh and its measurement anchors. */
@@ -11,6 +12,8 @@ export function deformFacePositions(source: ArrayLike<number>, value: FaceShapeN
         const x = source[i], y = source[i + 1], z = source[i + 2];
         const front = Math.max(0, Math.min(1, (z + 0.05) / 0.55));
         const noseBridge = bell(x, 0, 0.14) * bell(y, -0.12, 0.19) * front;
+        // A finite, smooth root region excludes the eye anchors, bridge midpoint and tip.
+        const noseRoot = compact(x, 0, 0.12) * compact(y, 0.01, 0.12) * front;
         const noseTip = bell(x, 0, 0.16) * bell(y, -0.28, 0.13) * front;
         const nostril = bell(x, 0, 0.2) * bell(y, -0.41, 0.1) * front;
         const eye = bell(Math.abs(x), 0.28, 0.14) * bell(y, -0.02, 0.14) * front;
@@ -47,6 +50,7 @@ export function deformFacePositions(source: ArrayLike<number>, value: FaceShapeN
         positions[i + 2] = z
             + 0.09 * change("chinProjection") * bell(x, 0, 0.24) * bell(y, -0.74, 0.13) * front
             + 0.18 * change("noseBridgeHeight") * noseBridge
+            + 0.032 * change("noseRootHeight") * noseRoot
             + 0.12 * change("noseProjection") * noseTip
             - 0.045 * change("eyeDepth") * eye;
     }

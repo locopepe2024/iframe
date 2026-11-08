@@ -13,7 +13,7 @@ import FacePhotoInput from "./FacePhotoInput";
 
 const CONTROL_GROUPS: Array<[string, Array<[keyof FaceShapeNumbers, string, number, number]>]> = [
     ["头部轮廓", [["faceLength", "脸部长度", 80, 120], ["faceWidth", "脸部宽度", 80, 120], ["foreheadWidth", "额头宽度", 80, 120], ["cheekWidth", "颧部宽度", 80, 120], ["cheekHeight", "颧部高度", 75, 125], ["jawWidth", "下颌宽度", 75, 125], ["jawHeight", "下颌高度", 75, 125], ["chinWidth", "下巴宽度", 75, 125], ["chinProjection", "下巴前突", 75, 125]]],
-    ["鼻部", [["noseBridgeHeight", "鼻梁高度", 75, 125], ["noseBridgeWidth", "鼻梁宽度", 75, 125], ["noseProjection", "鼻尖突出度", 75, 125], ["noseTipHeight", "鼻尖高度", 75, 125], ["noseTipWidth", "鼻尖宽度", 75, 125], ["nostrilWidth", "鼻翼宽度", 75, 125]]],
+    ["鼻部", [["noseRootHeight", "鼻根前突", 75, 125], ["noseBridgeHeight", "鼻梁高度", 75, 125], ["noseBridgeWidth", "鼻梁宽度", 75, 125], ["noseProjection", "鼻尖突出度", 75, 125], ["noseTipHeight", "鼻尖高度", 75, 125], ["noseTipWidth", "鼻尖宽度", 75, 125], ["nostrilWidth", "鼻翼宽度", 75, 125]]],
     ["眼眉", [["eyeSpacing", "眼距", 80, 120], ["eyeSize", "眼睛大小", 80, 120], ["eyeDepth", "眼窝深度", 80, 120], ["eyeTilt", "眼尾倾斜", 80, 120], ["browEyeDistance", "眉眼距离", 80, 120]]],
     ["嘴唇与下巴", [["mouthWidth", "嘴宽", 80, 120], ["upperLipThickness", "上唇厚度", 75, 125], ["lowerLipThickness", "下唇厚度", 75, 125], ["philtrumLength", "人中长度", 80, 120], ["mouthCornerTilt", "嘴角倾斜", 80, 120]]],
 ];
@@ -254,7 +254,7 @@ export default function WhiteFaceModel({ characterName, initialShape, portraitSo
             <input type="checkbox" checked={showNose} onChange={event => setShowNose(event.target.checked)} />显示鼻部放大对比
         </label>
         {showNose && <section aria-label="鼻部放大对比" className="space-y-2">
-            <p className="text-xs text-text-secondary">鼻梁高度控制向前隆起，请看侧面；鼻梁宽度、鼻尖宽度请看正面。100% 为当前基准。</p>
+            <p className="text-xs text-text-secondary">鼻根前突控制山根，鼻梁高度控制中段向前隆起，请看侧面；鼻梁宽度、鼻尖宽度请看正面。100% 为当前基准。</p>
             <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                 {([false, true] as const).flatMap(side => ([false, true] as const).map(current => {
                     const label = `${current ? "当前" : "基准"}鼻部${side ? "侧面" : "正面"}放大预览`;

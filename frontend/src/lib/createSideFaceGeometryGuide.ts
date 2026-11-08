@@ -13,7 +13,7 @@ async function blobOf(canvas: HTMLCanvasElement) {
 export async function createSideFaceGeometryGuide(image: HTMLImageElement, shape: FaceShape,
     progress: (message: string) => void = () => {}): Promise<FaceGeometryGuide> {
     const measures = faceShapeMeasurements(shape);
-    if (!measures.some(v => SIDE_GUIDE_KEYS.includes(v.key) && v.target !== v.baseline)) throw new Error("当前没有可应用的侧面深度或鼻尖位置调整");
+    if (!measures.some(v => SIDE_GUIDE_KEYS.includes(v.key) && v.target !== v.baseline)) throw new Error("当前没有可应用的侧面鼻部或下巴调整");
     if (!shape.calibration?.referencePair || !shape.calibration.reviewed) throw new Error("请先保存并核对独立正面与侧脸双图拟合");
     const saved = shape.calibration.referencePair.side;
     if (saved.sourceWidth !== image.naturalWidth || saved.sourceHeight !== image.naturalHeight) throw new Error("侧脸原图尺寸与保存记录不一致，请重新拟合");
@@ -42,11 +42,11 @@ export async function createSideFaceGeometryGuide(image: HTMLImageElement, shape
     const tracked = controls.source.map((v, i) => tracks.get(controls.indices[i])?.point || v);
     const after = sideGuideMeasurements(controls, tracked);
     const desired = Object.fromEntries(measures.map(v => [v.key, v.target]));
-    const labels = { noseBridgeHeight: "鼻梁前缘至眼轴", noseProjection: "鼻尖至眼轴",
+    const labels = { noseRootHeight: "鼻根前突位移（向鼻尖为正）", noseBridgeHeight: "鼻梁前缘至眼轴", noseProjection: "鼻尖至眼轴",
         noseTipHeight: "鼻尖上下位移（向下为正）", chinProjection: "下巴前突位移（向鼻尖为正）" };
     const checks: FaceGuideCheck[] = SIDE_GUIDE_KEYS.map(key => {
         const k = key as keyof typeof labels;
-        const position = k === "noseTipHeight" || k === "chinProjection";
+        const position = k === "noseRootHeight" || k === "noseTipHeight" || k === "chinProjection";
         const observed = position ? (after[k] - before[k]) / before.length * 100 : after[k] / before[k] * 100;
         return { key, label: labels[k], target: desired[key], observed,
             error: position ? Math.abs(observed - desired[key]) : Math.abs(observed / desired[key] - 1),
