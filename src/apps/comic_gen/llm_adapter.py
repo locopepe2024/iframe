@@ -22,11 +22,21 @@ from ...utils.endpoints import get_provider_base_url
 logger = logging.getLogger(__name__)
 
 
+def get_script_writing_model() -> Optional[str]:
+    """Resolve the shared model used by screenplay authoring operations."""
+    return (
+        os.getenv("SCRIPT_WRITING_MODEL")
+        or os.getenv("SCRIPT_CONTINUATION_MODEL")
+        or ""
+    ).strip() or None
+
+
 class LLMAdapter:
     """Unified LLM call interface supporting DashScope and OpenAI-compatible APIs."""
 
-    def __init__(self):
+    def __init__(self, default_model: Optional[str] = None):
         self.provider = os.getenv("LLM_PROVIDER", "dashscope").lower()
+        self.default_model = default_model
         self._client = None
         self._client_config_key = None
         logger.info(f"LLM Adapter initialized with provider: {self.provider}")
@@ -133,6 +143,7 @@ class LLMAdapter:
         Raises:
             RuntimeError: If the API call fails.
         """
+        model = model or self.default_model
         client = self._get_client()
 
         # 显式 model override 路径：单次尝试，失败就抛。

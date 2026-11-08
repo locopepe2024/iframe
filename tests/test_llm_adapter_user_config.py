@@ -152,3 +152,24 @@ def test_chat_assembles_streamed_json_and_closes_response(monkeypatch):
     assert captured["stream"] is True
     assert captured["response_format"] == {"type": "json_object"}
     assert response.closed
+
+
+def test_script_processor_uses_shared_screenplay_model(monkeypatch):
+    from src.apps.comic_gen.llm_adapter import get_script_writing_model
+
+    monkeypatch.setenv("SCRIPT_WRITING_MODEL", "nsfw/llm-nf-all")
+    monkeypatch.setenv("SCRIPT_CONTINUATION_MODEL", "nsfw/other-model")
+    assert get_script_writing_model() == "nsfw/llm-nf-all"
+
+    monkeypatch.delenv("SCRIPT_WRITING_MODEL")
+    assert get_script_writing_model() == "nsfw/other-model"
+
+
+def test_adapter_default_model_is_used_when_call_has_no_override(monkeypatch):
+    adapter = LLMAdapter(default_model="nsfw/llm-nf-all")
+    captured = {}
+    monkeypatch.setattr(adapter, "_get_client", lambda **_: object())
+    monkeypatch.setattr(adapter, "_chat_once", lambda _client, model, *_args, **_kwargs: captured.setdefault("model", model))
+
+    assert adapter.chat([{"role": "user", "content": "director analysis"}]) == "nsfw/llm-nf-all"
+    assert captured["model"] == "nsfw/llm-nf-all"
