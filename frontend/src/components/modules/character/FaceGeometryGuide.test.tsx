@@ -95,6 +95,23 @@ it("discloses unsupported depth changes and prevents a depth-only unchanged guid
     expect(mocks.preview).not.toHaveBeenCalled();
 });
 
+it("enables a root-only profile guide while keeping the frontal guide disabled", async () => {
+    const shape = { ...DEFAULT_FACE_SHAPE, noseRootHeight: 115 };
+    const props = { characterName: "苏砚", shape, source, onApplied: vi.fn() };
+    const view = render(<FaceGeometryGuide {...props} />);
+    await screen.findByAltText("骨相引导原始头像");
+    expect(screen.getByText(/本次未应用/)).toHaveTextContent("鼻根前突");
+    expect(screen.getByRole("button", { name: "制作本地引导预览" })).toBeDisabled();
+    view.rerender(<FaceGeometryGuide {...props} view="side" />);
+    const image = await screen.findByAltText("骨相引导原始侧脸");
+    Object.defineProperty(image, "naturalWidth", { value: 1024 });
+    expect(screen.getByRole("button", { name: "制作本地引导预览" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "制作本地引导预览" }));
+    await screen.findByAltText("局部变形后的侧面骨相引导图");
+    expect(mocks.sidePreview).toHaveBeenCalledWith(image, shape, expect.any(Function));
+    expect(mocks.preview).not.toHaveBeenCalled();
+});
+
 it("shows matching nasal crops and rejects an unreliable pixel check", async () => {
     mocks.preview.mockResolvedValue({ ...result(), verified: false, pixelCheckPassed: false,
         noseComparison: { original: new Blob(["before"]), guide: new Blob(["after"]) } });

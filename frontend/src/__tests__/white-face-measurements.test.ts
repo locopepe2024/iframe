@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { DEFAULT_FACE_SHAPE, faceShapePrompt, faceShapeMeasurements, faceBaseShape, type FaceShape } from "@/lib/whiteFaceShape";
+import { DEFAULT_FACE_SHAPE, effectiveFaceShape, faceShapePrompt, faceShapeMeasurements, faceBaseShape, type FaceShape, type FaceShapeCalibration } from "@/lib/whiteFaceShape";
 import anchors from "@/lib/whiteFaceMeasurementAnchors.json";
 import mesh from "../../public/models/character/makehuman-face-v1/head.json";
 import { meshFaceLandmarks } from "@/lib/whiteFaceFit";
@@ -58,4 +58,26 @@ it("defines angular and signed position changes without dividing by zero", () =>
     expect(prompt).toContain("参考图原角度为θ₀");
     expect(prompt).toContain("眼线至下巴距离为100单位");
     expect(prompt).not.toMatch(/NaN|Infinity|调节值/);
+});
+
+it("measures nasal-root projection independently and keeps legacy calibrated shapes neutral", () => {
+    const root = faceShapeMeasurements({ ...DEFAULT_FACE_SHAPE, noseRootHeight: 110 }).find(item => item.key === "noseRootHeight")!;
+    expect(root.view).toBe("侧面");
+    expect(root.label).toBe("鼻根前突");
+    expect(root.unit).toBe("position");
+    expect(root.target).toBeGreaterThan(0);
+    for (const value of [75, 125]) for (const m of faceShapeMeasurements({ ...DEFAULT_FACE_SHAPE, noseRootHeight: value })) {
+        if (m.key !== "noseRootHeight") expect(m.target).toBe(m.baseline);
+    }
+
+    const legacyBaseline = { ...DEFAULT_FACE_SHAPE } as Record<string, unknown>;
+    delete legacyBaseline.noseRootHeight;
+    const legacy = { ...DEFAULT_FACE_SHAPE, calibration: {
+        schema: "iframe.white-face-fit.v1" as const,
+        source: { asset_type: "character" as const, asset_id: "role", variant_id: "sheet" },
+        baseline: legacyBaseline as unknown as FaceShapeCalibration["baseline"],
+        landmarks: {}, residual: 0,
+    } };
+    expect(effectiveFaceShape(legacy).noseRootHeight).toBe(100);
+    expect(faceShapeMeasurements(legacy).every(item => Number.isFinite(item.target))).toBe(true);
 });

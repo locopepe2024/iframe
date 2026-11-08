@@ -28,6 +28,7 @@ const DEFINITIONS: Definition[] = [
     { key: "jawHeight", label: "下颌位置", view: "正面", definition: "左右下颌角平均高度相对眼线的垂直位置，向下为正", unit: "position", read: p => eyeY(p) - (p.leftJaw.y + p.rightJaw.y) / 2 },
     { key: "chinWidth", label: "下巴宽度", view: "正面", definition: "下巴下部左右轮廓之间的水平距离", read: p => p.rightChin.x - p.leftChin.x },
     { key: "chinProjection", label: "下巴前突", view: "侧面", definition: "下巴前端相对过眼中心竖直线的水平位置，向鼻尖方向为正", unit: "position", read: p => p.chinFront.z - eyeZ(p) },
+    { key: "noseRootHeight", label: "鼻根前突", view: "侧面", definition: "鼻根（山根）前缘相对过眼中心竖直线的水平位置，向鼻尖方向为正", unit: "position", read: p => p.noseRootFront.z - eyeZ(p) },
     { key: "noseBridgeHeight", label: "鼻梁隆起高度", view: "侧面", definition: "鼻梁中段前缘到过眼中心竖直线的水平距离", read: p => p.bridgeFront.z - eyeZ(p) },
     { key: "noseBridgeWidth", label: "鼻梁宽度", view: "正面", definition: "鼻梁中段左右边缘之间的水平距离", read: p => p.rightBridge.x - p.leftBridge.x },
     { key: "noseProjection", label: "鼻尖突出度", view: "侧面", definition: "鼻尖到过眼中心竖直线的水平距离", read: p => p.noseTip.z - eyeZ(p) },

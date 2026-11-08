@@ -248,7 +248,11 @@ it("uses a single portrait original for the guide and requires two independent f
         await waitFor(() => expect(apiMocks.authenticatedFetch).toHaveBeenCalledWith(
             expect.stringContaining("scope=series&container_id=series-1&asset_type=character&asset_id=su-yan&variant_id=avatar"), { cache: "no-store" }));
         expect(apiMocks.authenticatedFetch.mock.calls.some(([url]) => String(url).includes("variant_id=sheet"))).toBe(false);
-        expect(screen.getByLabelText("上传正面照")).toBeVisible(); expect(screen.getByLabelText("上传侧脸照")).toBeVisible();
+        // The modal fades in; delivery lookup can finish before its first visible animation frame on CI.
+        await waitFor(() => {
+            expect(screen.getByLabelText("上传正面照")).toBeVisible();
+            expect(screen.getByLabelText("上传侧脸照")).toBeVisible();
+        });
         expect(screen.getByRole("button", { name: "拟合白模" })).toBeDisabled();
         expect(screen.queryByLabelText("正脸所在区域")).toBeNull(); expect(screen.queryByLabelText("引导图正脸区域")).toBeNull();
     } finally { projectStoreMocks.currentProject = previous; vi.unstubAllGlobals(); }

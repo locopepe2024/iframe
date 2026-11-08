@@ -113,8 +113,8 @@ export default function FaceGeometryGuide({ characterName, shape, source, onAppl
 
     return <section aria-label={`${label}骨相引导图`} className="mt-5 space-y-3 rounded border border-glass-border p-4">
         <h3 className="text-sm font-medium">{label}骨相引导图</h3>
-        <p className="text-xs text-text-secondary">{side ? "使用已保存的独立侧脸原图，调整鼻梁向前隆起、鼻尖突出及上下位置、下巴前突；朝左、朝右均可。" : "使用已保存的骨相参数调整参考脸像素，再用引导图细化头像。支持脸长、颧宽、下颌宽、眼距、鼻梁宽、鼻尖宽、鼻翼宽及鼻尖上下位置。"}</p>
-        <p className="text-xs text-text-secondary">{side ? "侧面引导图仅调整当前侧脸轮廓；请使用接近90°、只露一侧眼睛的原图。鼻梁宽、鼻翼宽等正面参数请使用正面引导图。" : "鼻梁高度是向前隆起，鼻尖突出度也是侧面深度，正面引导图暂不处理。调整这些参数请使用下方侧面引导图；鼻尖高度控制上下位置。"}</p>
+        <p className="text-xs text-text-secondary">{side ? "使用已保存的独立侧脸原图，调整鼻根前突、鼻梁向前隆起、鼻尖突出及上下位置、下巴前突；朝左、朝右均可。" : "使用已保存的骨相参数调整参考脸像素，再用引导图细化头像。支持脸长、颧宽、下颌宽、眼距、鼻梁宽、鼻尖宽、鼻翼宽及鼻尖上下位置。"}</p>
+        <p className="text-xs text-text-secondary">{side ? "侧面引导图仅调整当前侧脸轮廓；请使用接近90°、只露一侧眼睛的原图。鼻梁宽、鼻翼宽等正面参数请使用正面引导图。" : "鼻根前突（山根）、鼻梁高度和鼻尖突出度均属于侧面深度，正面引导图暂不处理。调整这些参数请使用下方侧面引导图；鼻尖高度控制上下位置。"}</p>
         {editingPending && <p role="status" className="text-xs text-amber-400">骨相参数尚未保存，请先点击上方“保存骨相参数”，再制作引导图。</p>}
         {unsupported.length > 0 && <p className="text-xs text-amber-400">本次未应用：{unsupported.map(item => item.label).join("、")}。</p>}
         {shape && !supported && <p className="text-xs text-text-muted">当前没有可应用的{label}调整，无法制作新的变形引导图。</p>}
@@ -129,7 +129,7 @@ export default function FaceGeometryGuide({ characterName, shape, source, onAppl
             </div>}
             <button type="button" disabled={!originalUrl || busy || saving || editingPending || !supported} onClick={() => void preview()} className="min-h-11 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary rounded border border-glass-border px-4 text-xs disabled:opacity-50">{busy ? "正在制作并复核…" : "制作本地引导预览"}</button>
             {guide && <div className="space-y-2 text-xs text-text-secondary">
-                <p>原始人脸高约 {Math.round(guide.sourceFaceHeight)} 像素{guide.sourceFaceHeight < 256 ? " · 建议使用人脸高256像素以上的原图" : ""}。各项比例以原图为100，误差须在5%以内；{side ? "鼻尖及下巴" : "鼻尖"}位移以原位置为0、原图眼线至下巴为100单位，误差须在1单位以内。</p>
+                <p>原始人脸高约 {Math.round(guide.sourceFaceHeight)} 像素{guide.sourceFaceHeight < 256 ? " · 建议使用人脸高256像素以上的原图" : ""}。各项比例以原图为100，误差须在5%以内；{side ? "鼻根、鼻尖及下巴" : "鼻尖"}位移以原位置为0、原图眼线至下巴为100单位，误差须在1单位以内。</p>
                 <p>{side ? "侧面“输出核对”通过原图纹理追踪核实实际二维变形；不把人脸模型的深度估计当作输出证据。" : "鼻部“输出核对”通过原图纹理追踪核实二维变形；“人脸点位估计”仅供参考。"}请通过同倍率放大图确认变化和自然程度。</p>
                 <table aria-label={side ? "侧面骨相引导比例复核" : "骨相引导比例复核"} className="w-full text-left"><thead><tr><th>比例</th><th>目标</th><th>输出核对</th><th>人脸点位估计</th></tr></thead><tbody>{guide.checks.map(item => <tr key={item.key}><td>{item.label}</td><td>{item.target.toFixed(2)}</td><td>{item.observed.toFixed(2)}{item.detectorEstimate !== undefined ? "（纹理）" : ""}</td><td>{item.detectorEstimate?.toFixed(2) ?? "—"}</td></tr>)}</tbody></table>
                 {guide.omitted.length > 0 && <details><summary className="min-h-9 cursor-pointer">未应用的其他测量目标（{guide.omitted.length}项）</summary><p>{guide.omitted.join("、")}</p></details>}
