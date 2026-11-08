@@ -3155,7 +3155,7 @@
       "instruction": "Additional requirements",
       "instructionPlaceholder": "Optional: point of view, pacing, format, or episode constraints",
       "preview": "Generated draft (editable)",
-      "sourceOutline": "Expand the current {count}-character text using the episode title, outline, and series context.",
+      "sourceOutline": "Expand this episode’s confirmed {count}-character outline using series settings and the previous saved ending.",
       "sourceScript": "Continue the current {count}-character screenplay and generate only new content.",
       "working": "Writing…",
       "timeout": "The writing task timed out. Check again or retry.",
@@ -3169,7 +3169,8 @@
       "generating": "Generating…",
       "regenerate": "Regenerate",
       "replace": "Replace body",
-      "append": "Append to end"
+      "append": "Append to end",
+      "selectedEpisode": "Selected episode {number} · {title}"
     },
     "toolbar": {
       "format": "Format",
@@ -3447,6 +3448,42 @@
     "placeholders": {
       "sceneHeading": "INT./EXT. SCENE - TIME",
       "startTyping": "Start typing..."
+    },
+    "outlinePlan": {
+      "invalidPlan": "Check episode titles, outlines and character targets.",
+      "title": "Outline & episodes",
+      "close": "Close",
+      "discard": "Discard unconfirmed plan changes?",
+      "failed": "Could not load or save the writing plan",
+      "timeout": "Outline analysis timed out. Please retry.",
+      "sourceChanged": "The outline changed. Analyze and confirm it again before writing.",
+      "analyzing": "Analyzing outline…",
+      "analyze": "Analyze outline",
+      "reanalyze": "Analyze outline again",
+      "edit": "Edit settings & episodes",
+      "backOutline": "Back to full outline",
+      "empty": "Analyze the full outline, review settings and episode titles, then explicitly select an episode to write.",
+      "episode": "Episode {number}",
+      "bodyCount": "{count} characters written",
+      "openEpisode": "Open episode",
+      "review": "Review source facts and episode outlines. Confirmation saves the plan; select an episode to write its body. Existing episode bodies are preserved.",
+      "background": "Story background & world",
+      "style": "Narrative style",
+      "point_of_view": "Point of view",
+      "characters": "Series characters",
+      "constraints": "Writing constraints",
+      "missing": "Information missing from the source",
+      "suggestions": "AI suggestions (not accepted as facts)",
+      "selectEpisode": "Select episode",
+      "outline": "Episode outline",
+      "opening_state": "Opening state",
+      "ending_state": "Ending state",
+      "episodeCharacters": "Episode characters",
+      "episodeTitle": "Episode title",
+      "target": "Episode target characters (100–20000)",
+      "cancel": "Cancel changes",
+      "confirm": "Confirm plan & view episodes",
+      "root": "Full outline"
     }
   },
   "imageEditor": {

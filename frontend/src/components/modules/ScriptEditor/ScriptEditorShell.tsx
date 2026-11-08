@@ -22,7 +22,8 @@ import { useL3Completion } from './hooks/useL3Completion';
 import { scriptEditorApi } from '@/lib/scriptEditorApi';
 import SnapshotListDialog from './dialogs/SnapshotListDialog';
 import ScriptWritingDialog from './dialogs/ScriptWritingDialog';
-import type { ScriptWritingMode } from '@/lib/scriptEditorApi';
+import ScriptOutlineDialog from './dialogs/ScriptOutlineDialog';
+import type { WritingWorkspace, ScriptWritingMode } from '@/lib/scriptEditorApi';
 import { PasteHintBar } from './components/PasteHintBar';
 import { ShortcutHelpPanel } from './components/ShortcutHelpPanel';
 import { ContinuityIndicator } from './components/ContinuityIndicator';
@@ -45,6 +46,10 @@ export default function ScriptEditorShell({
 }: ScriptEditorShellProps) {
   const t = useTranslations('scriptEditor');
   const { editor, isReady } = useEditorSetup({ content: initialContent });
+  const [writingWorkspace, setWritingWorkspace] = useState<WritingWorkspace | null>(null);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [navigating, setNavigating] = useState(false);
+  const selectedEpisode = writingWorkspace?.plan?.episodes.find(item => item.document_id === scriptDocumentId);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [seriesImportOpen, setSeriesImportOpen] = useState(false);
   const [scriptWritingOpen, setScriptWritingOpen] = useState(false);
@@ -149,8 +154,8 @@ export default function ScriptEditorShell({
   }, [editor, projectId, scriptDocumentId, mode, refreshDerivation, t]);
 
   useEffect(() => {
-    editor?.setEditable(canPersist && !isReadOnly && !creatingProject);
-  }, [editor, canPersist, isReadOnly, creatingProject]);
+    editor?.setEditable(canPersist && !isReadOnly && !creatingProject && !navigating && !outlineOpen && !scriptWritingOpen);
+  }, [editor, canPersist, isReadOnly, creatingProject, navigating, outlineOpen, scriptWritingOpen]);
 
   const handleRestore = useCallback((content: object) => {
     if (!editor) return;
@@ -202,14 +207,59 @@ export default function ScriptEditorShell({
     window.location.hash = '#/studio/editor';
   }, [save, t]);
 
+  const navigateDocument = useCallback(async (id: string) => {
+    if (navigating) return;
+    setNavigating(true);
+    try {
+      if (useEditorStore.getState().isDirty && !await save(false)) throw new Error(t('toolbar.saveFailed'));
+      setOutlineOpen(false);
+      window.location.hash = `#/studio/editor/${id}`;
+    } catch (cause) {
+      toast.error(t('toolbar.saveFailed'), { body: cause instanceof Error ? cause.message : '' });
+    } finally { setNavigating(false); }
+  }, [navigating, save, t]);
+
+  const openOutline = useCallback(async () => {
+    if (!scriptDocumentId) return;
+    try {
+      if (useEditorStore.getState().isDirty && !await save(false)) throw new Error(t('toolbar.saveFailed'));
+      setWritingWorkspace(await scriptEditorApi.getWritingPlan(scriptDocumentId));
+      setOutlineOpen(true);
+    } catch (cause) {
+      toast.error(t('outlinePlan.failed'), { body: cause instanceof Error ? cause.message : '' });
+    }
+  }, [scriptDocumentId, save, t]);
+
   const handleOpenScriptWriting = useCallback(async (nextMode: ScriptWritingMode) => {
     if (isDirty && !await save(false)) {
       toast.error(t('toolbar.saveFailed'));
       return;
     }
+    if (scriptDocumentId) {
+      try {
+        const workspace = await scriptEditorApi.getWritingPlan(scriptDocumentId);
+        setWritingWorkspace(workspace);
+        if ((!workspace.selected_episode_number && (nextMode === 'expand_outline' || workspace.plan)) || workspace.source_changed) {
+          setOutlineOpen(true);
+          return;
+        }
+      } catch (cause) {
+        toast.error(t('outlinePlan.failed'));
+        return;
+      }
+    }
     setScriptWritingMode(nextMode);
     setScriptWritingOpen(true);
-  }, [isDirty, save, t]);
+  }, [isDirty, scriptDocumentId, save, t]);
+
+  useEffect(() => {
+    if (!scriptDocumentId || documentLoading || documentLoadFailed) return;
+    let cancelled = false;
+    scriptEditorApi.getWritingPlan(scriptDocumentId).then(workspace => {
+      if (!cancelled) setWritingWorkspace(workspace);
+    }).catch(() => { if (!cancelled) setWritingWorkspace(null); });
+    return () => { cancelled = true; };
+  }, [scriptDocumentId, documentLoading, documentLoadFailed]);
 
   const handleApplyScriptDraft = useCallback(async (draftMode: ScriptWritingMode, draft: string) => {
     if (!editor || !canPersist) throw new Error(t('toolbar.saveFailed'));
@@ -221,7 +271,7 @@ export default function ScriptEditorShell({
     if (draftMode === 'expand_outline') {
       editor.commands.setContent(parsed.content);
     } else {
-      const end = Math.max(1, editor.state.doc.content.size - 1);
+      const end = editor.state.doc.content.size;
       editor.chain().focus().insertContentAt(end, blocks).run();
     }
     refreshDerivation();
@@ -286,7 +336,7 @@ export default function ScriptEditorShell({
             {scriptDocumentId && (
               <label className="flex items-center gap-2 text-xs text-text-muted">
                 <span>{t('document.authoring')}</span>
-                <input aria-label={t('document.title')} value={projectTitle} disabled={!canPersist || creatingProject}
+                <input aria-label={t('document.title')} value={projectTitle} readOnly={Boolean(selectedEpisode)} disabled={!canPersist || creatingProject}
                   onChange={(event) => {
                     setProjectTitle(event.target.value);
                     useEditorStore.getState().setDirty(true);
@@ -348,6 +398,19 @@ export default function ScriptEditorShell({
             )}
           </div>
         </div>
+      )}
+
+      {scriptDocumentId && writingWorkspace && !hideAllSidebars && (
+        <nav aria-label={t('outlinePlan.title')} className="flex shrink-0 flex-wrap items-center gap-3 border-b border-white/10 px-4 py-2 text-xs">
+          <button type="button" onClick={() => void openOutline()} disabled={navigating || !canPersist} className="rounded border border-white/15 px-3 py-1.5 hover:bg-white/10 disabled:opacity-50">{t('outlinePlan.title')}</button>
+          <select aria-label={t('outlinePlan.selectEpisode')} value={scriptDocumentId} disabled={navigating || !canPersist}
+            onChange={event => void navigateDocument(event.target.value)} className="max-w-md rounded border border-white/15 bg-[#101116] px-2 py-1.5">
+            <option value={writingWorkspace.root_document_id}>{t('outlinePlan.root')} · {writingWorkspace.root_title}</option>
+            {writingWorkspace.plan?.episodes.map(item => <option key={item.document_id} value={item.document_id}>{t('outlinePlan.episode', { number: item.number })} · {item.title}</option>)}
+          </select>
+          {selectedEpisode && <span className="text-text-muted">{t('outlinePlan.bodyCount', { count: wordCount })}</span>}
+          {writingWorkspace.source_changed && <span className="text-amber-300">{t('outlinePlan.sourceChanged')}</span>}
+        </nav>
       )}
 
       {/* Main content area: Three-column layout */}
@@ -487,6 +550,11 @@ export default function ScriptEditorShell({
           onRestore={handleRestore}
         />
       )}
+      {writingWorkspace && <ScriptOutlineDialog open={outlineOpen} workspace={writingWorkspace} onClose={() => setOutlineOpen(false)} onWorkspace={workspace => {
+        setWritingWorkspace(workspace);
+        const current = workspace.plan?.episodes.find(item => item.document_id === scriptDocumentId);
+        if (current) setProjectTitle(current.title);
+      }} onNavigate={navigateDocument} />}
       <ScriptWritingDialog
         open={scriptWritingOpen}
         onClose={() => setScriptWritingOpen(false)}
@@ -495,6 +563,7 @@ export default function ScriptEditorShell({
         projectId={projectId}
         scriptDocumentId={scriptDocumentId}
         title={projectTitle || t('document.untitled')}
+        episode={selectedEpisode}
         sourceText={editor?.getText({ blockSeparator: '\n' }) || ''}
       />
       {scriptDocumentId && (

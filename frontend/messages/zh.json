@@ -3155,7 +3155,7 @@
       "instruction": "补充要求",
       "instructionPlaceholder": "可选：视角、节奏、格式或本集特别约束",
       "preview": "生成草稿（可编辑）",
-      "sourceOutline": "将根据当前 {count} 字文本扩写。本集标题、大纲和系列设定会作为写作依据。",
+      "sourceOutline": "将根据本集已确认的 {count} 字大纲扩写，并使用全局设定与上一集已保存的结尾。",
       "sourceScript": "将根据当前 {count} 字正文续写，只生成新增内容。",
       "working": "模型正在写作…",
       "timeout": "写作任务等待超时，请稍后查看或重试。",
@@ -3169,7 +3169,8 @@
       "generating": "生成中…",
       "regenerate": "重新生成",
       "replace": "替换正文",
-      "append": "追加到末尾"
+      "append": "追加到末尾",
+      "selectedEpisode": "已选择第 {number} 集 · {title}"
     },
     "toolbar": {
       "format": "格式",
@@ -3447,6 +3448,42 @@
     "placeholders": {
       "sceneHeading": "INT./EXT. 场景 - 时间",
       "startTyping": "开始输入..."
+    },
+    "outlinePlan": {
+      "invalidPlan": "请检查标题、大纲和字数是否符合填写要求。",
+      "title": "总纲与分集",
+      "close": "关闭",
+      "discard": "尚有未确认的规划修改，确定放弃？",
+      "failed": "加载或保存分集规划失败",
+      "timeout": "总纲解析超时，请稍后重试",
+      "sourceChanged": "总纲已修改，请重新解析并确认后再写作。",
+      "analyzing": "正在解析总纲…",
+      "analyze": "解析总纲",
+      "reanalyze": "重新解析总纲",
+      "edit": "编辑设定与分集",
+      "backOutline": "返回总纲",
+      "empty": "先解析完整总纲，核对全局设定与分集标题；确认后选择某一集进入写作。不会自动生成第一集。",
+      "episode": "第 {number} 集",
+      "bodyCount": "已写正文 {count} 字",
+      "openEpisode": "进入写作",
+      "review": "请核对原文设定和每集大纲。确认只保存规划，正文将在选择具体集数后生成。重新确认会保留已有正文。",
+      "background": "故事背景与世界观",
+      "style": "叙事风格",
+      "point_of_view": "叙事视角",
+      "characters": "全剧角色设定",
+      "constraints": "创作约束",
+      "missing": "原文尚未明确的信息",
+      "suggestions": "AI 补充建议（尚未采纳，写作时不作为事实）",
+      "selectEpisode": "选择集数",
+      "outline": "本集大纲",
+      "opening_state": "开场状态",
+      "ending_state": "结尾状态",
+      "episodeCharacters": "本集出场角色",
+      "episodeTitle": "本集标题",
+      "target": "本集目标字数（100–20000）",
+      "cancel": "取消修改",
+      "confirm": "确认规划并查看分集目录",
+      "root": "总纲"
     }
   },
   "imageEditor": {

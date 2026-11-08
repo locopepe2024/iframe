@@ -90,3 +90,13 @@ it('prevents submission until a valid integer character target is entered', () =
   expect(screen.getByRole('button', { name: 'generate' })).toBeEnabled();
   expect(scriptEditorApi.startScriptWriting).not.toHaveBeenCalled();
 });
+
+it('expands an empty selected episode using its outline and configured target', async () => {
+  vi.mocked(scriptEditorApi.startScriptWriting).mockResolvedValue({ id: 'job', status: 'completed', result: { draft: '正文', title: '第二集', mode: 'expand_outline' } });
+  render(<ScriptWritingDialog open onClose={vi.fn()} onApply={vi.fn()} mode="expand_outline" scriptDocumentId="child-2" title="第二集" sourceText="" episode={{ number: 2, title: '第二集', outline: '已确认本集大纲', opening_state: '', ending_state: '', characters: '', target_word_count: 3500 }} />);
+  expect(screen.getByRole('spinbutton')).toHaveValue(3500);
+  expect(screen.getByRole('button', { name: 'generate' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'generate' }));
+  await screen.findByLabelText('preview');
+  expect(scriptEditorApi.startScriptWriting).toHaveBeenCalledWith(expect.objectContaining({ script_document_id: 'child-2', source_text: '已确认本集大纲', title: '第二集', target_word_count: 3500 }));
+});

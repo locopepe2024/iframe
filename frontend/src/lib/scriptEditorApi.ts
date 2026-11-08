@@ -54,6 +54,8 @@ export interface SaveDocumentResponse {
 export interface ScriptDocumentResponse extends DocumentResponse {
   id: string;
   title: string;
+  authoring_parent_id?: string;
+  episode_number?: number;
 }
 
 export type ScriptWritingMode = 'expand_outline' | 'continue';
@@ -65,7 +67,63 @@ export interface ScriptWritingJob {
   error?: string | null;
 }
 
+export interface WritingEpisodeOutline {
+  number: number;
+  title: string;
+  outline: string;
+  opening_state: string;
+  ending_state: string;
+  characters: string;
+  target_word_count: number;
+}
+
+export interface WritingPlanDraft {
+  background: string;
+  style: string;
+  point_of_view: string;
+  characters: string;
+  constraints: string;
+  missing_information: string[];
+  suggestions: string[];
+  episodes: WritingEpisodeOutline[];
+}
+
+export interface WritingPlan extends Omit<WritingPlanDraft, 'episodes'> {
+  revision: string;
+  source_hash: string;
+  episodes: Array<WritingEpisodeOutline & { document_id: string; word_count: number }>;
+}
+
+export interface WritingWorkspace {
+  root_document_id: string;
+  root_title: string;
+  selected_episode_number: number | null;
+  source_text: string;
+  source_hash: string;
+  source_changed: boolean;
+  plan: WritingPlan | null;
+}
+
+export interface OutlineAnalysisJob {
+  id: string;
+  status: ScriptWritingJob['status'];
+  result?: { draft: WritingPlanDraft; source_hash: string } | null;
+  error?: string | null;
+}
+
 export const scriptEditorApi = {
+  getWritingPlan: async (documentId: string): Promise<WritingWorkspace> => {
+    return (await axios.get(`${API_BASE}/script-documents/${documentId}/writing-plan`)).data;
+  },
+  confirmWritingPlan: async (documentId: string, data: { draft: WritingPlanDraft; base_revision: string | null; source_hash: string }): Promise<WritingWorkspace> => {
+    return (await axios.put(`${API_BASE}/script-documents/${documentId}/writing-plan`, data)).data;
+  },
+  startOutlineAnalysis: async (documentId: string): Promise<OutlineAnalysisJob> => {
+    return (await axios.post(`${API_BASE}/script-documents/${documentId}/outline-analysis`)).data;
+  },
+  getOutlineAnalysisJob: async (documentId: string, jobId: string): Promise<OutlineAnalysisJob> => {
+    return (await axios.get(`${API_BASE}/script-documents/${documentId}/outline-analysis/jobs/${jobId}`)).data;
+  },
   /** Independent authoring documents */
   createScriptDocument: async (title: string, content?: object): Promise<ScriptDocumentResponse> => {
     const res = await axios.post(`${API_BASE}/script-documents`, { title, content });
