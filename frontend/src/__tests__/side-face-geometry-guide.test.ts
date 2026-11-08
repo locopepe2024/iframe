@@ -25,7 +25,7 @@ it("transfers measured profile changes in original units while preserving eyes a
     const mirrored=sideFaceGuideControls(sideFace().map(p=>({...p,x:1-p.x})),shape,500,600);
     c.target.slice(0,c.indices.length).forEach((p,i)=>{expect(mirrored.target[i].x).toBeCloseTo(500-p.x);expect(mirrored.target[i].y).toBeCloseTo(p.y)});
 });
-it.each([75, 90, 110, 125])("moves the nasal root at %s independently of the bridge midpoint and tip", value => {
+it.each([50, 75, 90, 110, 125, 150])("moves the nasal root at %s independently of the bridge midpoint and tip", value => {
     const shape = { ...DEFAULT_FACE_SHAPE, noseRootHeight: value };
     const c = sideFaceGuideControls(sideFace(), shape, 500, 600);
     const before = sideGuideMeasurements(c), after = sideGuideMeasurements(c, c.target);
@@ -81,9 +81,9 @@ it("verifies actual warped texture and rejects unchanged output with a changed n
     expect(sideFaceGuidePrompt("苏砚")).toContain("90°侧脸");expect(sideFaceGuidePrompt("苏砚")).not.toContain("骨相测量目标：");
 });
 
-it("tracks actual root texture and rejects unchanged pixels despite a requested root movement", () => {
+it.each([50, 150])("tracks actual root texture at %s and rejects unchanged pixels despite a requested root movement", value => {
     const width = 600, height = 700;
-    const c = sideFaceGuideControls(sideFace(), { ...DEFAULT_FACE_SHAPE, noseRootHeight: 125 }, width, height);
+    const c = sideFaceGuideControls(sideFace(), { ...DEFAULT_FACE_SHAPE, noseRootHeight: value }, width, height);
     const pixels = Uint8ClampedArray.from({ length: width * height * 4 }, (_, i) => {
         const x = Math.floor(i / 4) % width, y = Math.floor(i / 4 / width);
         return i % 4 === 3 ? 255 : 125 + 45 * Math.sin(x * .31) + 40 * Math.cos(y * .27) + 20 * Math.sin((x + y) * .41);
