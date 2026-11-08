@@ -9415,7 +9415,7 @@ class ScriptWritingRequest(BaseModel):
     script_document_id: Optional[str] = None
     title: str = Field("未命名剧本", max_length=160)
     source_text: str = Field(min_length=1, max_length=80000)
-    duration_minutes: int = Field(5, ge=1, le=30)
+    target_word_count: int = Field(2000, ge=100, le=20000)
     instruction: str = Field("", max_length=4000)
 
 
@@ -9453,7 +9453,7 @@ def _run_script_writing(request: ScriptWritingRequest, series_context: str,
         mode=request.mode,
         title=request.title,
         source_text=request.source_text,
-        duration_minutes=request.duration_minutes,
+        target_word_count=request.target_word_count,
         series_context=series_context,
         previous_episode_context=previous_episode_context,
         instruction=request.instruction,
@@ -9490,7 +9490,7 @@ def start_script_writing(
     llm = pipeline.script_processor.llm
     fingerprint = hashlib.sha256(json.dumps([
         normalized.mode, resource_key, normalized.title, normalized.source_text,
-        normalized.duration_minutes, normalized.instruction,
+        normalized.target_word_count, normalized.instruction,
         llm.provider, llm._get_default_model(), series_context, previous_context,
     ], ensure_ascii=False).encode()).hexdigest()
     return extraction_jobs.start(

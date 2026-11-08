@@ -11,7 +11,7 @@
       "source_revision": "b8a438dd1f1730b1317b0f38b69342a7ac67c80e",
       "license": "MIT (Emma Screenwriting Skills)",
       "license_file": "em-outline-to-script/LICENSE",
-      "adaptation": "Imported under MIT with attribution. Applied only to single-episode outline expansion; GreenA's episode duration, first-person camera rules, series bible, and user-confirmed constraints take precedence.",
+      "adaptation": "Imported under MIT with attribution. Applied only to single-episode outline expansion; GreenA's episode target character count, first-person camera rules, series bible, and user-confirmed constraints take precedence. Screen duration belongs to director analysis and storyboarding.",
       "instructions_file": "em-outline-to-script/SKILL.md"
     },
     {

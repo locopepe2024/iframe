@@ -160,7 +160,7 @@ export const scriptEditorApi = {
     script_document_id?: string;
     title: string;
     source_text: string;
-    duration_minutes: number;
+    target_word_count: number;
     instruction?: string;
   }): Promise<ScriptWritingJob> => {
     const res = await axios.post(`${API_BASE}/script-writing/generate`, data);

@@ -10,7 +10,7 @@ def test_expand_and_continue_use_distinct_writing_contracts():
         mode="expand_outline",
         title="筹码不能流血",
         source_text="纲手挥拳前手指发抖；你露出流血的掌心。",
-        duration_minutes=5,
+        target_word_count=2000,
         series_context="第一视角，不出现男主面部。",
         skill_instructions="保留原纲事件、人物动机与结尾。",
     )
@@ -18,14 +18,30 @@ def test_expand_and_continue_use_distinct_writing_contracts():
         mode="continue",
         title="筹码不能流血",
         source_text="纲手摘下项链，第一道查克拉线缠上你的手指。",
-        duration_minutes=5,
+        target_word_count=2000,
     )
 
-    assert "扩写成约 5 分钟" in expand[1]["content"]
+    assert "扩写成约 2000 字" in expand[1]["content"]
     assert "不出现男主面部" in expand[1]["content"]
     assert "保留原纲事件" in expand[0]["content"]
     assert "只输出新增内容" in continuation[1]["content"]
     assert "不重复已有段落" in continuation[1]["content"]
+    assert "本集正文目标字数：约 2000 字" in expand[1]["content"]
+    assert "本次新增目标字数：约 2000 字" in continuation[1]["content"]
+    assert "目标时长" not in expand[1]["content"]
+    assert "分钟" not in continuation[1]["content"]
+
+
+def test_writing_target_character_count_validation():
+    import pytest
+    from pydantic import ValidationError
+    from src.apps.comic_gen.api import ScriptWritingRequest
+
+    base = {"mode": "expand_outline", "source_text": "女孩出发。"}
+    assert ScriptWritingRequest(**base).target_word_count == 2000
+    for target in (99, 20001, 1000.5):
+        with pytest.raises(ValidationError):
+            ScriptWritingRequest(**base, target_word_count=target)
 
 
 def test_generate_episode_text_uses_shared_llm_and_strips_fences():
@@ -38,7 +54,7 @@ def test_generate_episode_text_uses_shared_llm_and_strips_fences():
 
     result = generate_episode_text(
         FakeLLM(), mode="expand_outline", title="筹码不能流血", source_text="她挥拳。",
-        duration_minutes=5, skill_instructions="保留人物动机。",
+        target_word_count=2000, skill_instructions="保留人物动机。",
     )
 
     assert result == {"draft": "INT. 赌桌 - 夜\n纲手抬起拳头。", "mode": "expand_outline", "title": "筹码不能流血"}
@@ -66,7 +82,7 @@ def test_script_writing_endpoint_is_owner_scoped_and_returns_preview_draft(monke
             "mode": "expand_outline",
             "title": "筹码不能流血",
             "source_text": "纲手摘下项链。",
-            "duration_minutes": 5,
+            "target_word_count": 2000,
         })
     finally:
         api.app.dependency_overrides.pop(api.require_studio_user, None)

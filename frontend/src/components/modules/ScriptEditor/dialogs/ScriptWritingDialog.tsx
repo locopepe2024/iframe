@@ -31,18 +31,20 @@ export default function ScriptWritingDialog({
 }: ScriptWritingDialogProps) {
   const t = useTranslations('scriptEditor.writing');
   const [mode, setMode] = useState(initialMode);
-  const [duration, setDuration] = useState(5);
+  const [targetWordCount, setTargetWordCount] = useState(2000);
   const [instruction, setInstruction] = useState('');
   const [draft, setDraft] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState('');
   const runId = useRef(0);
+  const validWordCount = Number.isInteger(targetWordCount) && targetWordCount >= 100 && targetWordCount <= 20000;
+  const draftWordCount = Array.from(draft.replace(/\s/g, '')).length;
 
   useEffect(() => {
     if (!open) return;
     setMode(initialMode);
-    setDuration(5);
+    setTargetWordCount(2000);
     setInstruction('');
     setDraft('');
     setError('');
@@ -50,7 +52,7 @@ export default function ScriptWritingDialog({
   }, [open, initialMode]);
 
   const generate = async () => {
-    if (!sourceText.trim() || (!projectId && !scriptDocumentId) || isGenerating) return;
+    if (!sourceText.trim() || (!projectId && !scriptDocumentId) || isGenerating || !validWordCount) return;
     const activeRun = ++runId.current;
     setError('');
     setDraft('');
@@ -62,7 +64,7 @@ export default function ScriptWritingDialog({
         mode,
         title,
         source_text: sourceText,
-        duration_minutes: duration,
+        target_word_count: targetWordCount,
         instruction,
       });
       let current = job;
@@ -142,11 +144,14 @@ export default function ScriptWritingDialog({
                   </button>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-text-secondary">
-                  <span>{t('duration')}</span>
-                  <input type="number" min={1} max={30} value={duration} onChange={event => setDuration(Math.max(1, Math.min(30, Number(event.target.value) || 1)))} className="h-9 w-20 rounded border border-white/10 bg-transparent px-2 text-foreground" />
-                  <span>{t('minutes')}</span>
+                  <span>{t(mode === 'expand_outline' ? 'targetWordCount' : 'additionalWordCount')}</span>
+                  <input type="number" min={100} max={20000} step={1} value={targetWordCount || ''} onChange={event => setTargetWordCount(Number(event.target.value))} disabled={isGenerating || isApplying} aria-invalid={!validWordCount} className="h-9 w-24 rounded border border-white/10 bg-transparent px-2 text-foreground" />
+                  <span>{t('characters')}</span>
                 </label>
               </div>
+
+              <p className="text-xs text-text-muted">{t('wordCountHint')}</p>
+              {!validWordCount && <p role="alert" className="text-sm text-red-300">{t('invalidWordCount')}</p>}
 
               <label className="block text-sm text-text-secondary">
                 <span>{t('instruction')}</span>
@@ -158,6 +163,7 @@ export default function ScriptWritingDialog({
               {draft ? (
                 <label className="block text-sm text-text-secondary">
                   <span>{t('preview')}</span>
+                  <span className="ml-3 text-xs text-text-muted">{t('draftWordCount', { count: draftWordCount.toLocaleString() })}</span>
                   <textarea aria-label={t('preview')} value={draft} onChange={event => setDraft(event.target.value)} rows={18} className="mt-2 w-full resize-y rounded-md border border-white/10 bg-black/30 px-3 py-3 font-mono text-sm leading-6 text-foreground focus:border-primary/50 focus:outline-none" />
                 </label>
               ) : (
@@ -170,14 +176,14 @@ export default function ScriptWritingDialog({
 
             <footer className="flex flex-wrap justify-end gap-2 border-t border-white/10 px-5 py-4">
               <button type="button" onClick={close} className="h-10 rounded-md border border-white/10 px-4 text-sm text-text-secondary hover:bg-white/5">{t('cancel')}</button>
-              {draft && <button type="button" onClick={() => { void generate(); }} disabled={isGenerating || isApplying} className="h-10 rounded-md border border-white/10 px-4 text-sm text-foreground hover:bg-white/5 disabled:opacity-50">{t('regenerate')}</button>}
+              {draft && <button type="button" onClick={() => { void generate(); }} disabled={isGenerating || isApplying || !validWordCount} className="h-10 rounded-md border border-white/10 px-4 text-sm text-foreground hover:bg-white/5 disabled:opacity-50">{t('regenerate')}</button>}
               {draft ? (
                 <button type="button" onClick={() => { void apply(); }} disabled={isApplying || isGenerating} className="flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-50">
                   {isApplying ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                   {mode === 'expand_outline' ? t('replace') : t('append')}
                 </button>
               ) : (
-                <button type="button" onClick={() => { void generate(); }} disabled={!sourceText.trim() || isGenerating || isApplying} className="flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-50">
+                <button type="button" onClick={() => { void generate(); }} disabled={!sourceText.trim() || isGenerating || isApplying || !validWordCount} className="flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-50">
                   {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <WandSparkles size={16} />}
                   {isGenerating ? t('generating') : t('generate')}
                 </button>
