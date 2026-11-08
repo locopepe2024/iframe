@@ -134,10 +134,16 @@ def test_writing_http_routes_receive_authenticated_owner_context(tmp_path, monke
     })
     client = TestClient(api.app)
     document = client.post("/script-documents", json={"title": "大纲"}).json()
-    payload = {"script_document_id": document["id"], "mode": "expand_outline", "source_text": "女孩出发。"}
+    ws = client.get(f"/script-documents/{document['id']}/writing-plan").json()
+    confirmed = client.put(f"/script-documents/{document['id']}/writing-plan", json={
+        "draft": {"episodes": [{"number": 1, "title": "第一集", "outline": "女孩出发。"}]},
+        "source_hash": ws["source_hash"],
+    }).json()
+    child = confirmed["plan"]["episodes"][0]["document_id"]
+    payload = {"script_document_id": child, "mode": "expand_outline", "source_text": "女孩出发。"}
     assert client.post("/script-writing/generate", json=payload).status_code == 202
-    assert seen == [(owner.owner_profile_id, "script-writing:document:" + document["id"])]
+    assert seen == [(owner.owner_profile_id, "script-writing:document:" + child)]
     assert client.post("/script-writing/generate", json=payload, headers={"Authorization": "Bearer other"}).status_code == 404
-    job = client.get("/script-writing/jobs/job-http", params={"script_document_id": document["id"]})
+    job = client.get("/script-writing/jobs/job-http", params={"script_document_id": child})
     assert job.status_code == 200
     assert job.json()["result"]["draft"].startswith(owner.owner_profile_id)

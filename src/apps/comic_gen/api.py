@@ -9409,6 +9409,53 @@ class UpdateScriptDocumentRequest(BaseModel):
     create_snapshot: bool = False
 
 
+from .script_authoring import ScriptAuthoringStore, analyze_outline, document_text
+from .models import ScriptWritingPlanDraft
+
+
+def _authoring_store(user: UserContext) -> ScriptAuthoringStore:
+    return ScriptAuthoringStore(_script_documents_owner_dir(user.owner_profile_id))
+
+
+class ConfirmWritingPlanRequest(BaseModel):
+    draft: ScriptWritingPlanDraft
+    base_revision: Optional[str] = None
+    source_hash: str = Field(min_length=64, max_length=64)
+
+
+@app.get("/script-documents/{document_id}/writing-plan")
+def get_writing_plan(document_id: str, user: UserContext = Depends(require_studio_user)):
+    return _authoring_store(user).workspace(document_id)
+
+
+@app.put("/script-documents/{document_id}/writing-plan")
+def confirm_writing_plan(document_id: str, request: ConfirmWritingPlanRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    return _authoring_store(user).confirm(document_id, request.draft, request.base_revision, request.source_hash)
+
+
+@app.post("/script-documents/{document_id}/outline-analysis", status_code=202)
+def start_outline_analysis(document_id: str, user: UserContext = Depends(require_studio_user)):
+    workspace = _authoring_store(user).workspace(document_id)
+    if workspace["root_document_id"] != document_id:
+        raise HTTPException(422, "请在总纲文档解析全剧大纲")
+    if not workspace["source_text"].strip():
+        raise HTTPException(422, "请先输入总纲")
+    if len(workspace["source_text"]) > 80000:
+        raise HTTPException(422, "总纲最多支持80000字，请先整理原文")
+    llm = pipeline.script_processor.llm
+    return extraction_jobs.start(user.owner_profile_id, "script-outline:document:" + document_id,
+        workspace["source_hash"] + ":" + uuid.uuid4().hex,
+        lambda: analyze_outline(llm, workspace["source_text"]))
+
+
+@app.get("/script-documents/{document_id}/outline-analysis/jobs/{job_id}")
+def get_outline_analysis_job(document_id: str, job_id: str,
+                             user: UserContext = Depends(require_studio_user)):
+    _authoring_store(user).directory(document_id)
+    return extraction_jobs.get(user.owner_profile_id, "script-outline:document:" + document_id, job_id)
+
+
 class ScriptWritingRequest(BaseModel):
     mode: Literal["expand_outline", "continue"]
     project_id: Optional[str] = None
@@ -9468,9 +9515,6 @@ def start_script_writing(
 ):
     if bool(request.project_id) == bool(request.script_document_id):
         raise HTTPException(422, "必须且只能指定一个剧本或制作项目")
-    if not request.source_text.strip():
-        raise HTTPException(422, "请先输入本集大纲或剧本正文")
-
     series_context = previous_context = ""
     title = request.title.strip()
     if request.project_id:
@@ -9484,21 +9528,28 @@ def start_script_writing(
         document_dir = _script_document_dir(user.owner_profile_id, request.script_document_id or "")
         metadata = _script_document_metadata(document_dir)
         title = title if title and title != "未命名剧本" else metadata.get("title", title)
+        context = _authoring_store(user).writing_context(request.script_document_id or "", request.mode)
+        if context:
+            title = context["title"]
+            series_context = context["series_context"]
+            previous_context = context["previous_episode_context"]
+            request = request.model_copy(update={"source_text": context["source_text"]})
         resource_key = "document:" + (request.script_document_id or "")
 
+    if not request.source_text.strip():
+        raise HTTPException(422, "请先输入本集大纲或剧本正文")
     normalized = request.model_copy(update={"title": title})
     llm = pipeline.script_processor.llm
     fingerprint = hashlib.sha256(json.dumps([
         normalized.mode, resource_key, normalized.title, normalized.source_text,
         normalized.target_word_count, normalized.instruction,
-        llm.provider, llm._get_default_model(), series_context, previous_context,
+        llm.provider, llm.default_model or llm._get_default_model(), series_context, previous_context, uuid.uuid4().hex,
     ], ensure_ascii=False).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id,
         "script-writing:" + resource_key,
         fingerprint,
         lambda: _run_script_writing(normalized, series_context, previous_context),
-        reuse_running=True,
     )
 
 
@@ -9560,6 +9611,12 @@ def _script_document_response(document_dir: Path) -> dict:
         content = json.loads(document_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=500, detail=f"Failed to load script document: {exc}")
+    if metadata.get("authoring_parent_id"):
+        workspace = ScriptAuthoringStore(document_dir.parent).workspace(metadata["id"])
+        episode = next((e for e in (workspace["plan"] or {}).get("episodes", [])
+                        if e["document_id"] == metadata["id"]), None)
+        if episode:
+            metadata["title"] = episode["title"]
     metadata["content"] = content
     metadata["updated_at"] = datetime.fromtimestamp(document_path.stat().st_mtime, timezone.utc).isoformat()
     return metadata
@@ -9596,6 +9653,8 @@ def list_script_documents(user: UserContext = Depends(require_studio_user)):
     for document_dir in owner_dir.iterdir():
         if document_dir.is_dir() and (document_dir / "document.json").is_file():
             metadata = _script_document_metadata(document_dir)
+            if metadata.get("authoring_parent_id"):
+                continue
             document_path = document_dir / "document.json"
             metadata["updated_at"] = datetime.fromtimestamp(document_path.stat().st_mtime, timezone.utc).isoformat()
             documents.append(metadata)
@@ -9616,7 +9675,7 @@ def save_script_document(
 ):
     document_dir = _script_document_dir(user.owner_profile_id, document_id)
     metadata = _script_document_metadata(document_dir)
-    if request.title is not None:
+    if request.title is not None and not metadata.get("authoring_parent_id"):
         metadata["title"] = request.title.strip() or "未命名剧本"
         _write_script_document_json(document_dir / "metadata.json", metadata)
     if request.content is not None:

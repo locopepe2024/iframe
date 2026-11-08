@@ -42,9 +42,9 @@ def build_episode_writing_messages(
         f"本集正文目标字数：约 {target_word_count} 字" if mode == "expand_outline" else f"本次新增目标字数：约 {target_word_count} 字",
     ]
     if series_context.strip():
-        constraints.append("系列设定与创作约束（优先作为全局事实）：\n" + series_context.strip()[:18000])
+        constraints.append("系列设定与创作约束（优先作为全局事实）：\n" + series_context.strip())
     if previous_episode_context.strip():
-        constraints.append("上一集结尾与承接状态：\n" + previous_episode_context.strip()[:2400])
+        constraints.append("上一集结尾与承接状态：\n" + previous_episode_context.strip())
     if instruction.strip():
         constraints.append("本次写作补充要求：\n" + instruction.strip()[:4000])
     user = "\n\n".join([
