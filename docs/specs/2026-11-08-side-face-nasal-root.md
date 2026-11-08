@@ -23,10 +23,10 @@ Add a separately measurable and editable nasal-root (radix) forward projection c
 
 ## Boundaries
 
-No image-model generation, paid test, API/character write, threshold change, eyelash detector, or production deployment is in scope.
+No image-model generation, paid test, API/character write, threshold change, or eyelash detector is in scope. Merge and production deployment were explicitly authorized after review on 2026-11-08.
 
 ## Local validation and known limitation
 
 The mesh root anchor uses MakeHuman source vertex 134, at `(0, 0.00872, 0.81112)` in the shipped head coordinates, above existing bridge-midpoint vertex 164. Its compact forward-deformation region excludes all other measurement anchors.
 
-The existing real 1024px profile was checked at root controls 75, 90, 110 and 125, plus mirrored 110 and 125, using only loopback GET requests. Five of six cases passed output pose and original-texture tracking. The original-direction 110 case was rejected by the unchanged cropped-output pose gate (estimated yaw below 50 degrees); it remains rejected and must not be described as a verified production preview. Pose estimates are model outputs, not measured camera angles. This is a remaining usability limitation on this near-threshold source; do not loosen the gate or substitute diagnostic pixels for a verified guide. Keep this change in review until that limitation is assessed.
+The existing real 1024px profile was checked at root controls 75, 90, 110 and 125, plus mirrored 110 and 125, using only loopback GET requests. Five of six cases passed output pose and original-texture tracking. The original-direction 110 case was rejected by the unchanged cropped-output pose gate (estimated yaw below 50 degrees); it remains rejected and must not be described as a verified production preview. Pose estimates are model outputs, not measured camera angles. This is a remaining usability limitation on this near-threshold source; do not loosen the gate or substitute diagnostic pixels for a verified guide. The user reviewed this limitation and authorized merge/deployment on 2026-11-08.
