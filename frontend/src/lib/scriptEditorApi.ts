@@ -68,6 +68,7 @@ export interface ScriptWritingJob {
 }
 
 export interface WritingEpisodeOutline {
+  source_excerpt?: string;
   number: number;
   title: string;
   outline: string;

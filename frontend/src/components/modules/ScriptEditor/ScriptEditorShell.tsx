@@ -248,9 +248,9 @@ export default function ScriptEditorShell({
         return;
       }
     }
-    setScriptWritingMode(nextMode);
+    setScriptWritingMode(selectedEpisode && !editor?.getText().trim() ? 'expand_outline' : nextMode);
     setScriptWritingOpen(true);
-  }, [isDirty, scriptDocumentId, save, t]);
+  }, [isDirty, scriptDocumentId, save, t, selectedEpisode, editor]);
 
   useEffect(() => {
     if (!scriptDocumentId || documentLoading || documentLoadFailed) return;
@@ -460,6 +460,21 @@ export default function ScriptEditorShell({
                     <X size={14} />
                   </button>
                 </div>
+              </div>
+            )}
+            {selectedEpisode && (
+              <div className="mx-auto mt-6 max-w-[720px] px-4">
+                <details key={scriptDocumentId} open={wordCount === 0 ? true : undefined} className="rounded-lg border border-primary/25 bg-primary/[0.04] p-4">
+                  <summary className="cursor-pointer text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{t('outlinePlan.episodeBasis')} · {t('outlinePlan.episode', { number: selectedEpisode.number })} · {selectedEpisode.title}</summary>
+                  <p className="mt-2 text-xs text-text-muted">{t('outlinePlan.basisHint')}</p>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    {(['outline', 'opening_state', 'ending_state', 'characters', 'source_excerpt'] as const).map(key => selectedEpisode[key] ? <div key={key}><dt className="text-xs text-text-muted">{t(`outlinePlan.${key === 'characters' ? 'episodeCharacters' : key}`)}</dt><dd className="mt-1 whitespace-pre-wrap break-words leading-6 text-text-secondary">{selectedEpisode[key]}</dd></div> : null)}
+                  </dl>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={() => void openOutline()} className="rounded border border-white/15 px-3 py-2 text-xs hover:bg-white/10">{t('outlinePlan.edit')}</button>
+                    <button type="button" onClick={() => void handleOpenScriptWriting(wordCount ? 'continue' : 'expand_outline')} disabled={!canPersist || isOffline} className="rounded bg-primary px-3 py-2 text-xs text-white disabled:opacity-50">{t(wordCount ? 'writing.continue' : 'writing.expand')}</button>
+                  </div>
+                </details>
               </div>
             )}
             {/* Paste Hint Bar */}

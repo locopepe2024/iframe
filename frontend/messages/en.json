@@ -3144,6 +3144,7 @@
       "loading": "Loading editor..."
     },
     "writing": {
+      "startFromOutline": "This episode has no body yet. Write from its confirmed outline and opening, preserving planned events and emotional beats.",
       "title": "AI Script Writing",
       "expand": "Write from outline",
       "expandTitle": "Expand the current outline into a complete screenplay",
@@ -3454,6 +3455,9 @@
       "startTyping": "Start typing..."
     },
     "outlinePlan": {
+      "episodeBasis": "Episode writing basis",
+      "basisHint": "AI writing uses this outline, opening, ending, source details and the previous saved episode.",
+      "source_excerpt": "Source passages (dialogue, action & emotional beats)",
       "invalidPlan": "Check episode titles, outlines and character targets.",
       "title": "Outline & episodes",
       "close": "Close",

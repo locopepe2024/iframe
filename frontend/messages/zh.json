@@ -3144,6 +3144,7 @@
       "loading": "编辑器加载中..."
     },
     "writing": {
+      "startFromOutline": "本集尚无正文，将从已确认的大纲与开场开始写作，保留既定情节和情感节点。",
       "title": "AI剧本写作",
       "expand": "按大纲写剧本",
       "expandTitle": "根据当前大纲写成完整剧本",
@@ -3454,6 +3455,9 @@
       "startTyping": "开始输入..."
     },
     "outlinePlan": {
+      "episodeBasis": "本集写作依据",
+      "basisHint": "AI 写作会使用以下大纲、开场、结尾和原文细节，并承接上一集已保存的正文。",
+      "source_excerpt": "本集原文素材（对白、动作与情感节点）",
       "invalidPlan": "请检查标题、大纲和字数是否符合填写要求。",
       "title": "总纲与分集",
       "close": "关闭",

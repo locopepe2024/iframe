@@ -100,3 +100,16 @@ it('expands an empty selected episode using its outline and configured target', 
   await screen.findByLabelText('preview');
   expect(scriptEditorApi.startScriptWriting).toHaveBeenCalledWith(expect.objectContaining({ script_document_id: 'child-2', source_text: '已确认本集大纲', title: '第二集', target_word_count: 3500 }));
 });
+
+
+it('starts an empty episode from its outline even when opened through AI continuation', async () => {
+  vi.mocked(scriptEditorApi.startScriptWriting).mockResolvedValue({ id: 'job', status: 'completed', result: { draft: '从本集开场写起', title: '第二集', mode: 'expand_outline' } });
+  const onApply = vi.fn().mockResolvedValue(undefined);
+  render(<ScriptWritingDialog open onClose={vi.fn()} onApply={onApply} mode="continue" scriptDocumentId="child-2" title="第二集" sourceText="" episode={{ number: 2, title: '第二集', outline: '裂缝与破局', opening_state: '你故意输掉一局', ending_state: '获得项链', characters: '纲手', target_word_count: 2000 }} />);
+  expect(screen.getByText('startFromOutline')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'generate' }));
+  await screen.findByLabelText('preview');
+  expect(scriptEditorApi.startScriptWriting).toHaveBeenCalledWith(expect.objectContaining({ mode: 'expand_outline', source_text: '裂缝与破局' }));
+  fireEvent.click(screen.getByRole('button', { name: 'replace' }));
+  await waitFor(() => expect(onApply).toHaveBeenCalledWith('expand_outline', '从本集开场写起'));
+});

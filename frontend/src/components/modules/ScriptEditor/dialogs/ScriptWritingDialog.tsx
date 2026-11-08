@@ -40,7 +40,8 @@ export default function ScriptWritingDialog({
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState('');
   const runId = useRef(0);
-  const effectiveSource = mode === 'expand_outline' && episode ? episode.outline : sourceText;
+  const effectiveMode = episode && !sourceText.trim() ? 'expand_outline' : mode;
+  const effectiveSource = effectiveMode === 'expand_outline' && episode ? episode.outline : sourceText;
   const validWordCount = Number.isInteger(targetWordCount) && targetWordCount >= 100 && targetWordCount <= 20000;
   const draftWordCount = Array.from(draft.replace(/\s/g, '')).length;
 
@@ -64,7 +65,7 @@ export default function ScriptWritingDialog({
       const resource = projectId ? { project_id: projectId } : { script_document_id: scriptDocumentId };
       const job = await scriptEditorApi.startScriptWriting({
         ...resource,
-        mode,
+        mode: effectiveMode,
         title,
         source_text: effectiveSource,
         target_word_count: targetWordCount,
@@ -103,7 +104,7 @@ export default function ScriptWritingDialog({
     setIsApplying(true);
     setError('');
     try {
-      await onApply(mode, draft);
+      await onApply(effectiveMode, draft);
       close();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('applyFailed'));
@@ -139,20 +140,21 @@ export default function ScriptWritingDialog({
             <div className="flex-1 space-y-4 overflow-y-auto p-5">
               <div className="flex flex-wrap items-center gap-4">
                 <div className="inline-flex rounded-md border border-white/10 p-1" role="group" aria-label={t('mode')}>
-                  <button type="button" disabled={isGenerating || isApplying} onClick={() => { setMode('expand_outline'); setDraft(''); setError(''); }} aria-pressed={mode === 'expand_outline'} className={`flex h-9 items-center gap-2 rounded px-3 text-sm ${mode === 'expand_outline' ? 'bg-primary/20 text-primary' : 'text-text-secondary hover:text-foreground'}`}>
+                  <button type="button" disabled={isGenerating || isApplying} onClick={() => { setMode('expand_outline'); setDraft(''); setError(''); }} aria-pressed={effectiveMode === 'expand_outline'} className={`flex h-9 items-center gap-2 rounded px-3 text-sm ${effectiveMode === 'expand_outline' ? 'bg-primary/20 text-primary' : 'text-text-secondary hover:text-foreground'}`}>
                     <WandSparkles size={15} />{t('expand')}
                   </button>
-                  <button type="button" disabled={isGenerating || isApplying} onClick={() => { setMode('continue'); setDraft(''); setError(''); }} aria-pressed={mode === 'continue'} className={`flex h-9 items-center gap-2 rounded px-3 text-sm ${mode === 'continue' ? 'bg-primary/20 text-primary' : 'text-text-secondary hover:text-foreground'}`}>
+                  <button type="button" disabled={isGenerating || isApplying} onClick={() => { setMode('continue'); setDraft(''); setError(''); }} aria-pressed={effectiveMode === 'continue'} className={`flex h-9 items-center gap-2 rounded px-3 text-sm ${effectiveMode === 'continue' ? 'bg-primary/20 text-primary' : 'text-text-secondary hover:text-foreground'}`}>
                     <TextCursorInput size={15} />{t('continue')}
                   </button>
                 </div>
                 <label className="flex items-center gap-2 text-sm text-text-secondary">
-                  <span>{t(mode === 'expand_outline' ? 'targetWordCount' : 'additionalWordCount')}</span>
+                  <span>{t(effectiveMode === 'expand_outline' ? 'targetWordCount' : 'additionalWordCount')}</span>
                   <input type="number" min={100} max={20000} step={1} value={targetWordCount || ''} onChange={event => setTargetWordCount(Number(event.target.value))} disabled={isGenerating || isApplying} aria-invalid={!validWordCount} className="h-9 w-24 rounded border border-white/10 bg-transparent px-2 text-foreground" />
                   <span>{t('characters')}</span>
                 </label>
               </div>
 
+              {episode && !sourceText.trim() && <p className="text-sm text-primary">{t('startFromOutline')}</p>}
               <p className="text-xs text-text-muted">{t('wordCountHint')}</p>
               {!validWordCount && <p role="alert" className="text-sm text-red-300">{t('invalidWordCount')}</p>}
 
@@ -171,7 +173,7 @@ export default function ScriptWritingDialog({
                 </label>
               ) : (
                 <div className="rounded-md border border-white/10 bg-white/[0.025] px-4 py-3 text-sm text-text-secondary">
-                  {mode === 'expand_outline' ? t('sourceOutline', { count: Array.from(effectiveSource.replace(/\s/g, '')).length.toLocaleString() }) : t('sourceScript', { count: Array.from(effectiveSource.replace(/\s/g, '')).length.toLocaleString() })}
+                  {effectiveMode === 'expand_outline' ? t('sourceOutline', { count: Array.from(effectiveSource.replace(/\s/g, '')).length.toLocaleString() }) : t('sourceScript', { count: Array.from(effectiveSource.replace(/\s/g, '')).length.toLocaleString() })}
                   {isGenerating && <span className="ml-2 text-primary">{t('working')}</span>}
                 </div>
               )}
@@ -183,7 +185,7 @@ export default function ScriptWritingDialog({
               {draft ? (
                 <button type="button" onClick={() => { void apply(); }} disabled={isApplying || isGenerating} className="flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-50">
                   {isApplying ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
-                  {mode === 'expand_outline' ? t('replace') : t('append')}
+                  {effectiveMode === 'expand_outline' ? t('replace') : t('append')}
                 </button>
               ) : (
                 <button type="button" onClick={() => { void generate(); }} disabled={!effectiveSource.trim() || isGenerating || isApplying || !validWordCount} className="flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-50">
