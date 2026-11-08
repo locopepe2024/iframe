@@ -60,6 +60,7 @@ def test_generate_episode_text_uses_shared_llm_and_strips_fences():
     assert result == {"draft": "INT. 赌桌 - 夜\n纲手抬起拳头。", "mode": "expand_outline", "title": "筹码不能流血"}
     assert calls[0]["timeout_seconds"] == 900
     assert calls[0]["max_retries"] == 1
+    assert calls[0]["stream"] is True
 
 
 def test_script_writing_endpoint_is_owner_scoped_and_returns_preview_draft(monkeypatch):

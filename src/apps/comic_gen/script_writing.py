@@ -57,7 +57,7 @@ def build_episode_writing_messages(
 
 def generate_episode_text(llm: Any, **kwargs: Any) -> dict[str, str]:
     messages = build_episode_writing_messages(**kwargs)
-    draft = llm.chat(messages=messages, timeout_seconds=900, max_retries=1).strip()
+    draft = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True).strip()
     if draft.startswith("```"):
         draft = draft.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     if not draft:
