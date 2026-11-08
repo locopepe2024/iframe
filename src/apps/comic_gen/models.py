@@ -3169,6 +3169,7 @@ class Script(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Authenticated UniArt profile owner")
     title: str = Field(..., description="Title of the comic/video")
     original_text: str = Field(..., description="The original novel text")
+    source_script_document_id: Optional[str] = Field(None, description="Independent authoring document copied when creating this project")
     source_revision: int = Field(1, ge=1)
     source_revisions: List[ScriptSourceRevision] = Field(default_factory=list)
     fact_ledger_revision: int = Field(0, ge=0)

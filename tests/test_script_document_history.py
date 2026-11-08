@@ -57,6 +57,25 @@ def test_snapshot_timestamps_do_not_overwrite_same_second(tmp_path, monkeypatch)
     assert len(api.list_document_snapshots(project_id)) == 2
 
 
+def test_save_with_snapshot_captures_current_document_even_on_first_save(tmp_path, monkeypatch):
+    from src.apps.comic_gen import api
+
+    monkeypatch.setattr(api, "_TRON_PROJECTS_DIR", Path(tmp_path) / "projects")
+    project_id = "current-version"
+    current = _doc("当前编辑内容")
+
+    result = api.save_document(
+        project_id,
+        api.SaveDocumentRequest(content=current, create_snapshot=True),
+    )
+
+    assert result["snapshot_created"] is True
+    snapshots = api.list_document_snapshots(project_id)
+    assert len(snapshots) == 1
+    snapshot_path = api._get_project_dir(project_id) / "history" / f"{snapshots[0].timestamp}.json"
+    assert api.json.loads(snapshot_path.read_text(encoding="utf-8")) == current
+
+
 def test_legacy_project_opens_with_editable_source_text(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
@@ -103,3 +122,73 @@ def test_docx_import_creates_editable_paragraphs_without_splitting_episodes():
     assert [block["content"][0]["text"] for block in result["content"]["content"]] == [
         "第1集 甲到达", "第2集 乙离开",
     ]
+
+
+def test_script_documents_are_owner_scoped_and_support_version_history(tmp_path, monkeypatch):
+    from fastapi import HTTPException
+
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+
+    monkeypatch.setattr(api, "_TRON_SCRIPT_DOCUMENTS_DIR", Path(tmp_path) / "script-documents")
+    owner = UserContext("user-a", "profile-a", "A", "")
+    other = UserContext("user-b", "profile-b", "B", "")
+    draft = _doc("创作原稿")
+
+    created = api.create_script_document(api.CreateScriptDocumentRequest(title="原稿", content=draft), owner)
+    document_id = created["id"]
+    api.save_script_document(document_id, api.UpdateScriptDocumentRequest(content=_doc("修改稿")), owner)
+    saved = api.save_script_document(
+        document_id,
+        api.UpdateScriptDocumentRequest(content=draft, create_snapshot=True),
+        owner,
+    )
+
+    assert saved["snapshot_created"] is True
+    assert len(api.list_script_document_snapshots(document_id, owner)) == 1
+    snapshot = api.list_script_document_snapshots(document_id, owner)[0]
+    api.save_script_document(document_id, api.UpdateScriptDocumentRequest(content=_doc("下一稿")), owner)
+    restored = api.restore_script_document_snapshot(document_id, snapshot["timestamp"], owner)
+    assert restored["content"] == draft
+    assert len(api.list_script_document_snapshots(document_id, owner)) == 2
+    assert api.list_script_documents(other) == []
+    try:
+        api.load_script_document(document_id, other)
+    except HTTPException as exc:
+        assert exc.status_code == 404
+    else:
+        raise AssertionError("another owner must not read this script")
+
+
+def test_creating_project_from_script_copies_document_as_production_draft(tmp_path, monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+
+    monkeypatch.setattr(api, "_TRON_SCRIPT_DOCUMENTS_DIR", Path(tmp_path) / "script-documents")
+    monkeypatch.setattr(api, "_TRON_PROJECTS_DIR", Path(tmp_path) / "projects")
+    user = UserContext("user-a", "profile-a", "A", "")
+    content = _doc("创作稿正文\n第二行")
+    document = api.create_script_document(api.CreateScriptDocumentRequest(title="原稿", content=content), user)
+    created = {}
+
+    def create_project(title, text, skip_analysis, workflow_mode, series_id, owner_user_id, owner_profile_id, source_script_document_id=None):
+        created.update(locals())
+        return SimpleNamespace(id="production-project")
+
+    monkeypatch.setattr(api.pipeline, "create_project", create_project)
+    monkeypatch.setattr(api, "signed_response", lambda result: result)
+    result = asyncio.run(api.create_project(
+        api.CreateProjectRequest(title="制作项目", text="ignored", source_script_document_id=document["id"]),
+        skip_analysis=True,
+        user=user,
+    ))
+
+    production = api.load_document(result.id)
+    api.save_document(result.id, api.SaveDocumentRequest(content=_doc("制作阶段修改")))
+    assert created["source_script_document_id"] == document["id"]
+    assert created["text"] == "创作稿正文\n第二行"
+    assert production["content"] == content
+    assert api.load_script_document(document["id"], user)["content"] == content

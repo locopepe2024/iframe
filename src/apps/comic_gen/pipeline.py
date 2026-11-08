@@ -1355,6 +1355,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         series_id: Optional[str] = None,
         owner_user_id: Optional[str] = None,
         owner_profile_id: Optional[str] = None,
+        source_script_document_id: Optional[str] = None,
     ) -> Script:
         """Step 1: Parse novel and create project.
 
@@ -1376,6 +1377,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script.workflow_mode = workflow_mode
         script.owner_user_id = owner_user_id
         script.owner_profile_id = owner_profile_id
+        script.source_script_document_id = source_script_document_id
         self._record_source_text(script, script.original_text)
         self.stamp_owned_children(script)
         self.scripts[script.id] = script

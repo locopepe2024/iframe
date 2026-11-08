@@ -493,6 +493,8 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
     protected = (
         path == "/projects"
         or path.startswith("/projects/")
+        or path == "/script-documents"
+        or path.startswith("/script-documents/")
         or path == "/series"
         or path.startswith("/series/")
         or path.startswith("/recreation/")
@@ -1183,6 +1185,7 @@ class CreateProjectRequest(BaseModel):
     # the next episode of this series (episode_number = current max + 1).
     # Omit for a standalone project — behavior unchanged.
     series_id: Optional[str] = None
+    source_script_document_id: Optional[str] = None
 
 
 @app.post("/projects", response_model=Script)
@@ -1199,6 +1202,19 @@ async def create_project(
     """
     # Run in thread pool to avoid blocking event loop during LLM analysis (Python 3.8 compatible)
     loop = asyncio.get_event_loop()
+    source_document = None
+    if request.source_script_document_id:
+        source_document = await loop.run_in_executor(
+            None, partial(load_script_document, request.source_script_document_id, user)
+        )
+        def node_text(node):
+            if node.get("type") == "hardBreak":
+                return "\n"
+            separator = "\n" if node.get("type") in {"doc", "shotBlock"} else ""
+            return node.get("text", "") + separator.join(node_text(child) for child in node.get("content", []))
+        request.text = "\n".join(node_text(block) for block in source_document["content"].get("content", []))
+        if not request.text.strip():
+            raise HTTPException(status_code=422, detail="Script document is empty")
     try:
         result = await loop.run_in_executor(
             None,  # Use default executor
@@ -1211,10 +1227,17 @@ async def create_project(
                 request.series_id,
                 user.user_id,
                 user.owner_profile_id,
+                **({"source_script_document_id": request.source_script_document_id}
+                   if request.source_script_document_id else {}),
             )
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    if source_document is not None:
+        await loop.run_in_executor(
+            None,
+            partial(save_document, result.id, SaveDocumentRequest(content=source_document["content"], create_snapshot=True)),
+        )
     return signed_response(result)
 
 
@@ -9358,7 +9381,8 @@ def delete_prop(script_id: str, prop_id: str):
 
 from datetime import datetime, timezone
 
-_TRON_PROJECTS_DIR = Path.home() / ".tron" / "comic" / "projects"
+_TRON_PROJECTS_DIR = Path(os.environ.get("SCRIPT_EDITOR_PROJECTS_DIR", str(Path.home() / ".tron" / "comic" / "projects")))
+_TRON_SCRIPT_DOCUMENTS_DIR = Path(os.environ.get("SCRIPT_DOCUMENTS_DIR", str(Path.home() / ".tron" / "comic" / "script-documents")))
 
 
 class SaveDocumentRequest(BaseModel):
@@ -9371,6 +9395,172 @@ class DocumentSnapshotInfo(BaseModel):
     timestamp: str  # ISO format
     created_at: str
     size_bytes: int
+
+
+class CreateScriptDocumentRequest(BaseModel):
+    title: str = "未命名剧本"
+    content: dict = Field(default_factory=lambda: {"type": "doc", "content": [{"type": "action", "content": []}]})
+
+
+class UpdateScriptDocumentRequest(BaseModel):
+    title: Optional[str] = None
+    content: Optional[dict] = None
+    create_snapshot: bool = False
+
+
+def _script_documents_owner_dir(owner_profile_id: str) -> Path:
+    return _TRON_SCRIPT_DOCUMENTS_DIR / studio_owner_key(owner_profile_id)
+
+
+def _write_script_document_json(path: Path, data: dict) -> None:
+    """Replace a complete JSON file so a failed write preserves the last save."""
+    temporary_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary_path.replace(path)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Failed to save script document") from exc
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _script_document_dir(owner_profile_id: str, document_id: str) -> Path:
+    try:
+        canonical_id = str(uuid.UUID(document_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=404, detail="Script document not found")
+    document_dir = _script_documents_owner_dir(owner_profile_id) / canonical_id
+    if not document_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Script document not found")
+    return document_dir
+
+
+def _script_document_metadata(document_dir: Path) -> dict:
+    try:
+        return json.loads((document_dir / "metadata.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to load script document metadata: {exc}")
+
+
+def _script_document_response(document_dir: Path) -> dict:
+    metadata = _script_document_metadata(document_dir)
+    document_path = document_dir / "document.json"
+    try:
+        content = json.loads(document_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to load script document: {exc}")
+    metadata["content"] = content
+    metadata["updated_at"] = datetime.fromtimestamp(document_path.stat().st_mtime, timezone.utc).isoformat()
+    return metadata
+
+
+@app.post("/script-documents")
+def create_script_document(
+    request: CreateScriptDocumentRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    document_id = str(uuid.uuid4())
+    document_dir = _script_documents_owner_dir(user.owner_profile_id) / document_id
+    document_dir.mkdir(parents=True, exist_ok=False)
+    metadata = {
+        "id": document_id,
+        "title": request.title.strip() or "未命名剧本",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        _write_script_document_json(document_dir / "metadata.json", metadata)
+        _write_script_document_json(document_dir / "document.json", request.content)
+    except (OSError, HTTPException) as exc:
+        shutil.rmtree(document_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create script document: {exc}")
+    return _script_document_response(document_dir)
+
+
+@app.get("/script-documents")
+def list_script_documents(user: UserContext = Depends(require_studio_user)):
+    owner_dir = _script_documents_owner_dir(user.owner_profile_id)
+    if not owner_dir.exists():
+        return []
+    documents = []
+    for document_dir in owner_dir.iterdir():
+        if document_dir.is_dir() and (document_dir / "document.json").is_file():
+            metadata = _script_document_metadata(document_dir)
+            document_path = document_dir / "document.json"
+            metadata["updated_at"] = datetime.fromtimestamp(document_path.stat().st_mtime, timezone.utc).isoformat()
+            documents.append(metadata)
+    documents.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    return documents
+
+
+@app.get("/script-documents/{document_id}")
+def load_script_document(document_id: str, user: UserContext = Depends(require_studio_user)):
+    return _script_document_response(_script_document_dir(user.owner_profile_id, document_id))
+
+
+@app.put("/script-documents/{document_id}")
+def save_script_document(
+    document_id: str,
+    request: UpdateScriptDocumentRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    document_dir = _script_document_dir(user.owner_profile_id, document_id)
+    metadata = _script_document_metadata(document_dir)
+    if request.title is not None:
+        metadata["title"] = request.title.strip() or "未命名剧本"
+        _write_script_document_json(document_dir / "metadata.json", metadata)
+    if request.content is not None:
+        _write_script_document_json(document_dir / "document.json", request.content)
+    snapshot = _create_snapshot(document_dir, document_id) if request.create_snapshot else None
+    response = _script_document_response(document_dir)
+    response.update({
+        "status": "ok",
+        "size_bytes": (document_dir / "document.json").stat().st_size,
+        "snapshot_created": snapshot is not None,
+    })
+    if snapshot is not None:
+        response["snapshot"] = {"document_id": document_id, **snapshot.model_dump(exclude={"project_id"})}
+    return response
+
+
+@app.get("/script-documents/{document_id}/snapshots")
+def list_script_document_snapshots(document_id: str, user: UserContext = Depends(require_studio_user)):
+    document_dir = _script_document_dir(user.owner_profile_id, document_id)
+    history_dir = document_dir / "history"
+    if not history_dir.exists():
+        return []
+    snapshots = [
+        {"document_id": document_id, **_snapshot_info(document_id, path).model_dump(exclude={"project_id"})}
+        for path in history_dir.glob("*.json") if path.is_file()
+    ]
+    return sorted(snapshots, key=lambda item: item["timestamp"], reverse=True)
+
+
+@app.post("/script-documents/{document_id}/snapshots")
+def create_script_document_snapshot(document_id: str, user: UserContext = Depends(require_studio_user)):
+    document_dir = _script_document_dir(user.owner_profile_id, document_id)
+    snapshot = _create_snapshot(document_dir, document_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="No document to snapshot")
+    return {"status": "ok", "document_id": document_id, **snapshot.model_dump(exclude={"project_id"})}
+
+
+@app.post("/script-documents/{document_id}/snapshots/{timestamp}/restore")
+def restore_script_document_snapshot(
+    document_id: str,
+    timestamp: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    document_dir = _script_document_dir(user.owner_profile_id, document_id)
+    snapshot_path = document_dir / "history" / f"{timestamp}.json"
+    if not snapshot_path.is_file() or snapshot_path.parent != document_dir / "history":
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    document_path = document_dir / "document.json"
+    try:
+        _create_snapshot(document_dir, document_id)
+        _write_script_document_json(document_path, json.loads(snapshot_path.read_text(encoding="utf-8")))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to restore snapshot: {exc}")
+    return _script_document_response(document_dir)
 
 
 def _get_project_dir(project_id: str) -> Path:
@@ -9458,15 +9648,14 @@ def save_document(project_id: str, request: SaveDocumentRequest):
     project_dir.mkdir(parents=True, exist_ok=True)
 
     doc_path = project_dir / "document.json"
-
     snapshot = None
-    # Optionally create a snapshot before overwriting
-    if request.create_snapshot and doc_path.exists():
-        snapshot = _create_snapshot(project_dir, project_id)
 
     try:
         with open(doc_path, "w", encoding="utf-8") as f:
             json.dump(request.content, f, ensure_ascii=False, indent=2)
+        # A manual snapshot represents the content the user just saved.
+        if request.create_snapshot:
+            snapshot = _create_snapshot(project_dir, project_id)
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Failed to save document: {e}")
 
@@ -9787,6 +9976,10 @@ def _parse_txt(text: str) -> dict:
 
 @app.post("/projects/{project_id}/document/import")
 def import_document(project_id: str, req: ImportDocRequest):
+    return _parse_imported_document(req)
+
+
+def _parse_imported_document(req: ImportDocRequest):
     """Import a script file and convert to Tiptap JSON."""
     import base64
     import tempfile
@@ -9824,6 +10017,12 @@ def import_document(project_id: str, req: ImportDocRequest):
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_type}")
 
     return {"content": doc, "filename": req.filename, "file_type": file_type}
+
+
+@app.post("/script-documents/import")
+def import_script_document(req: ImportDocRequest, user: UserContext = Depends(require_studio_user)):
+    """Parse an uploaded screenplay into an independent authoring document."""
+    return _parse_imported_document(req)
 
 
 @app.post("/projects/{project_id}/document/export")
@@ -10222,8 +10421,24 @@ def derive_gaps(project_id: str, req: DeriveGapsRequest):
         if not text_blocks:
             return DeriveGapsResponse(entities=[], cached=False)
 
-    # 2. Check cache
-    cache_key = _derive_cache_key(text_blocks, req.gaps)
+    return _derive_text_gaps(text_blocks, req)
+
+
+@app.post("/script-documents/{document_id}/derive_gaps")
+def derive_script_document_gaps(
+    document_id: str,
+    req: DeriveGapsRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    _script_document_dir(user.owner_profile_id, document_id)
+    return _derive_text_gaps(req.raw_text_blocks or [], req, user.owner_profile_id)
+
+
+def _derive_text_gaps(text_blocks: List[str], req: DeriveGapsRequest, owner_scope: str = ""):
+    if not text_blocks:
+        return DeriveGapsResponse(entities=[], cached=False)
+    # Scope authoring cache entries to the authenticated profile.
+    cache_key = owner_scope + _derive_cache_key(text_blocks, req.gaps)
     cached_result = _derive_cache_get(cache_key)
     if cached_result is not None:
         entities = [DeriveGapEntity(**e) for e in cached_result]
