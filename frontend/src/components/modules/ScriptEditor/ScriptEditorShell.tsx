@@ -179,11 +179,8 @@ export default function ScriptEditorShell({
     if (!editor || !scriptDocumentId || !canPersist || creatingProject) return;
     setCreatingProject(true);
     try {
-      const content = editor.getJSON();
       const title = projectTitle.trim() || t('document.untitled');
-      const saved = await scriptEditorApi.saveScriptDocument(scriptDocumentId, content, title);
-      useEditorStore.getState().setDirty(false);
-      useEditorStore.getState().setLastSavedAt(saved.updated_at ? new Date(saved.updated_at) : new Date());
+      if (!await save(false)) throw new Error(t('toolbar.saveFailed'));
       const project = await api.createProject(title, editor.getText({ blockSeparator: '\n' }), true, 'r2v', undefined, scriptDocumentId);
       window.location.hash = `#/project/${project.id}/editor`;
     } catch (error) {
@@ -191,7 +188,7 @@ export default function ScriptEditorShell({
     } finally {
       setCreatingProject(false);
     }
-  }, [editor, scriptDocumentId, canPersist, creatingProject, projectTitle, t]);
+  }, [editor, scriptDocumentId, canPersist, creatingProject, projectTitle, save, t]);
 
   const backToLibrary = useCallback(async () => {
     if (useEditorStore.getState().isDirty && !await save(false)) {
