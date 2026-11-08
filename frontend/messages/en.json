@@ -3118,6 +3118,10 @@
   },
   "scriptEditor": {
     "document": {
+      "moreActions": "More actions for {title}",
+      "deleting": "Deleting {title}…",
+      "confirmDelete": "Delete screenplay “{title}”? The outline, all episode bodies and snapshots will be permanently deleted. Existing production projects will be kept.",
+      "deleteFailed": "Could not delete the screenplay. Please retry.",
       "production": "Production draft",
       "authoring": "Authoring script",
       "title": "Script title",

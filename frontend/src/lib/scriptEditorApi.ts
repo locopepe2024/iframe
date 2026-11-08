@@ -140,6 +140,10 @@ export const scriptEditorApi = {
     return res.data;
   },
 
+  deleteScriptDocument: async (documentId: string): Promise<void> => {
+    await axios.delete(`${API_BASE}/script-documents/${documentId}`);
+  },
+
   saveScriptDocument: async (documentId: string, content: object, title?: string, createSnapshot = false): Promise<SaveDocumentResponse> => {
     const res = await axios.put(`${API_BASE}/script-documents/${documentId}`, {
       content,

@@ -3118,6 +3118,10 @@
   },
   "scriptEditor": {
     "document": {
+      "moreActions": "“{title}”的更多操作",
+      "deleting": "正在删除“{title}”…",
+      "confirmDelete": "确定删除剧本“{title}”吗？总纲、全部分集正文和快照将一并删除，且无法恢复。已创建的制作项目不受影响。",
+      "deleteFailed": "删除剧本失败，请重试。",
       "production": "制作稿",
       "authoring": "创作稿",
       "title": "剧本标题",
