@@ -5,8 +5,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Loader2, TextCursorInput, WandSparkles, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { scriptEditorApi, type WritingEpisodeOutline, type ScriptWritingMode } from '@/lib/scriptEditorApi';
+import ScriptModelSelect, { type ScriptModelSelectProps } from '../components/ScriptModelSelect';
 
-interface ScriptWritingDialogProps {
+interface ScriptWritingDialogProps extends ScriptModelSelectProps {
   open: boolean;
   onClose: () => void;
   onApply: (mode: ScriptWritingMode, draft: string) => Promise<void>;
@@ -30,6 +31,11 @@ export default function ScriptWritingDialog({
   title,
   sourceText,
   episode,
+  model,
+  onModelChange,
+  modelBusy,
+  modelError,
+  onModelReload,
 }: ScriptWritingDialogProps) {
   const t = useTranslations('scriptEditor.writing');
   const [mode, setMode] = useState(initialMode);
@@ -56,7 +62,7 @@ export default function ScriptWritingDialog({
   }, [open, initialMode, episode?.target_word_count]);
 
   const generate = async () => {
-    if (!effectiveSource.trim() || (!projectId && !scriptDocumentId) || isGenerating || !validWordCount) return;
+    if (!effectiveSource.trim() || (!projectId && !scriptDocumentId) || isGenerating || isApplying || modelBusy || !validWordCount) return;
     const activeRun = ++runId.current;
     setError('');
     setDraft('');
@@ -70,6 +76,7 @@ export default function ScriptWritingDialog({
         source_text: effectiveSource,
         target_word_count: targetWordCount,
         instruction,
+        model,
       });
       let current = job;
       for (let attempt = 0; current.status === 'running' || current.status === 'queued'; attempt += 1) {
@@ -138,6 +145,7 @@ export default function ScriptWritingDialog({
             </header>
 
             <div className="flex-1 space-y-4 overflow-y-auto p-5">
+              {onModelChange && <ScriptModelSelect model={model} onModelChange={onModelChange} modelBusy={modelBusy || isGenerating || isApplying} modelError={modelError} onModelReload={onModelReload} />}
               <div className="flex flex-wrap items-center gap-4">
                 <div className="inline-flex rounded-md border border-white/10 p-1" role="group" aria-label={t('mode')}>
                   <button type="button" disabled={isGenerating || isApplying} onClick={() => { setMode('expand_outline'); setDraft(''); setError(''); }} aria-pressed={effectiveMode === 'expand_outline'} className={`flex h-9 items-center gap-2 rounded px-3 text-sm ${effectiveMode === 'expand_outline' ? 'bg-primary/20 text-primary' : 'text-text-secondary hover:text-foreground'}`}>
@@ -181,14 +189,14 @@ export default function ScriptWritingDialog({
 
             <footer className="flex flex-wrap justify-end gap-2 border-t border-white/10 px-5 py-4">
               <button type="button" onClick={close} className="h-10 rounded-md border border-white/10 px-4 text-sm text-text-secondary hover:bg-white/5">{t('cancel')}</button>
-              {draft && <button type="button" onClick={() => { void generate(); }} disabled={isGenerating || isApplying || !validWordCount} className="h-10 rounded-md border border-white/10 px-4 text-sm text-foreground hover:bg-white/5 disabled:opacity-50">{t('regenerate')}</button>}
+              {draft && <button type="button" onClick={() => { void generate(); }} disabled={isGenerating || isApplying || modelBusy || !validWordCount} className="h-10 rounded-md border border-white/10 px-4 text-sm text-foreground hover:bg-white/5 disabled:opacity-50">{t('regenerate')}</button>}
               {draft ? (
                 <button type="button" onClick={() => { void apply(); }} disabled={isApplying || isGenerating} className="flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-50">
                   {isApplying ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                   {effectiveMode === 'expand_outline' ? t('replace') : t('append')}
                 </button>
               ) : (
-                <button type="button" onClick={() => { void generate(); }} disabled={!effectiveSource.trim() || isGenerating || isApplying || !validWordCount} className="flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-50">
+                <button type="button" onClick={() => { void generate(); }} disabled={!effectiveSource.trim() || isGenerating || isApplying || modelBusy || !validWordCount} className="flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-white disabled:opacity-50">
                   {isGenerating ? <Loader2 size={16} className="animate-spin" /> : <WandSparkles size={16} />}
                   {isGenerating ? t('generating') : t('generate')}
                 </button>

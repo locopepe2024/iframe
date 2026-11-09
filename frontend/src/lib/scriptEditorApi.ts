@@ -59,6 +59,7 @@ export interface ScriptDocumentResponse extends DocumentResponse {
 }
 
 export type ScriptWritingMode = 'expand_outline' | 'continue';
+export type ScriptWritingModel = 'llm-nf-all' | 'deepseek-v4.1-flash';
 
 export interface ScriptWritingJob {
   id: string;
@@ -113,14 +114,20 @@ export interface OutlineAnalysisJob {
 }
 
 export const scriptEditorApi = {
+  getWritingSettings: async (): Promise<{ model: ScriptWritingModel }> => {
+    return (await axios.get(`${API_BASE}/script-writing/settings`)).data;
+  },
+  setWritingModel: async (model: ScriptWritingModel): Promise<{ model: ScriptWritingModel }> => {
+    return (await axios.put(`${API_BASE}/script-writing/settings`, { model })).data;
+  },
   getWritingPlan: async (documentId: string): Promise<WritingWorkspace> => {
     return (await axios.get(`${API_BASE}/script-documents/${documentId}/writing-plan`)).data;
   },
   confirmWritingPlan: async (documentId: string, data: { draft: WritingPlanDraft; base_revision: string | null; source_hash: string }): Promise<WritingWorkspace> => {
     return (await axios.put(`${API_BASE}/script-documents/${documentId}/writing-plan`, data)).data;
   },
-  startOutlineAnalysis: async (documentId: string): Promise<OutlineAnalysisJob> => {
-    return (await axios.post(`${API_BASE}/script-documents/${documentId}/outline-analysis`)).data;
+  startOutlineAnalysis: async (documentId: string, model?: ScriptWritingModel): Promise<OutlineAnalysisJob> => {
+    return (await axios.post(`${API_BASE}/script-documents/${documentId}/outline-analysis`, model ? { model } : undefined)).data;
   },
   getOutlineAnalysisJob: async (documentId: string, jobId: string): Promise<OutlineAnalysisJob> => {
     return (await axios.get(`${API_BASE}/script-documents/${documentId}/outline-analysis/jobs/${jobId}`)).data;
@@ -225,6 +232,7 @@ export const scriptEditorApi = {
     source_text: string;
     target_word_count: number;
     instruction?: string;
+    model?: ScriptWritingModel;
   }): Promise<ScriptWritingJob> => {
     const res = await axios.post(`${API_BASE}/script-writing/generate`, data);
     return res.data;

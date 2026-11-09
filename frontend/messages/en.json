@@ -3117,6 +3117,13 @@
     }
   },
   "scriptEditor": {
+    "model": {
+      "label": "Screenplay model",
+      "hint": "Used for outline parsing, episode writing and AI continuation. Switch models to retry after a failure.",
+      "loading": "Loading…",
+      "failed": "Could not load or save model settings. Please retry.",
+      "retry": "Reload"
+    },
     "document": {
       "moreActions": "More actions for {title}",
       "deleting": "Deleting {title}…",

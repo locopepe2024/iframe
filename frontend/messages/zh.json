@@ -3117,6 +3117,13 @@
     }
   },
   "scriptEditor": {
+    "model": {
+      "label": "剧本模型",
+      "hint": "用于总纲解析、按大纲写作和 AI 续写；失败后可切换模型重试。",
+      "loading": "正在加载…",
+      "failed": "模型设置加载或保存失败，请重试。",
+      "retry": "重新加载"
+    },
     "document": {
       "moreActions": "“{title}”的更多操作",
       "deleting": "正在删除“{title}”…",
