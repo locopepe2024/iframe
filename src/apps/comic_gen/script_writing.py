@@ -55,9 +55,10 @@ def build_episode_writing_messages(
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
-def generate_episode_text(llm: Any, **kwargs: Any) -> dict[str, str]:
+def generate_episode_text(llm: Any, *, model: str | None = None, **kwargs: Any) -> dict[str, str]:
     messages = build_episode_writing_messages(**kwargs)
-    draft = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True).strip()
+    options = {"model": model} if model else {}
+    draft = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True, **options).strip()
     if draft.startswith("```"):
         draft = draft.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     if not draft:

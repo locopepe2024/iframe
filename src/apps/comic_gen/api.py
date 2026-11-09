@@ -9430,12 +9430,38 @@ class UpdateScriptDocumentRequest(BaseModel):
     create_snapshot: bool = False
 
 
-from .script_authoring import ScriptAuthoringStore, analyze_outline, document_text
+from .script_authoring import ScriptAuthoringStore, ScriptWritingModel, analyze_outline, document_text
 from .models import ScriptWritingPlanDraft
 
 
 def _authoring_store(user: UserContext) -> ScriptAuthoringStore:
     return ScriptAuthoringStore(_script_documents_owner_dir(user.owner_profile_id))
+
+
+class ScriptWritingModelSettings(BaseModel):
+    model: ScriptWritingModel
+
+
+@app.get("/script-writing/settings")
+def get_script_writing_settings(user: UserContext = Depends(require_studio_user)):
+    return {"model": _authoring_store(user).writing_model() or "llm-nf-all"}
+
+
+@app.put("/script-writing/settings")
+def update_script_writing_settings(request: ScriptWritingModelSettings,
+                                   user: UserContext = Depends(require_studio_user)):
+    _authoring_store(user).set_writing_model(request.model)
+    return {"model": request.model}
+
+
+def _script_model_for_request(user: UserContext, requested: ScriptWritingModel | None) -> str | None:
+    model = requested or _authoring_store(user).writing_model()
+    if not model:
+        return None  # Existing callers retain the deployment's configured model.
+    from ..user_config import get_user_config_store
+
+    provider = get_user_config_store().get_public(user).get("catalog_name")
+    return f"{provider}/{model}" if provider in {"greena", "uniart"} else model
 
 
 class ConfirmWritingPlanRequest(BaseModel):
@@ -9456,7 +9482,8 @@ def confirm_writing_plan(document_id: str, request: ConfirmWritingPlanRequest,
 
 
 @app.post("/script-documents/{document_id}/outline-analysis", status_code=202)
-def start_outline_analysis(document_id: str, user: UserContext = Depends(require_studio_user)):
+def start_outline_analysis(document_id: str, request: ScriptWritingModelSettings | None = None,
+                           user: UserContext = Depends(require_studio_user)):
     workspace = _authoring_store(user).workspace(document_id)
     if workspace["root_document_id"] != document_id:
         raise HTTPException(422, "请在总纲文档解析全剧大纲")
@@ -9465,9 +9492,10 @@ def start_outline_analysis(document_id: str, user: UserContext = Depends(require
     if len(workspace["source_text"]) > 80000:
         raise HTTPException(422, "总纲最多支持80000字，请先整理原文")
     llm = pipeline.script_processor.llm
+    model = _script_model_for_request(user, request.model if request else None)
     return extraction_jobs.start(user.owner_profile_id, "script-outline:document:" + document_id,
-        workspace["source_hash"] + ":" + uuid.uuid4().hex,
-        lambda: analyze_outline(llm, workspace["source_text"]))
+        workspace["source_hash"] + ":" + str(model or llm.default_model) + ":" + uuid.uuid4().hex,
+        lambda: analyze_outline(llm, workspace["source_text"], model=model))
 
 
 @app.get("/script-documents/{document_id}/outline-analysis/jobs/{job_id}")
@@ -9485,6 +9513,7 @@ class ScriptWritingRequest(BaseModel):
     source_text: str = Field(min_length=1, max_length=80000)
     target_word_count: int = Field(2000, ge=100, le=20000)
     instruction: str = Field("", max_length=4000)
+    model: ScriptWritingModel | None = None
 
 
 def _series_writing_context(script: Script, owner_profile_id: str) -> tuple[str, str]:
@@ -9510,7 +9539,7 @@ def _series_writing_context(script: Script, owner_profile_id: str) -> tuple[str,
 
 
 def _run_script_writing(request: ScriptWritingRequest, series_context: str,
-                        previous_episode_context: str) -> dict[str, str]:
+                        previous_episode_context: str, model: str | None = None) -> dict[str, str]:
     from ..agent_skills import catalog as skill_catalog
     from .script_writing import generate_episode_text
 
@@ -9518,6 +9547,7 @@ def _run_script_writing(request: ScriptWritingRequest, series_context: str,
                   if package["id"] == "em-outline-to-script"), None)
     return generate_episode_text(
         pipeline.script_processor.llm,
+        model=model,
         mode=request.mode,
         title=request.title,
         source_text=request.source_text,
@@ -9561,16 +9591,17 @@ def start_script_writing(
         raise HTTPException(422, "请先输入本集大纲或剧本正文")
     normalized = request.model_copy(update={"title": title})
     llm = pipeline.script_processor.llm
+    model = _script_model_for_request(user, request.model)
     fingerprint = hashlib.sha256(json.dumps([
         normalized.mode, resource_key, normalized.title, normalized.source_text,
         normalized.target_word_count, normalized.instruction,
-        llm.provider, llm.default_model or llm._get_default_model(), series_context, previous_context, uuid.uuid4().hex,
+        llm.provider, model or llm.default_model or llm._get_default_model(), series_context, previous_context, uuid.uuid4().hex,
     ], ensure_ascii=False).encode()).hexdigest()
     return extraction_jobs.start(
         user.owner_profile_id,
         "script-writing:" + resource_key,
         fingerprint,
-        lambda: _run_script_writing(normalized, series_context, previous_context),
+        lambda: _run_script_writing(normalized, series_context, previous_context, model),
     )
 
 

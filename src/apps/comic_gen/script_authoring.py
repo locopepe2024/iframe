@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 import shutil
 from threading import RLock
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -19,6 +19,7 @@ from .models import ScriptWritingPlanDraft
 _LOCK = RLock()
 logger = logging.getLogger(__name__)
 _EMPTY_DOCUMENT = {"type": "doc", "content": [{"type": "action", "content": []}]}
+ScriptWritingModel = Literal["llm-nf-all", "deepseek-v4.1-flash"]
 
 
 def document_text(node: dict) -> str:
@@ -51,6 +52,21 @@ def _write(path: Path, value: dict) -> None:
 class ScriptAuthoringStore:
     def __init__(self, owner_directory: Path):
         self.owner_directory = owner_directory
+
+    def writing_model(self) -> ScriptWritingModel | None:
+        path = self.owner_directory / "writing-settings.json"
+        with _LOCK:
+            if not path.exists():
+                return None
+            model = _read(path).get("model")
+            if model not in ("llm-nf-all", "deepseek-v4.1-flash"):
+                raise HTTPException(409, "剧本模型设置无效，请重新选择")
+            return model
+
+    def set_writing_model(self, model: ScriptWritingModel) -> None:
+        with _LOCK:
+            self.owner_directory.mkdir(parents=True, exist_ok=True)
+            _write(self.owner_directory / "writing-settings.json", {"model": model})
 
     def directory(self, document_id: str) -> Path:
         try:
@@ -213,7 +229,7 @@ class ScriptAuthoringStore:
                 "episode_number": selected, "plan_revision": plan["revision"]}
 
 
-def analyze_outline(llm: Any, text: str) -> dict:
+def analyze_outline(llm: Any, text: str, *, model: str | None = None) -> dict:
     schema = ScriptWritingPlanDraft.model_json_schema()
     messages = [
         {"role": "system", "content": (
@@ -228,7 +244,8 @@ def analyze_outline(llm: Any, text: str) -> dict:
             "只输出符合以下schema的JSON对象，不输出代码围栏：\n" + json.dumps(schema, ensure_ascii=False))},
         {"role": "user", "content": "请解析以下完整总纲：\n<source_outline>\n" + text + "\n</source_outline>"},
     ]
-    output = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True).strip()
+    options = {"model": model} if model else {}
+    output = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True, **options).strip()
     if output.startswith("```"):
         output = output.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     try:

@@ -62,6 +62,61 @@ def test_analysis_keeps_all_24_episodes_and_source_facts():
         analyze_outline(SimpleNamespace(chat=lambda **_: json.dumps(wrong)), '两集')
 
 
+@pytest.mark.parametrize('provider', ['greena', 'uniart'])
+def test_model_choice_is_owner_scoped_and_routes_all_writing_operations(client, monkeypatch, provider):
+    from src.apps.comic_gen import api
+    from src.apps import user_config
+
+    monkeypatch.setattr(user_config, 'get_user_config_store', lambda: SimpleNamespace(
+        get_public=lambda _user: {'catalog_name': provider}))
+    root, workspace, _ = create_plan(client)
+    child = workspace['plan']['episodes'][0]['document_id']
+    original_default = api.pipeline.script_processor.llm.default_model
+    calls = []
+    monkeypatch.setattr(api.pipeline.script_processor.llm, 'chat', lambda **kwargs:
+        calls.append(kwargs) or (json.dumps(plan()) if '规划助手' in kwargs['messages'][0]['content'] else '正文草稿'))
+    assert client.put('/script-writing/settings', json={'model': 'deepseek-v4.1-flash'}).json()['model'] == 'deepseek-v4.1-flash'
+    assert client.get('/script-writing/settings').json()['model'] == 'deepseek-v4.1-flash'
+    assert client.get('/script-writing/settings', headers={'Authorization': 'Bearer other'}).json()['model'] == 'llm-nf-all'
+    assert client.put('/script-writing/settings', json={'model': 'deepseek-v4.1-flash-peak'}).status_code == 422
+    assert client.get('/script-writing/settings').json()['model'] == 'deepseek-v4.1-flash'
+
+    response = client.post(f'/script-documents/{root}/outline-analysis')
+    assert response.status_code == 202 and len(response.json()['result']['draft']['episodes']) == 24
+    assert calls[-1]['model'] == f'{provider}/deepseek-v4.1-flash'
+    payload = {'script_document_id': child, 'mode': 'expand_outline', 'source_text': '客户端文本'}
+    assert client.post('/script-writing/generate', json=payload).status_code == 202
+    assert calls[-1]['model'] == f'{provider}/deepseek-v4.1-flash'
+    client.put(f'/script-documents/{child}', json={'content': content('已保存正文')})
+    response = client.post('/script-writing/generate', json={**payload, 'mode': 'continue', 'model': 'llm-nf-all'})
+    assert response.status_code == 202 and response.json()['result']['mode'] == 'continue'
+    assert calls[-1]['model'] == f'{provider}/llm-nf-all'
+    assert calls[-1]['stream'] is True
+    assert client.get('/script-writing/settings').json()['model'] == 'deepseek-v4.1-flash'
+    assert api.pipeline.script_processor.llm.default_model == original_default
+
+
+def test_queued_outline_keeps_the_model_selected_when_started(client, monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps import user_config
+
+    monkeypatch.setattr(user_config, 'get_user_config_store', lambda: SimpleNamespace(
+        get_public=lambda _user: {'catalog_name': 'greena'}))
+    root, _, _ = create_plan(client)
+    pending = []
+    monkeypatch.setattr(api.extraction_jobs, 'start', lambda owner, resource, fingerprint, work:
+        pending.append(work) or {'id': 'queued', 'status': 'queued'})
+    calls = []
+    monkeypatch.setattr(api.pipeline.script_processor.llm, 'chat', lambda **kwargs:
+        calls.append(kwargs) or json.dumps(plan()))
+    client.put('/script-writing/settings', json={'model': 'deepseek-v4.1-flash'})
+    assert client.post(f'/script-documents/{root}/outline-analysis').status_code == 202
+    client.put('/script-writing/settings', json={'model': 'llm-nf-all'})
+    pending[0]()
+    assert calls[-1]['model'] == 'greena/deepseek-v4.1-flash'
+    assert client.post(f'/script-documents/{root}/outline-analysis', json={'model': 'invalid'}).status_code == 422
+
+
 def test_independent_episode_documents_snapshots_and_reconfirmation(client):
     root, ws, request = create_plan(client)
     episodes = ws['plan']['episodes']
