@@ -1295,10 +1295,10 @@ it("submits the current edited Prompt and read-only description in one action an
     expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/preview", "POST", expect.objectContaining({
         profile: "少年，身姿挺拔，素黑劲装；性格沉静寡言。",
         current_draft: "身高约178厘米，素黑外衣一件，脚穿布靴。", route: "", reference_assets: [],
-    }));
+    }), expect.objectContaining({ cache: 'no-store' }));
     expect(apiMocks.agentRequest).toHaveBeenCalledWith("/character-design/draft/jobs", "POST", expect.objectContaining({
         review_token: "reviewed", reviewed_messages: expect.objectContaining({ system: "返回 identity 与 look" }),
-    }));
+    }), expect.objectContaining({ cache: 'no-store' }));
     expect(aiResult()).toHaveValue("身份：深棕眼\n造型：黑色劲装");
     expect(originalEditor.getText()).toBe("身高约178厘米，素黑外衣一件，脚穿布靴。");
     expect(onUpdateAttributes).not.toHaveBeenCalled();
@@ -1405,6 +1405,56 @@ it("drops an in-flight generated result after role details change", async () => 
     } }));
     expect(screen.queryByRole("textbox", { name: "AI 优化" })).not.toBeInTheDocument();
     expect(designDetailsEditor().getText()).toBe("新的素白衣约束。");
+});
+
+it('recovers a completed optimization without generating again or saving over the role', async () => {
+    const { onUpdateAttributes } = mountSimpleDesign();
+    await waitFor(() => expect(screen.getByRole('button', { name: '提交 AI 完善' })).toBeEnabled());
+    apiMocks.agentRequest.mockResolvedValueOnce({ id: 'existing', status: 'completed', result: {
+        identity: { visual_notes: '已完成的黑发设计' }, look: { visual_notes: '已完成的素白外衣' },
+    } });
+    fireEvent.click(screen.getByRole('button', { name: '读取上次优化结果' }));
+    expect(await screen.findByRole('textbox', { name: 'AI 优化' })).toHaveValue('身份：已完成的黑发设计\n造型：已完成的素白外衣');
+    expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path.startsWith('/character-design/')))
+        .toEqual([[expect.stringContaining('/character-design/draft/latest-job?'), 'GET', undefined,
+            expect.objectContaining({ cache: 'no-store' })]]);
+    expect(designDetailsEditor().getText()).toContain('素黑劲装，布靴');
+    expect(onUpdateAttributes).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('tab', { name: '角色设计' }));
+    expect(screen.getByRole('button', { name: '提交 AI 完善' })).toBeEnabled();
+});
+
+it('reads a completed job immediately when returning to the workbench', async () => {
+    mountSimpleDesign();
+    await waitFor(() => expect(screen.getByRole('button', { name: '提交 AI 完善' })).toBeEnabled());
+    apiMocks.agentRequest.mockResolvedValueOnce({ messages: { system: 'identity look', user: 'details' }, review_token: 'reviewed' });
+    apiMocks.agentRequest.mockResolvedValueOnce({ id: 'background-job', status: 'running' });
+    apiMocks.agentRequest.mockResolvedValueOnce({ id: 'background-job', status: 'completed', result: {
+        identity: { visual_notes: '完整外观' }, look: { visual_notes: '完整造型' },
+    } });
+    fireEvent.click(screen.getByRole('button', { name: '提交 AI 完善' }));
+    await waitFor(() => expect(apiMocks.agentRequest).toHaveBeenCalledWith('/character-design/draft/jobs', 'POST',
+        expect.anything(), expect.anything()));
+    act(() => window.dispatchEvent(new Event('focus')));
+    expect(await screen.findByRole('textbox', { name: 'AI 优化' })).toHaveValue('身份：完整外观\n造型：完整造型');
+    expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path === '/character-design/draft/jobs')).toHaveLength(1);
+});
+
+it('releases the busy state when a status request hangs and offers reading the existing result', async () => {
+    mountSimpleDesign();
+    await waitFor(() => expect(screen.getByRole('button', { name: '提交 AI 完善' })).toBeEnabled());
+    apiMocks.agentRequest.mockResolvedValueOnce({ messages: { system: 'identity look', user: 'details' }, review_token: 'reviewed' });
+    apiMocks.agentRequest.mockResolvedValueOnce({ id: 'background-job', status: 'running' });
+    apiMocks.agentRequest.mockImplementationOnce(() => new Promise(() => {}));
+    vi.useFakeTimers();
+    try {
+        fireEvent.click(screen.getByRole('button', { name: '提交 AI 完善' }));
+        await act(async () => { await vi.advanceTimersByTimeAsync(33_001); });
+        expect(screen.getByRole('alert')).toHaveTextContent('读取上次优化结果');
+        expect(screen.getByRole('button', { name: '提交 AI 完善' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: '读取上次优化结果' })).toBeEnabled();
+        expect(apiMocks.agentRequest.mock.calls.filter(([path]) => path === '/character-design/draft/jobs')).toHaveLength(1);
+    } finally { vi.useRealTimers(); }
 });
 
 it("shows model errors without overwriting role details or saving a design", async () => {

@@ -44,7 +44,7 @@ function DesignReferencePicker({ candidates, selected, onChange, onOpen }: { can
 }
 
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, metricBody, onMetricBodyChange, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange, onRefreshReferences,
+    identityFields, lookFields, metricBody, onMetricBodyChange, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onRecover, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange, onRefreshReferences,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
@@ -61,7 +61,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     models: ChatModel[]; model: string; onModelChange: (value: string) => void;
     busy: boolean; saving: boolean; canSave: boolean; canReedit: boolean; error: string; status: string;
     tab: "design" | "ai"; onTabChange: (tab: "design" | "ai") => void;
-    onSubmit: () => void; onSave: (source: "panel" | "ai") => void; onReedit: () => void;
+    onSubmit: () => void; onRecover?: () => void; onSave: (source: "panel" | "ai") => void; onReedit: () => void;
     referenceCandidates?: ReferenceCandidate[]; referenceSelections?: AssetLibraryReference[]; onRefreshReferences?: () => void;
     onReferenceSelectionsChange?: (references: AssetLibraryReference[]) => void;
 }) {
@@ -189,6 +189,8 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
         </select>
         <button type="button" onClick={onSubmit} disabled={!model || !description.trim() || busy || saving || details.length > 8000}
             className="min-h-11 w-full rounded bg-primary px-3 text-sm text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{busy ? "完善中…" : "提交 AI 完善"}</button>
+        {onRecover && <button type="button" onClick={onRecover} disabled={busy || saving}
+            className="min-h-11 w-full rounded border border-glass-border px-3 text-sm hover:bg-hover-bg disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">读取上次优化结果</button>}
         {details.length > 8000 && <p role="alert" className="text-xs text-red-400">角色设计不能超过 8000 字，请精简后提交。</p>}
         </div>
         <div id="character-design-panel-ai" role="tabpanel" aria-labelledby="character-design-tab-ai" hidden={tab !== 'ai'} className="space-y-3">

@@ -3309,8 +3309,10 @@ export async function agentTranscribe(file: File): Promise<{ text: string; model
   if (!response.ok) throw new Error(typeof payload.detail === 'string' ? payload.detail : '语音识别失败');
   return payload as { text: string; model: string };
 }
-export async function agentRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function agentRequest<T>(path: string, method = 'GET', body?: unknown,
+    options: Pick<RequestInit, 'signal' | 'cache'> = {}): Promise<T> {
   const response = await authenticatedFetch(`${API_URL}/agent${path}`, {
+    ...options,
     method, headers: { 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
