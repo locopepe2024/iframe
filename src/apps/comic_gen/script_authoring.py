@@ -14,6 +14,7 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from pydantic import ValidationError
+from ...utils.llm_json import parse_model_json_object
 
 from .models import ScriptWritingPlanDraft
 
@@ -236,13 +237,8 @@ def _outline_response(output: str) -> ScriptWritingPlanDraft:
     Do not search nested objects or repair truncated JSON: either could turn an
     incomplete series into an apparently successful plan.
     """
-    start = output.find("{")
     try:
-        if start < 0 or output.startswith("["):
-            raise ValueError("Expected one JSON object")
-        value, end = json.JSONDecoder().raw_decode(output, start)
-        if output[end:].strip() not in ("", "```"):
-            raise ValueError("Unexpected content after JSON object")
+        value = parse_model_json_object(output)
     except ValueError as exc:
         logger.warning("Outline response JSON invalid: chars=%s", len(output))
         raise RuntimeError("模型返回的 JSON 不完整或格式无效，请重新解析或切换剧本模型") from exc
@@ -258,7 +254,7 @@ def _outline_response(output: str) -> ScriptWritingPlanDraft:
         else:
             message = "总纲解析结果字段格式无效（" + "、".join(e["field"] for e in errors[:5]) + "）"
         raise RuntimeError(message + "，请重新解析或切换剧本模型") from exc
-    if start:
+    if not output.startswith("{"):
         logger.info("Outline JSON recovered from provider commentary: chars=%s episodes=%s", len(output), len(draft.episodes))
     return draft
 
