@@ -3874,7 +3874,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
     director_profile = resolve_director(script) if resolve_director else None
     visual_style = pipeline.storyboard_visual_style(script)
     llm = pipeline.script_processor.llm
-    resolver = getattr(pipeline, "get_effective_script_model", None) or getattr(pipeline, "get_effective_polish_model", None)
+    resolver = getattr(pipeline, "get_effective_storyboard_model", None) or getattr(pipeline, "get_effective_polish_model", None)
     selected_model = resolver(script) if callable(resolver) else ""
     return hashlib.sha256(json.dumps([
         text,
@@ -3907,7 +3907,7 @@ def start_storyboard_analysis(
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, lineage=lineage,
     )
-    resolver = getattr(pipeline, "get_effective_script_model", None) or pipeline.get_effective_polish_model
+    resolver = getattr(pipeline, "get_effective_storyboard_model", None) or pipeline.get_effective_polish_model
     selected_model = resolver(pipeline.get_script(script_id))
     job_fingerprint = "storyboard:" + fingerprint
     from .llm import split_director_source
@@ -3967,7 +3967,7 @@ def start_storyboard_analysis_refinement(
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, request.draft, instructions, lineage,
     )
-    resolver = getattr(pipeline, "get_effective_script_model", None) or pipeline.get_effective_polish_model
+    resolver = getattr(pipeline, "get_effective_storyboard_model", None) or pipeline.get_effective_polish_model
     selected_model = resolver(pipeline.get_script(script_id))
     return extraction_jobs.start(
         user.owner_profile_id,

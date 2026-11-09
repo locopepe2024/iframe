@@ -1038,3 +1038,31 @@ def test_storyboard_job_fingerprint_changes_when_selected_model_changes(monkeypa
     source.prompt_config.polish_model = "kimi-k3"
     second = api._storyboard_analysis_fingerprint("project", "source")
     assert first != second
+
+
+def test_storyboard_explicit_project_then_series_model_wins_over_shared_account_default(monkeypatch):
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+    from src.apps.comic_gen.models import PromptConfig, Series
+    from src.apps.studio_access import set_studio_script_model, reset_studio_script_model
+
+    script = Script(id='project', title='Story', original_text='source', series_id='series',
+                    prompt_config=PromptConfig(polish_model='explicit-project-model'), created_at=1, updated_at=1)
+    engine = ComicGenPipeline.__new__(ComicGenPipeline)
+    engine.scripts = {script.id: script}
+    series = Series(id='series', title='Series', prompt_config=PromptConfig(polish_model='explicit-series-model'),
+                    created_at=1, updated_at=1)
+    engine.series_store = {series.id: series}
+    engine.storyboard_analysis_context = lambda *args, **kwargs: (script, {}, '')
+    engine.script_processor = Mock()
+    engine.script_processor.analyze_to_storyboard.return_value = [{'action_summary': '进入'}]
+    token = set_studio_script_model('greena/deepseek-v4.1-flash')
+    try:
+        for expected in ['explicit-project-model', 'explicit-series-model', 'greena/deepseek-v4.1-flash']:
+            engine.preview_storyboard_analysis('project', 'source')
+            assert engine.script_processor.analyze_to_storyboard.call_args.kwargs['model'] == expected
+            if script.prompt_config.polish_model:
+                script.prompt_config.polish_model = ''
+            else:
+                series.prompt_config.polish_model = ''
+    finally:
+        reset_studio_script_model(token)

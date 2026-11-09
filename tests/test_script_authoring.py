@@ -270,16 +270,16 @@ def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_k
         get_public=lambda _user: {'catalog_name': provider}))
     processor = ScriptProcessor()
     source = Script(id='project', title='本集', original_text='source', created_at=1, updated_at=1,
-                    owner_profile_id='writer-profile', prompt_config=PromptConfig(polish_model='old-polish-model'))
+                    owner_profile_id='writer-profile', prompt_config=PromptConfig())
     engine = SimpleNamespace(scripts={'project': source}, series_store={}, get_script=lambda _: source,
-        script_processor=processor, get_effective_polish_model=lambda _: 'old-polish-model',
+        script_processor=processor, get_effective_polish_model=lambda _: '',
         director_analysis_context=lambda _: (source, {}, {}),
         storyboard_analysis_context=lambda *args, **kwargs: (source, {}, ''),
         storyboard_visual_style=lambda _: {}, effective_director_profile=lambda _: None,
         storyboard_workflow_lineage=lambda *args: ArtifactLineage(),
         director_shooting_plan_lineage=lambda _: {},
         resolve_episode_assets=lambda _: {'characters': [], 'scenes': [], 'props': []})
-    engine.get_effective_script_model = lambda script: ComicGenPipeline.get_effective_script_model(engine, script)
+    engine.get_effective_storyboard_model = lambda script: ComicGenPipeline.get_effective_storyboard_model(engine, script)
     calls = []
     monkeypatch.setattr(processor.llm, '_get_client', lambda **kwargs: calls.append(kwargs) or object())
     monkeypatch.setattr(processor.llm, '_chat_once', lambda _client, model, *args, **kwargs: model)
@@ -314,5 +314,5 @@ def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_k
     assert results[3]['frames']['model'] == 'llm-nf-all'
     assert results[0]['profile']['source_cache'] != results[2]['profile']['source_cache']
     assert calls == [{'gateway': provider}] * 4
-    assert source.prompt_config.polish_model == 'old-polish-model'
+    assert source.prompt_config.polish_model == ''
     assert processor.llm.default_model is None

@@ -3119,7 +3119,7 @@
   "scriptEditor": {
     "model": {
       "label": "Screenplay model",
-      "hint": "Shared by outline parsing, screenplay writing and continuation, director analysis, and storyboard text analysis.",
+      "hint": "Used for outline parsing, screenplay writing and continuation, and director analysis. Storyboard text analysis uses this default unless a model is selected separately.",
       "scope": "Shared across your account and saved immediately. Running tasks keep their original model.",
       "saving": "Saving screenplay model…",
       "saved": "Saved. New tasks will use this model.",
