@@ -2059,6 +2059,8 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
         result = json.loads(_strip_markdown_json(content))
         if not isinstance(result, dict):
             raise RuntimeError("导演设定模型返回格式不正确，请重试。")
+        if not isinstance(result.get("story_map"), dict):
+            raise RuntimeError("导演返回缺少 story_map 故事结构对象，请重新分析。")
         return result
 
     def analyze_director_profile_with_audit(self, text: str, entities_json: Dict[str, Any],

@@ -69,7 +69,7 @@ def test_visual_style_summary_distinguishes_animation_and_live_action_without_ch
 def test_director_prompt_marks_series_scope_separately_from_episode_scope():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.analyze_director_profile(
         "全剧资料。", {"characters": [], "scope": "series"}, {}
@@ -235,7 +235,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     processor.llm.chat.side_effect = lambda **kwargs: (
         json.dumps({"summary": "短片段摘要", "continuity_in": "", "continuity_out": "", "facts": [], "open_threads": []}, ensure_ascii=False)
         if "<source_chunk" in kwargs["messages"][0]["content"]
-        else json.dumps(profile_payload(), ensure_ascii=False)
+        else json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
     )
 
     result = processor.refine_director_profile(
@@ -275,7 +275,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
 def test_director_analysis_prompt_defines_bookend_as_optional_structure():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.analyze_director_profile(
         "开头：公墓。中段：战争往事。结尾：回到公墓。",
@@ -1114,7 +1114,7 @@ def test_bookend_narrative_is_an_explicit_scoped_constraint_not_a_global_style()
 
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.refine_director_profile(
         "开头：公墓。中段：战争往事。结尾：回到公墓。",
@@ -1586,7 +1586,7 @@ def test_director_source_split_preserves_exact_ranges_and_prefers_sentence_bound
 def test_short_director_source_stays_on_single_call_path():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
     source = "短剧本：开头、冲突、结尾。"
 
     processor.analyze_director_profile(source, {"characters": []}, {})
@@ -1602,7 +1602,7 @@ def test_short_director_source_stays_on_single_call_path():
 def test_director_analysis_with_audit_preserves_raw_response_and_direct_source_metadata():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    raw = json.dumps(profile_payload(), ensure_ascii=False)
+    raw = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
     processor.llm.chat.return_value = raw
 
     result = processor.analyze_director_profile_with_audit(
@@ -1627,7 +1627,7 @@ def test_director_analysis_with_audit_records_digest_and_map_notes():
         prompt = kwargs["messages"][0]["content"]
         if "<source_chunk" in prompt:
             return json.dumps({"summary": "场景摘要", "facts": ["人物进入"], "open_threads": []}, ensure_ascii=False)
-        return json.dumps(profile_payload(), ensure_ascii=False)
+        return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.llm.chat.side_effect = chat_side_effect
     result = processor.analyze_director_profile_with_audit(source, {"characters": []}, {})
@@ -1643,7 +1643,7 @@ def test_director_analysis_with_audit_records_digest_and_map_notes():
 def test_director_source_mode_can_force_direct_for_ab_comparison():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
     source = "长文本。" * 2000
 
     result = processor.analyze_director_profile_with_audit(
@@ -1666,7 +1666,7 @@ def test_director_source_mode_can_force_map_reduce_for_ab_comparison():
         prompt = kwargs["messages"][0]["content"]
         if "<source_chunk" in prompt:
             return json.dumps({"summary": "强制摘要", "facts": [], "open_threads": []}, ensure_ascii=False)
-        return json.dumps(profile_payload(), ensure_ascii=False)
+        return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.llm.chat.side_effect = chat_side_effect
     result = processor.analyze_director_profile_with_audit(
@@ -1716,7 +1716,7 @@ def test_long_director_source_uses_source_digest_and_reuses_map_cache():
                 "facts": ["人物关系发生变化"],
                 "open_threads": ["选择的后果尚未揭示"],
             }, ensure_ascii=False)
-        return json.dumps(profile_payload(), ensure_ascii=False)
+        return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.llm.chat.side_effect = chat_side_effect
     processor.analyze_director_profile(source, {"characters": []}, {})
@@ -1757,7 +1757,7 @@ def test_long_director_source_maps_chunks_concurrently_but_keeps_digest_order():
         nonlocal active, peak
         prompt = kwargs["messages"][0]["content"]
         if "<source_chunk" not in prompt:
-            return json.dumps(profile_payload(), ensure_ascii=False)
+            return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
         with lock:
             active += 1
             peak = max(peak, active)
@@ -1834,7 +1834,7 @@ def test_long_director_source_propagates_request_context_to_map_workers(monkeypa
         prompt = kwargs["messages"][0]["content"]
         if "<source_chunk" in prompt:
             return json.dumps({"summary": "摘要", "continuity_in": "", "continuity_out": "", "facts": [], "open_threads": []})
-        return json.dumps(profile_payload(), ensure_ascii=False)
+        return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.llm.chat.side_effect = chat_side_effect
     token = request_owner.set("owner-a")
@@ -2018,7 +2018,7 @@ def test_analysis_serializes_optional_story_defaults_before_returning_to_visual_
 def test_director_output_contract_defines_nested_ids_and_ledger_shape(refine):
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload())
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()})
     if refine:
         processor.refine_director_profile('原文', {'characters': []}, {}, profile_payload(), ['保留原意'])
     else:
@@ -2066,3 +2066,16 @@ def test_director_validation_failure_reports_fields_without_model_content():
     assert 'PRIVATE_DIRECTOR_RESPONSE' not in message
     assert exc.value.director_audit['admission_status'] == 'blocked'
     pipeline._save_data.assert_not_called()
+
+
+@pytest.mark.parametrize('value', [None, [], 'omitted'])
+def test_new_director_generation_rejects_missing_story_map(value):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    payload = profile_payload()
+    if value != 'omitted':
+        payload['story_map'] = value
+    processor.llm.chat.return_value = json.dumps(payload)
+    with pytest.raises(RuntimeError, match='缺少 story_map 故事结构对象'):
+        processor.analyze_director_profile('原文', {'characters': []}, {})
+    assert processor.llm.chat.call_count == 1
