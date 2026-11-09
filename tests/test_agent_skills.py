@@ -390,21 +390,61 @@ def test_character_design_draft_does_not_silently_retry_missing_detail_checklist
     with pytest.raises(HTTPException) as exc:
         run_reviewed_character_draft(body, ctx)
     assert exc.value.status_code == 502
+    assert 'unresolved' in exc.value.detail
     assert complete.call_count == 1
 
 
-def test_character_design_draft_rejects_repeated_empty_review(ctx, monkeypatch):
+@pytest.mark.parametrize('question', [
+    '原稿为黑发，当前指定白发，需确定发色',
+    'Script specifies black hair; the user specifies white hair',
+    '服装细节尚未指定',
+])
+def test_character_design_accepts_actionable_review_without_magic_words(ctx, monkeypatch, question):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
-    answer = '{"identity":{"visual_notes":"少年剑客"},"look":{"visual_notes":"素黑劲装"},"review_items":[{"question":"服装细节尚未指定","suggestion":"窄袖黑衣"}]}'
+    answer = json.dumps({'identity': {'visual_notes': '少年剑客'}, 'look': {'visual_notes': '素黑劲装'},
+        'review_items': [{'question': question, 'suggestion': '白色长发'}]}, ensure_ascii=False)
     complete = Mock(return_value=answer)
     monkeypatch.setattr(agent, 'complete', complete)
-    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客')
+    result = run_reviewed_character_draft(body, ctx)
+    assert result['identity']['visual_notes'] == '少年剑客'
+    assert result['field_suggestions'] == {question: '白色长发'}
+    assert result['unresolved'] == [question]
+    assert complete.call_count == 1
+    assert '包含“冲突”或“矛盾”' not in complete.call_args.args[2][0]['content']
 
+
+@pytest.mark.parametrize('reviews,field,issue', [
+    ({}, 'review_items', 'invalid_review_items'),
+    (None, 'review_items', 'invalid_review_items'),
+    (['PRIVATE_QUESTION'], 'review_items[0]', 'invalid_review_item'),
+    ([None], 'review_items[0]', 'invalid_review_item'),
+    ([{'suggestion': 'PRIVATE_SUGGESTION'}], 'review_items[0].question', 'missing_question'),
+    ([{'question': '   ', 'suggestion': 'PRIVATE_SUGGESTION'}], 'review_items[0].question', 'missing_question'),
+    ([{'question': 'PRIVATE_QUESTION'}], 'review_items[0].suggestion', 'missing_suggestion'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': '   '}], 'review_items[0].suggestion', 'missing_suggestion'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': {}}], 'review_items[0].suggestion', 'missing_suggestion'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_age_stage': []}],
+        'review_items[0].suggested_age_stage', 'invalid_age_stage'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_route': 'PRIVATE_ROUTE'}],
+        'review_items[0].suggested_route', 'invalid_route'),
+])
+def test_character_review_rejection_identifies_safe_field(ctx, monkeypatch, caplog, reviews, field, issue):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    answer = json.dumps({'identity': {'visual_notes': '黑发'}, 'look': {}, 'review_items': reviews})
+    complete = Mock(return_value=answer)
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='PRIVATE_PROFILE')
     with pytest.raises(HTTPException) as exc:
         run_reviewed_character_draft(body, ctx)
-
     assert exc.value.status_code == 502
+    assert field in exc.value.detail
+    assert '诊断编号' in exc.value.detail
+    assert f'field={field}' in caplog.text
+    assert f'issue={issue}' in caplog.text
+    assert 'PRIVATE_' not in caplog.text + exc.value.detail
     assert complete.call_count == 1
+
 
 
 def test_character_design_draft_keeps_previous_ai_draft_separate_from_profile(ctx, monkeypatch):
@@ -793,7 +833,7 @@ def test_character_design_distinguishes_missing_object_from_review_failure(ctx, 
     body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='少年')
     for answer, reason in [
         ('设计：黑发少年。', '未返回包含 identity 和 look 的 JSON 对象'),
-        ('{"identity":{"visual_notes":"黑发"},"look":{},"review_items":[{"question":"发型未指定","suggestion":"长发"}]}', '返回了待办问题或不完整的冲突建议'),
+        ('{"identity":{"visual_notes":"黑发"},"look":{},"review_items":[{"question":"发型未指定"}]}', 'review_items[0].suggestion 必须是非空文本'),
     ]:
         complete = Mock(return_value=answer)
         monkeypatch.setattr(agent, 'complete', complete)

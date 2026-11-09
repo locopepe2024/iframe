@@ -536,23 +536,41 @@ def _preserve_character_realism(text: str, current_draft: str) -> str:
     return value
 
 
-def _character_design_review_needs_revision(result: dict) -> bool:
-    legacy = result.get("unresolved") or []
-    if legacy:
-        return True
-    reviews = result.get("review_items") or []
+class CharacterDesignReviewError(ValueError):
+    """A bounded, content-free description of a rejected model review field."""
+
+    def __init__(self, field: str, issue: str, detail: str, value):
+        super().__init__(f"{field} {detail}")
+        self.field = field
+        self.issue = issue
+        self.actual_type = type(value).__name__
+
+
+def _character_design_reviews(result: dict, allowed_age_stages: set, allowed_routes: set) -> list[dict]:
+    # Do not infer semantic completeness from words such as “冲突” or “但”.
+    # The model proposes a reviewable choice; validation checks its structure.
+    legacy = result.get("unresolved", [])
+    if legacy != []:
+        raise CharacterDesignReviewError("unresolved", "legacy_review",
+            "是旧版字段；请用 review_items 提供问题及可采纳的视觉建议", legacy)
+    reviews = result.get("review_items", [])
     if not isinstance(reviews, list):
-        return False  # The normal parser reports malformed output.
-    return any(
-        isinstance(item, str)
-        or isinstance(item, dict) and (
-            not isinstance(item.get("question"), str)
-            or not re.search(r"冲突|矛盾|不一致|但|conflict|contradict|inconsistent", item["question"], re.IGNORECASE)
-            or not isinstance(item.get("suggestion"), str)
-            or not item["suggestion"].strip()
-        )
-        for item in reviews
-    )
+        raise CharacterDesignReviewError("review_items", "invalid_review_items", "必须是数组", reviews)
+    for index, item in enumerate(reviews):
+        field = f"review_items[{index}]"
+        if not isinstance(item, dict):
+            raise CharacterDesignReviewError(field, "invalid_review_item", "必须是包含 question 和 suggestion 的对象", item)
+        for key, issue in (("question", "missing_question"), ("suggestion", "missing_suggestion")):
+            value = item.get(key)
+            if not isinstance(value, str) or not value.strip():
+                raise CharacterDesignReviewError(f"{field}.{key}", issue, "必须是非空文本", value)
+        for key, allowed, issue in (("suggested_age_stage", allowed_age_stages, "invalid_age_stage"),
+                                    ("suggested_route", allowed_routes, "invalid_route")):
+            value = item.get(key)
+            if value is not None and (not isinstance(value, str) or value not in allowed):
+                raise CharacterDesignReviewError(f"{field}.{key}", issue, "不是有效选项", value)
+    return reviews
+
 
 
 def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: UserContext) -> dict:
@@ -595,7 +613,7 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
               + "输出的 visual_notes 和 features 只补充当前草稿真正缺失且有必要的可观察细节；如果没有必要补充，直接保留原文对应内容。不得用‘概念设计’作为开头，不得加入质量评价或生成参数。"
               + "对缺少描写但可创作的外貌和造型细节，结合人物档案、选定题材 / 时代 / 年龄阶段、项目画风及参考素材，给出一套明确方案并标为 creative_choice；尤其需要补齐可用于出图的服装结构、面料、鞋履、发式和配饰。少年感与 young-adult 可以兼容，请设计年轻成年人中偏少年的可见年龄表现，不要仅因此列待核对。不要把每个缺失字段变成 review_item。"
               + "不得把创意选择伪装成剧本事实；不要依据姓名、职业或族裔刻板推断肤色、阶层或其他身份事实。没有可靠史实上下文时，将服饰方案明确写成与题材相容的架空设计，而不是声称具体朝代规制。"
-              + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题，question 直接引用相互冲突的两项要求并包含“冲突”或“矛盾”，同时提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
+              + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题，question 直接说明需要核对的两项要求，不要求固定关键词，同时提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
               + "若建议改变年龄阶段或题材画风，同时提供与 suggestion 一致的 suggested_age_stage 或 suggested_route；否则工作台选项与图片 Prompt 会冲突。"
               + "route 为空表示用户未另外指定题材路由，依据 profile 与 current_draft 中明确给出的时代、服装和画风设计，不默认补成现代写实。current_draft 可以是用户当前编辑的图片 Prompt，应保留其中明确的角色细节；白底、构图、拍摄景别等资产出图指令不写入 identity 或 look。"
               + "参考图片是只读视觉证据，只能描述图中清晰可见的内容；不要推断图外事实。不要把图中其他人物或物品混为本角色。")
@@ -676,8 +694,7 @@ def _run_character_design_draft(body: CharacterDesignRequest, ctx: UserContext, 
         {"role": "system", "content": messages["system"]}, {"role": "user", "content": user_content}])
     try:
         result = _parse_character_design_object(answer)
-        if _character_design_review_needs_revision(result):
-            raise ValueError("Model returned review items without design suggestions")
+        review_items = _character_design_reviews(result, allowed_age_stages, allowed_routes)
         identity = result.get("identity") or {}
         look = result.get("look") or {}
         if not isinstance(identity, dict) or not isinstance(look, dict):
@@ -704,82 +721,26 @@ def _run_character_design_draft(body: CharacterDesignRequest, ctx: UserContext, 
             raise ValueError("Missing concrete identity design")
         identity_notes = _preserve_character_realism(identity_notes, body.current_draft)
         look_notes = _preserve_character_realism(look_notes, body.current_draft)
-        review_items = result.get("review_items") or []
-        if not isinstance(review_items, list):
-            raise ValueError("Invalid review items")
         unresolved: list[str] = []
         suggestions: dict[str, str] = {}
         suggestion_choices: dict[str, dict[str, str]] = {}
         for item in review_items:
-            if isinstance(item, str):
-                question = item.strip()
-                suggestion = ""
-                suggested_age_stage = None
-                suggested_route = None
-            elif isinstance(item, dict):
-                question = item.get("question")
-                suggestion = item.get("suggestion", "")
-                if not isinstance(question, str) or not isinstance(suggestion, str):
-                    raise ValueError("Invalid review item")
-                suggested_age_stage = item.get("suggested_age_stage")
-                suggested_route = item.get("suggested_route")
-                if suggested_age_stage is not None and suggested_age_stage not in allowed_age_stages:
-                    raise ValueError("Invalid suggested age stage")
-                if suggested_route is not None and suggested_route not in allowed_routes:
-                    raise ValueError("Invalid suggested route")
-                question = question.strip()
-                suggestion = suggestion.strip()
-            else:
-                raise ValueError("Invalid review item")
-            if question:
-                unresolved.append(question)
-                if suggestion:
-                    suggestions[question] = suggestion
-                choice = {}
-                if suggested_age_stage:
-                    choice["age_stage"] = suggested_age_stage
-                if suggested_route:
-                    choice["route"] = suggested_route
-                if choice:
-                    suggestion_choices[question] = choice
-        # Read old structured responses during rollout; the new prompt uses review_items.
-        legacy_unresolved = result.get("unresolved") or []
-        if not isinstance(legacy_unresolved, list):
-            raise ValueError("Invalid unresolved list")
-        for item in legacy_unresolved:
-            if isinstance(item, str) and item.strip():
-                unresolved.append(item.strip())
-            elif isinstance(item, dict):
-                question = item.get("question")
-                suggestion = item.get("suggestion", "")
-                if not isinstance(question, str) or not isinstance(suggestion, str):
-                    raise ValueError("Invalid unresolved item")
-                suggested_age_stage = item.get("suggested_age_stage")
-                suggested_route = item.get("suggested_route")
-                if suggested_age_stage is not None and suggested_age_stage not in allowed_age_stages:
-                    raise ValueError("Invalid suggested age stage")
-                if suggested_route is not None and suggested_route not in allowed_routes:
-                    raise ValueError("Invalid suggested route")
-                question = question.strip()
-                if question:
-                    unresolved.append(question)
-                    if suggestion.strip():
-                        suggestions[question] = suggestion.strip()
-                    choice = {}
-                    if suggested_age_stage:
-                        choice["age_stage"] = suggested_age_stage
-                    if suggested_route:
-                        choice["route"] = suggested_route
-                    if choice:
-                        suggestion_choices[question] = choice
-            else:
-                raise ValueError("Invalid unresolved item")
+            question = item["question"].strip()
+            suggestion = item["suggestion"].strip()
+            unresolved.append(question)
+            suggestions[question] = suggestion
+            choice = {}
+            if item.get("suggested_age_stage"):
+                choice["age_stage"] = item["suggested_age_stage"]
+            if item.get("suggested_route"):
+                choice["route"] = item["suggested_route"]
+            if choice:
+                suggestion_choices[question] = choice
         unresolved = list(dict.fromkeys(unresolved))
     except (ValueError, TypeError) as exc:
         # Report bounded validation reasons; never log the profile, model prose or credentials.
         reasons = {
             "Missing character design object": ("missing_object", "未返回包含 identity 和 look 的 JSON 对象"),
-            "Model returned review items without design suggestions": ("invalid_review", "返回了待办问题或不完整的冲突建议"),
             "Invalid design sections": ("invalid_sections", "identity 或 look 不是对象"),
             "Invalid character design features": ("invalid_features", "视觉字段名称或结构不符合要求"),
             "Invalid character design feature value": ("invalid_feature_value", "视觉字段的类型或长度不符合要求"),
@@ -790,9 +751,13 @@ def _run_character_design_draft(body: CharacterDesignRequest, ctx: UserContext, 
             "Invalid suggested route": ("invalid_route", "建议的题材路由不符合要求"),
         }
         reason, detail = reasons.get(str(exc), ("invalid_schema", "返回字段结构不符合要求"))
+        field = issue = actual_type = "-"
+        if isinstance(exc, CharacterDesignReviewError):
+            reason, detail = "invalid_review", str(exc)
+            field, issue, actual_type = exc.field, exc.issue, exc.actual_type
         diagnostic_id = uuid.uuid4().hex[:12]
-        logger.warning("Character design rejected: diagnostic_id=%s model=%s reason=%s answer_chars=%s",
-                       diagnostic_id, body.model, reason, len(answer))
+        logger.warning("Character design rejected: diagnostic_id=%s model=%s reason=%s field=%s issue=%s actual_type=%s answer_chars=%s",
+                       diagnostic_id, body.model, reason, field, issue, actual_type, len(answer))
         raise HTTPException(502, f"角色设计模型返回校验失败：{detail}。请重试或切换设计模型（诊断编号 {diagnostic_id}）") from None
     return {
         "identity": {"visual_notes": identity_notes.strip(), "features": identity_features, "basis": identity.get("basis", ["creative_choice"])},
