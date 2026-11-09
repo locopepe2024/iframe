@@ -113,24 +113,3 @@ it('starts an empty episode from its outline even when opened through AI continu
   fireEvent.click(screen.getByRole('button', { name: 'replace' }));
   await waitFor(() => expect(onApply).toHaveBeenCalledWith('expand_outline', '从本集开场写起'));
 });
-
-
-it('can retry a failed continuation with another model and locks model changes during generation', async () => {
-  vi.mocked(scriptEditorApi.startScriptWriting).mockRejectedValueOnce(new Error('upstream unavailable'));
-  const props = { open: true, onClose: vi.fn(), onApply: vi.fn(), mode: 'continue' as const, scriptDocumentId: 'document-1', title: '本集', sourceText: '已写的正文', onModelChange: vi.fn() };
-  const view = render(<ScriptWritingDialog {...props} model="llm-nf-all" />);
-  fireEvent.click(screen.getByRole('button', { name: 'generate' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('upstream unavailable');
-  fireEvent.change(screen.getByLabelText('label'), { target: { value: 'deepseek-v4.1-flash' } });
-  expect(props.onModelChange).toHaveBeenCalledWith('deepseek-v4.1-flash');
-  view.rerender(<ScriptWritingDialog {...props} model="llm-nf-all" modelBusy />);
-  expect(screen.getByRole('button', { name: 'generate' })).toBeDisabled();
-  let complete!: (value: Awaited<ReturnType<typeof scriptEditorApi.startScriptWriting>>) => void;
-  vi.mocked(scriptEditorApi.startScriptWriting).mockImplementationOnce(() => new Promise(resolve => { complete = resolve; }));
-  view.rerender(<ScriptWritingDialog {...props} model="deepseek-v4.1-flash" />);
-  fireEvent.click(screen.getByRole('button', { name: 'generate' }));
-  expect(screen.getByLabelText('label')).toBeDisabled();
-  complete({ id: 'job-2', status: 'completed', result: { draft: '续写成功', title: '本集', mode: 'continue' } });
-  await screen.findByLabelText('preview');
-  expect(vi.mocked(scriptEditorApi.startScriptWriting).mock.calls.map(([request]) => request.model)).toEqual(['llm-nf-all', 'deepseek-v4.1-flash']);
-});

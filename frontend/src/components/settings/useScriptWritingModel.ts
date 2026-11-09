@@ -8,10 +8,12 @@ export function useScriptWritingModel() {
   const [saving, setSaving] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setError(false);
+    setSaved(false);
     scriptEditorApi.getWritingSettings().then(settings => {
       if (!cancelled) setModel(settings.model);
     }).catch(() => { if (!cancelled) setError(true); });
@@ -22,9 +24,11 @@ export function useScriptWritingModel() {
     if (saving) return;
     setSaving(true);
     setError(false);
+    setSaved(false);
     try {
       const settings = await scriptEditorApi.setWritingModel(next);
       setModel(settings.model);
+      setSaved(true);
     } catch {
       setError(true);
     } finally {
@@ -32,5 +36,5 @@ export function useScriptWritingModel() {
     }
   }, [saving]);
 
-  return { model, saving, error, selectModel, reload: () => setLoadAttempt(value => value + 1) };
+  return { model, saving, saved, error, selectModel, reload: () => setLoadAttempt(value => value + 1) };
 }

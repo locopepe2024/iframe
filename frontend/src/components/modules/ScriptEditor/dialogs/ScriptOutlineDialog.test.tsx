@@ -54,15 +54,3 @@ it('preserves edits on a stale revision error and blocks invalid targets', async
   expect(await screen.findByRole('alert')).toHaveTextContent('规划已更新');
   expect(screen.getByLabelText('episodeTitle')).toHaveValue('保留我的修改');
 });
-
-
-it('waits for model settings and forwards the selected model to outline analysis', async () => {
-  const props = { open: true, workspace, onClose: vi.fn(), onWorkspace: vi.fn(), onNavigate: vi.fn(), onModelChange: vi.fn() };
-  const view = render(<ScriptOutlineDialog {...props} model="deepseek-v4.1-flash" modelBusy />);
-  expect(screen.getByRole('button', { name: 'analyze' })).toBeDisabled();
-  expect(screen.getByLabelText('label')).toBeDisabled();
-  view.rerender(<ScriptOutlineDialog {...props} model="deepseek-v4.1-flash" />);
-  fireEvent.click(screen.getByRole('button', { name: 'analyze' }));
-  await screen.findByLabelText('background');
-  expect(scriptEditorApi.startOutlineAnalysis).toHaveBeenCalledWith('root', 'deepseek-v4.1-flash');
-});

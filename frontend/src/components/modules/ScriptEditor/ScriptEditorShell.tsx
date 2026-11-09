@@ -17,8 +17,6 @@ import { useSceneFolding } from './hooks/useSceneFolding';
 import { useViewMode } from './hooks/useViewMode';
 import { useOfflineCache } from './hooks/useOfflineCache';
 import { useAutoSave } from './hooks/useAutoSave';
-import { useScriptWritingModel } from './hooks/useScriptWritingModel';
-import ScriptModelSelect from './components/ScriptModelSelect';
 import { useProductionHandoff } from './hooks/useProductionHandoff';
 import { useDerivation } from './hooks/useDerivation';
 import { useL3Completion } from './hooks/useL3Completion';
@@ -48,14 +46,6 @@ export default function ScriptEditorShell({
   initialContent,
 }: ScriptEditorShellProps) {
   const t = useTranslations('scriptEditor');
-  const writingModel = useScriptWritingModel();
-  const modelSelectProps = {
-    model: writingModel.model,
-    onModelChange: (model: Parameters<typeof writingModel.selectModel>[0]) => { void writingModel.selectModel(model); },
-    modelBusy: !writingModel.model || writingModel.saving,
-    modelError: writingModel.error,
-    onModelReload: writingModel.reload,
-  };
   const { editor, isReady } = useEditorSetup({ content: initialContent });
   const [writingWorkspace, setWritingWorkspace] = useState<WritingWorkspace | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(false);
@@ -346,7 +336,6 @@ export default function ScriptEditorShell({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {documentKey && <ScriptModelSelect {...modelSelectProps} modelBusy={modelSelectProps.modelBusy || outlineOpen || scriptWritingOpen} />}
             {scriptDocumentId && editor && !documentLoading && (
               <>
                 <button type="button" onClick={() => { void backToLibrary(); }} disabled={creatingProject}
@@ -566,13 +555,12 @@ export default function ScriptEditorShell({
           onRestore={handleRestore}
         />
       )}
-      {writingWorkspace && <ScriptOutlineDialog {...modelSelectProps} open={outlineOpen} workspace={writingWorkspace} onClose={() => setOutlineOpen(false)} onWorkspace={workspace => {
+      {writingWorkspace && <ScriptOutlineDialog open={outlineOpen} workspace={writingWorkspace} onClose={() => setOutlineOpen(false)} onWorkspace={workspace => {
         setWritingWorkspace(workspace);
         const current = workspace.plan?.episodes.find(item => item.document_id === scriptDocumentId);
         if (current) setProjectTitle(current.title);
       }} onNavigate={navigateDocument} />}
       <ScriptWritingDialog
-        {...modelSelectProps}
         open={scriptWritingOpen}
         onClose={() => setScriptWritingOpen(false)}
         onApply={handleApplyScriptDraft}

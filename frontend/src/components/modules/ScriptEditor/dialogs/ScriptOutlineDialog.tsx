@@ -4,12 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { scriptEditorApi, type WritingEpisodeOutline, type WritingPlanDraft, type WritingWorkspace } from '@/lib/scriptEditorApi';
-import ScriptModelSelect, { type ScriptModelSelectProps } from '../components/ScriptModelSelect';
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const fieldClass = 'mt-1 w-full rounded border border-white/15 bg-black/20 px-3 py-2 text-sm text-foreground';
 
-export default function ScriptOutlineDialog({ open, workspace, onClose, onWorkspace, onNavigate, model, onModelChange, modelBusy, modelError, onModelReload }: ScriptModelSelectProps & {
+export default function ScriptOutlineDialog({ open, workspace, onClose, onWorkspace, onNavigate }: {
   open: boolean;
   workspace: WritingWorkspace;
   onClose: () => void;
@@ -56,13 +55,12 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
     return typeof value === 'string' ? value : value ? t('invalidPlan') : cause instanceof Error ? cause.message : t('failed');
   };
   const analyze = async () => {
-    if (busy || modelBusy) return;
     if (dirty && !window.confirm(t('discard'))) return;
     const currentRun = ++run.current;
     setBusy(true);
     setError('');
     try {
-      let job = await scriptEditorApi.startOutlineAnalysis(workspace.root_document_id, model);
+      let job = await scriptEditorApi.startOutlineAnalysis(workspace.root_document_id);
       for (let attempt = 0; job.status === 'running' || job.status === 'queued'; attempt += 1) {
         if (attempt >= 600) throw new Error(t('timeout'));
         await pause(1500);
@@ -113,12 +111,11 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
         </header>
         <div className="playground-scrollbar min-h-0 flex-1 overflow-y-scroll overscroll-contain [scrollbar-gutter:stable]">
         <fieldset disabled={busy} className="min-w-0 p-5">
-          {onModelChange && <div className="mb-4"><ScriptModelSelect model={model} onModelChange={onModelChange} modelBusy={modelBusy} modelError={modelError} onModelReload={onModelReload} /></div>}
           {workspace.source_changed && <p className="mb-4 text-sm text-amber-300">{t('sourceChanged')}</p>}
           {error && <p role="alert" className="mb-4 text-sm text-red-300">{error}</p>}
           {!editing ? <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => void analyze()} disabled={busy || modelBusy || !workspace.source_text.trim()} className="rounded bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? t('analyzing') : t(workspace.plan ? 'reanalyze' : 'analyze')}</button>
+              <button type="button" onClick={() => void analyze()} disabled={busy || !workspace.source_text.trim()} className="rounded bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? t('analyzing') : t(workspace.plan ? 'reanalyze' : 'analyze')}</button>
               {workspace.plan && <button type="button" onClick={() => setEditing(true)} disabled={busy} className="rounded border border-white/15 px-4 py-2 text-sm">{t('edit')}</button>}
               {workspace.selected_episode_number && <button type="button" onClick={() => void onNavigate(workspace.root_document_id)} disabled={busy} className="rounded border border-white/15 px-4 py-2 text-sm">{t('backOutline')}</button>}
             </div>

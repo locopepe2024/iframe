@@ -3119,7 +3119,10 @@
   "scriptEditor": {
     "model": {
       "label": "Screenplay model",
-      "hint": "Used for outline parsing, episode writing and AI continuation. Switch models to retry after a failure.",
+      "hint": "Shared by outline parsing, screenplay writing and continuation, director analysis, and storyboard text analysis.",
+      "scope": "Shared across your account and saved immediately. Running tasks keep their original model.",
+      "saving": "Saving screenplay model…",
+      "saved": "Saved. New tasks will use this model.",
       "loading": "Loading…",
       "failed": "Could not load or save model settings. Please retry.",
       "retry": "Reload"

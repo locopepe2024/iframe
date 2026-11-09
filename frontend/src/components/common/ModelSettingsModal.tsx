@@ -7,6 +7,7 @@ import { useProjectStore, IMAGE_MODELS, I2V_MODELS, ASPECT_RATIOS } from '@/stor
 import { resolveModelSettings, VIDEO_R2V_MODELS, DEFAULT_R2V_MODEL_ID } from '@/lib/modelCatalog';
 import { api } from '@/lib/api';
 import { useTranslations } from "next-intl";
+import ScreenplayModelSettings from '@/components/settings/ScreenplayModelSettings';
 import GroupedModelGrid from '@/components/common/GroupedModelGrid';
 
 interface ModelSettingsModalProps {
@@ -113,6 +114,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
 
                     {/* Content */}
                     <div className="p-5 space-y-6 overflow-y-auto">
+                        <ScreenplayModelSettings />
                         {/* Assets Section */}
                         <div className="space-y-5">
                             <div className="flex items-center gap-2 text-sm font-bold text-foreground">

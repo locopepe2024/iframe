@@ -18,7 +18,7 @@ export default function ScriptModelSelect({ model, onModelChange, modelBusy, mod
       <span>{t('label')}</span>
       <select value={model || ''} onChange={event => onModelChange?.(event.target.value as ScriptWritingModel)}
         disabled={!model || modelBusy} title={t('hint')}
-        className="h-8 rounded border border-white/15 bg-[#101116] px-2 text-foreground outline-none focus:border-primary/60 disabled:opacity-50">
+        className="min-h-10 max-w-full rounded border border-glass-border bg-surface-inset px-2 text-foreground outline-none focus:border-primary/60 disabled:opacity-50">
         {!model && <option value="">{t('loading')}</option>}
         <option value="llm-nf-all">LLM · llm-nf-all</option>
         <option value="deepseek-v4.1-flash">DeepSeek · deepseek-v4.1-flash</option>
