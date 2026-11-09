@@ -1189,6 +1189,38 @@ class CreateProjectRequest(BaseModel):
     source_script_document_id: Optional[str] = None
 
 
+def _find_script_document_project(document_id: str, user: UserContext):
+    return next((project for project in pipeline.list_scripts(user.owner_profile_id)
+                 if project.source_script_document_id == document_id), None)
+
+
+def _create_script_document_project(request: CreateProjectRequest, user: UserContext):
+    # Use the persistence lock for lookup + creation, including simultaneous
+    # requests from separate tabs. Reentry never overwrites production edits.
+    with pipeline._save_lock:
+        source = load_script_document(request.source_script_document_id, user)
+        existing = _find_script_document_project(request.source_script_document_id, user)
+        if existing is not None:
+            return existing
+
+        def node_text(node):
+            if node.get("type") == "hardBreak":
+                return "\n"
+            separator = "\n" if node.get("type") in {"doc", "shotBlock"} else ""
+            return node.get("text", "") + separator.join(node_text(child) for child in node.get("content", []))
+
+        text = "\n".join(node_text(block) for block in source["content"].get("content", []))
+        if not text.strip():
+            raise HTTPException(status_code=422, detail="Script document is empty")
+        project = pipeline.create_project(
+            request.title, text, True, request.workflow_mode, request.series_id,
+            user.user_id, user.owner_profile_id,
+            source_script_document_id=request.source_script_document_id,
+        )
+        save_document(project.id, SaveDocumentRequest(content=source["content"], create_snapshot=True))
+        return project
+
+
 @app.post("/projects", response_model=Script)
 async def create_project(
     request: CreateProjectRequest,
@@ -1203,19 +1235,13 @@ async def create_project(
     """
     # Run in thread pool to avoid blocking event loop during LLM analysis (Python 3.8 compatible)
     loop = asyncio.get_event_loop()
-    source_document = None
     if request.source_script_document_id:
-        source_document = await loop.run_in_executor(
-            None, partial(load_script_document, request.source_script_document_id, user)
-        )
-        def node_text(node):
-            if node.get("type") == "hardBreak":
-                return "\n"
-            separator = "\n" if node.get("type") in {"doc", "shotBlock"} else ""
-            return node.get("text", "") + separator.join(node_text(child) for child in node.get("content", []))
-        request.text = "\n".join(node_text(block) for block in source_document["content"].get("content", []))
-        if not request.text.strip():
-            raise HTTPException(status_code=422, detail="Script document is empty")
+        try:
+            return signed_response(await loop.run_in_executor(
+                None, partial(_create_script_document_project, request, user)
+            ))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
     try:
         result = await loop.run_in_executor(
             None,  # Use default executor
@@ -1234,11 +1260,6 @@ async def create_project(
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    if source_document is not None:
-        await loop.run_in_executor(
-            None,
-            partial(save_document, result.id, SaveDocumentRequest(content=source_document["content"], create_snapshot=True)),
-        )
     return signed_response(result)
 
 
@@ -9665,6 +9686,14 @@ def list_script_documents(user: UserContext = Depends(require_studio_user)):
 @app.get("/script-documents/{document_id}")
 def load_script_document(document_id: str, user: UserContext = Depends(require_studio_user)):
     return _script_document_response(_script_document_dir(user.owner_profile_id, document_id))
+
+
+@app.get("/script-documents/{document_id}/production-project")
+def get_script_document_project(document_id: str, user: UserContext = Depends(require_studio_user)):
+    _script_document_dir(user.owner_profile_id, document_id)
+    with pipeline._save_lock:
+        project = _find_script_document_project(document_id, user)
+        return {"project_id": project.id if project is not None else None}
 
 
 @app.delete("/script-documents/{document_id}")
