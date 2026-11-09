@@ -2012,3 +2012,54 @@ def test_analysis_serializes_optional_story_defaults_before_returning_to_visual_
     assert result['phases'][0]['events'][0]['dramatic_function'] == ''
     assert result['phases'][0]['events'][0]['source_fact_ids'] == []
     assert 'note' not in draft['story_map']['story_threads'][0]['milestones'][0]
+
+
+@pytest.mark.parametrize('refine', [False, True])
+def test_director_output_contract_defines_nested_ids_and_ledger_shape(refine):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps(profile_payload())
+    if refine:
+        processor.refine_director_profile('原文', {'characters': []}, {}, profile_payload(), ['保留原意'])
+    else:
+        processor.analyze_director_profile('原文', {'characters': []}, {})
+    prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
+    contract = prompt.split('<director_output_contract>', 1)[1].split('</director_output_contract>', 1)[0]
+    schema = json.loads(contract)
+    definitions = schema['$defs']
+    arc = definitions['DirectorRelationshipArc']
+    thread = definitions['DirectorStoryThread']
+    assert 'relationship_id' in arc['required']
+    assert arc['properties']['person_refs']['type'] == 'array'
+    assert 'thread_id' in thread['required']
+    assert thread['properties']['milestones']['items']['$ref'].endswith('/DirectorStorylineMilestone')
+    assert 'event_id' in definitions['DirectorStorylineMilestone']['required']
+    assert 'source_revision' not in definitions['DirectorStoryMap']['required']
+    assert schema['properties']['canon_state']['type'] == 'object'
+    assert schema['properties']['canon_state']['properties']['events']['type'] == 'array'
+    assert 'milestones 不能是字符串数组' in prompt
+    assert 'role 位于每个 milestone 对象内' in prompt
+
+
+def test_director_validation_failure_reports_fields_without_model_content():
+    pipeline, script = make_pipeline()
+    payload = profile_payload()
+    payload['story_map'] = valid_story_map()
+    payload['story_map'].pop('source_revision_id')
+    payload['story_map'].pop('source_revision')
+    payload['story_map']['relationship_arcs'] = [{'person_refs': ['沈夏', '周涵'], 'states': []}]
+    payload['story_map']['story_threads'] = [{'milestones': ['event-meet']}]
+    pipeline.script_processor.analyze_director_profile_with_audit.return_value = {
+        'profile': payload, 'source_audit': {'raw_response': 'PRIVATE_DIRECTOR_RESPONSE'},
+    }
+    with pytest.raises(ValueError) as exc:
+        pipeline.preview_director_profile_with_audit(script.id)
+    message = str(exc.value)
+    assert 'story_map.relationship_arcs.0.relationship_id：缺少必填字段' in message
+    assert 'story_map.story_threads.0.thread_id：缺少必填字段' in message
+    assert 'story_map.story_threads.0.milestones.0：应为对象' in message
+    assert 'input_value' not in message
+    assert 'pydantic.dev' not in message
+    assert 'PRIVATE_DIRECTOR_RESPONSE' not in message
+    assert exc.value.director_audit['admission_status'] == 'blocked'
+    pipeline._save_data.assert_not_called()

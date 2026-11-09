@@ -27,6 +27,7 @@ from .models import (
     build_director_refinement_context,
     director_execution_payload,
     DirectorPlanLighting,
+    DirectorProfile,
 )
 from ...utils.llm_json import parse_model_json_object
 
@@ -42,6 +43,37 @@ class DirectorShootingChunkError(RuntimeError):
 
 class SceneBasisFormatError(ValueError):
     """A field-specific extraction error that permits one model correction."""
+
+
+def _director_profile_output_contract() -> str:
+    """Keep the model's nested field contract derived from runtime validation."""
+    schema = DirectorProfile.model_json_schema()
+    for key in ("revision", "content_hash", "confirmed_at", "creative_skill_run"):
+        schema["properties"].pop(key, None)
+    story_map = schema["$defs"]["DirectorStoryMap"]
+    server_fields = {"people", "source_revision", "source_revision_id", "fact_ledger_revision"}
+    for key in server_fields:
+        story_map["properties"].pop(key, None)
+    story_map["required"] = [key for key in story_map.get("required", []) if key not in server_fields]
+    # The ledger is stored as a bounded dictionary, so specify its category
+    # shapes here rather than leaving the schema's generic object ambiguous.
+    schema["properties"]["canon_state"] = {
+        "type": "object", "additionalProperties": False,
+        "properties": {key: {"type": "array", "items": {"type": "object"}} for key in (
+            "characters", "relationships", "world_rules", "timeline", "events", "open_threads", "conflicts", "uncertainties")},
+    }
+    return (
+        "嵌套字段必须遵守以下 JSON Schema（来源版本、people 和事实账本版本由服务端绑定，不要生成）：\n"
+        "<director_output_contract>" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+        + "</director_output_contract>\n"
+        'relationship_arcs 每项必须含非空 relationship_id；story_threads 每项必须含非空 thread_id。'
+        'person_refs、character_refs 必须为字符串数组，不是逗号分隔的单个字符串。'
+        'milestones 不能是字符串数组；role 位于每个 milestone 对象内，不在 thread 上。'
+        '例如：{"thread_id":"thread-main","milestones":[{"event_id":"event-1","role":"setup","note":""}]}。'
+        '所有 phase_id/event_id 引用须对应本次 story_map 中的实际条目。'
+        'canon_state 必须是按分类组织的对象，例如 {"events":[{"subject":"角色","value":"原文支持的事件",'
+        '"source_refs":[],"status":"uncertain"}]}，没有事实时用 {}，不能返回平铺事实数组。'
+    )
 
 
 def _strip_markdown_json(content: str) -> str:
@@ -1984,6 +2016,7 @@ story_threads 用 milestones 引用 event_id，role 只用 setup/progress/turn/r
 people、source_revision、source_revision_id 由服务端补齐。当前提示未提供可引用的 Fact Ledger ID，
 所有 source_fact_ids 必须返回空数组；不得猜 range 或 fact_id。未链接事实的模型内容标为 interpretation，
 来源不清或内部矛盾标为 uncertain/conflicted。不得从旧 relationship initial/change/final 猜测阶段状态。
+{_director_profile_output_contract()}
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}
 execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
 地点/时代、关系变化、关键事件、视觉/表演/声音方向、连续性约束、禁用项和未决问题；
@@ -2111,6 +2144,7 @@ relationship/thread 保留稳定 ID，states 仍使用 phase_id 与真实 trigge
 canon_state 只返回本次受影响的事实分类；优先复用已有
 fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id 表达冲突或替代，
 不要回显未变化的 canon_state 分类。只返回 JSON 对象，不要解释。
+{_director_profile_output_contract()}
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
         content = (self.llm.chat(
             messages=[{"role": "system", "content": prompt},

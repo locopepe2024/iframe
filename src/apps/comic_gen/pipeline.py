@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional, Tuple
+from pydantic import ValidationError
 from src.apps.director_skills import provenance as director_skill_provenance
 
 import hashlib
@@ -4298,6 +4299,16 @@ class ComicGenPipeline(StudioOwnerMixin):
                     source_audit["raw_response"] = raw
                 source_audit["normalization_status"] = "needs_review"
                 source_audit["admission_status"] = "blocked"
+            if isinstance(exc, ValidationError):
+                labels = {"missing": "缺少必填字段", "list_type": "应为数组", "model_type": "应为对象",
+                          "dict_type": "应为对象", "string_type": "应为文本"}
+                fields = [".".join(map(str, item["loc"])) + "：" + labels.get(item["type"], "字段格式或引用无效")
+                          for item in exc.errors(include_input=False, include_url=False)]
+                # Keep model prose out of public errors while retaining the
+                # original response in the owner-scoped audit for diagnosis.
+                error = ValueError("导演返回结构不完整：" + "；".join(fields[:6]))
+                error.director_audit = source_audit
+                raise error from None
             try:
                 setattr(exc, "director_audit", source_audit)
             except Exception:
