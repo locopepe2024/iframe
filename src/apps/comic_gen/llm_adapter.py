@@ -265,6 +265,11 @@ class LLMAdapter:
         if stream:
             kwargs["stream"] = True
 
+        started_at = time.monotonic()
+        chunks_received = 0
+        text_chars = 0
+        finish_reason = None
+        http_response = None
         try:
             request_client = client
             options: Dict[str, Any] = {}
@@ -278,19 +283,31 @@ class LLMAdapter:
             record_llm_request("comic_gen", model, messages, response_format=response_format, stream=stream)
             logger.info("LLM chat request started: model=%s", model)
             response = request_client.chat.completions.create(**kwargs)
+            http_response = getattr(response, "response", None)
             logger.info("LLM chat HTTP response received: model=%s", model)
             if stream:
                 parts = []
                 try:
                     for chunk in response:
+                        chunks_received += 1
                         if chunk.choices:
-                            parts.append(chunk.choices[0].delta.content or "")
+                            piece = chunk.choices[0].delta.content or ""
+                            parts.append(piece)
+                            text_chars += len(piece)
+                            finish_reason = getattr(chunk.choices[0], "finish_reason", None) or finish_reason
+                except Exception:
+                    # This log precedes close(): an upstream error was raised
+                    # during iteration, rather than caused by our cleanup.
+                    logger.error(
+                        "LLM stream iteration failed before close: model=%s elapsed=%.3f chunks=%s chars=%s finish_reason=%s",
+                        model, time.monotonic() - started_at, chunks_received, text_chars, finish_reason,
+                    )
+                    raise
                 finally:
                     response.close()
                 content = "".join(parts)
             else:
                 content = response.choices[0].message.content
-            finish_reason = None
             if not stream and response.choices:
                 finish_reason = getattr(response.choices[0], "finish_reason", None)
             logger.info(
@@ -307,6 +324,8 @@ class LLMAdapter:
             # payload or credentials.
             status = getattr(e, "status_code", None)
             response = getattr(e, "response", None)
+            if response is None:
+                response = http_response
             if status is None and response is not None:
                 status = getattr(response, "status_code", None)
             request_id = None
@@ -324,4 +343,11 @@ class LLMAdapter:
             suffix = f" status={status}" if status is not None else ""
             if request_id:
                 suffix += f" request_id={request_id}"
-            raise RuntimeError(f"{provider_label} API error{suffix}: {detail}") from e
+            error = RuntimeError(f"{provider_label} API error{suffix}: {detail}")
+            error.llm_diagnostic = {
+                "stream": stream, "elapsed_seconds": round(time.monotonic() - started_at, 3),
+                "chunks_received": chunks_received, "text_chars": text_chars,
+                "finish_reason": finish_reason, "request_id": request_id,
+                "exception_type": type(e).__name__,
+            }
+            raise error from e

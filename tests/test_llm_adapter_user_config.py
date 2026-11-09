@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 import sys
+import pytest
 
 from src.apps.comic_gen.llm_adapter import LLMAdapter
 from src.apps.identity import UserContext
@@ -196,3 +197,42 @@ def test_script_adapter_uses_request_snapshot_without_changing_other_adapters(mo
     assert screenplay.chat([]) == 'llm-nf-all'
     assert frozen.run(screenplay.chat, []) == 'deepseek-v4.1-flash'
     assert screenplay.default_model == 'greena/llm-nf-all'
+
+
+@pytest.mark.parametrize('text', ['{"setting":', '{"setting":{}}'])
+def test_real_sdk_stream_error_stays_failed_and_records_boundary(text, caplog):
+    import httpx
+    from openai import OpenAI
+    import json
+
+    class Wire(httpx.SyncByteStream):
+        closed = False
+        def __iter__(self):
+            yield ('data: ' + json.dumps({'id': 'test', 'object': 'chat.completion.chunk',
+                'created': 0, 'model': 'test-model', 'choices': [{'index': 0,
+                'delta': {'content': text}, 'finish_reason': None}]}) + '\n\n').encode()
+            yield b'data: {"error":{"type":"api_error","message":"Upstream returned an error event (request_id: event-id)"}}\n\n'
+            yield b'data: [DONE]\n\n'
+        def close(self):self.closed = True
+    wire = Wire()
+    sent = {}
+    def receive(request):
+        sent.update(json.loads(request.content))
+        return httpx.Response(200,headers={'Content-Type':'text/event-stream','x-request-id':'gateway-id'},stream=wire)
+    with OpenAI(api_key='test',base_url='https://example.test/v1',
+                http_client=httpx.Client(transport=httpx.MockTransport(receive))) as client:
+        adapter = LLMAdapter()
+        with pytest.raises(RuntimeError, match='Upstream returned an error event') as caught:
+            adapter._chat_once(client,'test-model',[{'role':'user','content':'PRIVATE_SCREENPLAY'}],
+                {'type':'json_object'},stream=True,timeout_seconds=900,max_retries=0)
+    diagnostic = caught.value.llm_diagnostic
+    assert diagnostic['request_id'] == 'gateway-id'
+    assert diagnostic['text_chars'] == len(text)
+    assert diagnostic['chunks_received'] == 1
+    assert diagnostic['finish_reason'] is None
+    assert diagnostic['elapsed_seconds'] >= 0
+    assert wire.closed
+    assert sent['stream'] is True
+    assert 'max_tokens' not in sent and 'max_completion_tokens' not in sent
+    assert 'PRIVATE_SCREENPLAY' not in caplog.text
+    assert 'failed before close' in caplog.text
