@@ -1,4 +1,5 @@
 import json
+import hashlib
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -2103,3 +2104,71 @@ def test_director_confirmation_explains_uncited_explicit_claim_and_preserves_gua
     claim['evidence_status'] = 'interpretation'
     pipeline._validate_director_story_map_for_confirmation(story_map)
     assert not script.fact_ledger_revisions
+
+
+def test_failed_director_request_does_not_reuse_previous_raw_response():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.side_effect = [json.dumps({'story_map': valid_story_map()}), RuntimeError('Upstream SSE error')]
+    processor.analyze_director_profile_with_audit('first source', {}, {})
+    with pytest.raises(RuntimeError) as raised:
+        processor.analyze_director_profile_with_audit('second source', {}, {})
+    audit = raised.value.director_audit
+    assert audit['raw_response'] == ''
+    assert audit['raw_response_received'] is False
+    assert audit['source_sha256'] == hashlib.sha256(b'second source').hexdigest()
+    assert audit['failure_stage'] == 'provider_response'
+
+
+def test_concurrent_director_failures_keep_their_own_response_and_source():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    failed_waiting = threading.Event()
+    other_completed = threading.Event()
+
+    def respond(**kwargs):
+        source = kwargs['messages'][0]['content']
+        if '<script>failing source</script>' in source:
+            failed_waiting.set()
+            assert other_completed.wait(3)
+            raise RuntimeError('SSE failure')
+        assert failed_waiting.wait(3)
+        return '{"story_map": {}}'
+
+    processor.llm.chat.side_effect = respond
+    def fail():
+        try:processor.analyze_director_profile_with_audit('failing source', {}, {})
+        except RuntimeError as exc:return exc.director_audit
+        pytest.fail('Expected failure')
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        failed = pool.submit(fail)
+        try:
+            success = processor.analyze_director_profile_with_audit('successful source', {}, {})
+        finally:
+            other_completed.set()
+        audit = failed.result(timeout=3)
+    assert audit['raw_response'] == ''
+    assert audit['source_sha256'] != success['source_audit']['source_sha256']
+    assert success['source_audit']['raw_response'] == '{"story_map": {}}'
+
+
+@pytest.mark.parametrize('scope', ['episode', 'series'])
+def test_director_pipeline_prefers_exception_local_audit_over_stale_processor_data(scope):
+    pipeline, script = make_pipeline()
+    request_audit = {'source_mode': 'direct', 'raw_response': '', 'raw_response_received': False,
+                     'failure_stage': 'provider_response', 'source_sha256': 'current-source'}
+    error = RuntimeError('Upstream SSE error')
+    error.director_audit = request_audit
+    pipeline.script_processor.analyze_director_profile_with_audit.side_effect = error
+    pipeline.script_processor._last_director_source_audit = {'source_sha256': 'previous-source'}
+    pipeline.script_processor._last_director_raw_response = 'PREVIOUS_PRIVATE_RESPONSE'
+    if scope == 'series':
+        pipeline.series_store = {'series': Series(id='series', title='Test', created_at=1, updated_at=1)}
+        pipeline.get_series_episodes = Mock(return_value=[script])
+    with pytest.raises(RuntimeError) as caught:
+        if scope == 'series':pipeline.preview_series_director_profile('series')
+        else:pipeline.preview_director_profile_with_audit(script.id)
+    assert caught.value.director_audit['raw_response'] == ''
+    assert caught.value.director_audit['source_sha256'] == 'current-source'
+    assert caught.value.director_audit['failure_stage'] == 'provider_response'
+    pipeline._save_data.assert_not_called()

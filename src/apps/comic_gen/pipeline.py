@@ -3722,8 +3722,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 source, entities, style, "auto"
             )
         except Exception as exc:
-            audit = getattr(self.script_processor, "_last_director_source_audit", {})
-            raw = getattr(self.script_processor, "_last_director_raw_response", "")
+            audit = getattr(exc, "director_audit", None)
+            if not isinstance(audit, dict):
+                audit = getattr(self.script_processor, "_last_director_source_audit", {})
+            raw = (audit["raw_response"] if isinstance(audit, dict) and "raw_response" in audit
+                   else getattr(self.script_processor, "_last_director_raw_response", ""))
             if isinstance(audit, dict):
                 audit = dict(audit)
                 if raw:
@@ -4290,9 +4293,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._last_director_analysis_audit = source_audit
             return {"profile": normalized, "source_audit": source_audit}
         except Exception as exc:
-            if not source_audit:
+            request_audit = getattr(exc, "director_audit", None)
+            if isinstance(request_audit, dict):
+                source_audit = request_audit
+            elif not source_audit:
                 source_audit = getattr(self.script_processor, "_last_director_source_audit", {})
-            raw = getattr(self.script_processor, "_last_director_raw_response", "")
+            raw = (source_audit["raw_response"] if isinstance(source_audit, dict) and "raw_response" in source_audit
+                   else getattr(self.script_processor, "_last_director_raw_response", ""))
             if isinstance(source_audit, dict):
                 source_audit = dict(source_audit)
                 if raw:

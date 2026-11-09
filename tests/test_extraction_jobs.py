@@ -432,3 +432,18 @@ def test_authoring_errors_are_not_reported_as_director_failures(tmp_path, resour
             assert '超时' in done['error']
         else:
             assert reason in done['error']
+
+
+
+def test_director_provider_failure_is_not_labeled_admission(tmp_path):
+    store = ExtractionJobs(tmp_path / 'jobs.db')
+    def work():
+        error = RuntimeError('Upstream SSE error')
+        error.director_audit = {'failure_stage': 'provider_response', 'raw_response': '',
+                                'provider_response': {'text_chars': 120, 'chunks_received': 12}}
+        raise error
+    job = store.start('owner', 'project', 'director:failure-stage', work)
+    result = wait_done(store, job)
+    assert result['status'] == 'failed'
+    assert result['result']['failure_stage'] == 'provider_response'
+    assert result['result']['source_audit']['provider_response']['text_chars'] == 120

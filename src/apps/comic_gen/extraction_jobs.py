@@ -305,7 +305,7 @@ class ExtractionJobs:
             if isinstance(audit, dict):
                 failure_result = {
                     "source_audit": audit,
-                    "failure_stage": "admission",
+                    "failure_stage": audit.get("failure_stage", "admission"),
                     "failure_detail": str(exc)[:1000],
                 }
             self._finish(job_id, result=failure_result, error=message)

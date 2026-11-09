@@ -9,7 +9,7 @@ import logging
 import traceback
 import re
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import copy_context
+from contextvars import ContextVar, copy_context
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -957,6 +957,32 @@ def assemble_storyboard_polish_message(draft_prompt: str, assets: List[Dict[str,
 
 
 class ScriptProcessor:
+    # The processor is shared by multiple background workers. Evidence must
+    # follow the request context, including failures that return no body.
+    @property
+    def _last_director_raw_response(self) -> str:
+        context = self.__dict__.get("_director_raw_context")
+        return context.get() if context is not None else ""
+
+    @_last_director_raw_response.setter
+    def _last_director_raw_response(self, value: str) -> None:
+        context = self.__dict__.setdefault(
+            "_director_raw_context", ContextVar("director_raw_response", default="")
+        )
+        context.set(value)
+
+    @property
+    def _last_director_source_audit(self) -> Dict[str, Any]:
+        context = self.__dict__.get("_director_source_context_state")
+        return (context.get() or {}) if context is not None else {}
+
+    @_last_director_source_audit.setter
+    def _last_director_source_audit(self, value: Dict[str, Any]) -> None:
+        context = self.__dict__.setdefault(
+            "_director_source_context_state", ContextVar("director_source_audit", default=None)
+        )
+        context.set(dict(value))
+
     def __init__(self, api_key: str = None):
         self._api_key = api_key
         from .llm_adapter import LLMAdapter, get_script_writing_model
@@ -1954,6 +1980,7 @@ class ScriptProcessor:
     def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
                                  style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
         """Create a reviewable director draft without mutating project data."""
+        self._last_director_raw_response = ""
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
         source_context, is_source_digest = self._director_source_context(text, source_mode)
@@ -2076,13 +2103,20 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
     def analyze_director_profile_with_audit(self, text: str, entities_json: Dict[str, Any],
                                             style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
         """Return the profile plus bounded source and raw-response evidence."""
-        source_audit = self.director_source_audit(text, source_mode)
+        self._last_director_raw_response = ""
+        self._last_director_source_audit = {}
         try:
+            source_audit = self.director_source_audit(text, source_mode)
             profile = self.analyze_director_profile(text, entities_json, style_config, source_mode)
         except Exception as exc:
-            audit = getattr(exc, "director_audit", None)
-            if isinstance(audit, dict):
-                raise
+            raw = self._last_director_raw_response
+            audit = dict(self._last_director_source_audit)
+            audit.update(raw_response=raw, raw_response_received=bool(raw),
+                         failure_stage="parse" if raw else "provider_response")
+            diagnostic = getattr(exc, "llm_diagnostic", None)
+            if isinstance(diagnostic, dict):
+                audit["provider_response"] = diagnostic
+            exc.director_audit = audit
             raise
         # The legacy method parses internally, so capture raw JSON by issuing
         # no second request is not possible. The profile remains auditable;
