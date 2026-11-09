@@ -45,16 +45,20 @@ class SceneBasisFormatError(ValueError):
     """A field-specific extraction error that permits one model correction."""
 
 
-def _director_profile_output_contract() -> str:
+def _director_profile_output_contract(*, partial: bool = False) -> str:
     """Keep the model's nested field contract derived from runtime validation."""
     schema = DirectorProfile.model_json_schema()
     for key in ("revision", "content_hash", "confirmed_at", "creative_skill_run"):
         schema["properties"].pop(key, None)
+    # Storage accepts legacy profiles without a story map; new generation
+    # must produce it. A nullable/defaulted storage schema is insufficient.
+    schema["required"] = [] if partial else list(schema["properties"])
+    schema["properties"]["story_map"] = {"$ref": "#/$defs/DirectorStoryMap"}
     story_map = schema["$defs"]["DirectorStoryMap"]
     server_fields = {"people", "source_revision", "source_revision_id", "fact_ledger_revision"}
     for key in server_fields:
         story_map["properties"].pop(key, None)
-    story_map["required"] = [key for key in story_map.get("required", []) if key not in server_fields]
+    story_map["required"] = ["schema_version", "phases", "relationship_arcs", "story_threads"]
     # The ledger is stored as a bounded dictionary, so specify its category
     # shapes here rather than leaving the schema's generic object ambiguous.
     schema["properties"]["canon_state"] = {
@@ -62,10 +66,14 @@ def _director_profile_output_contract() -> str:
         "properties": {key: {"type": "array", "items": {"type": "object"}} for key in (
             "characters", "relationships", "world_rules", "timeline", "events", "open_threads", "conflicts", "uncertainties")},
     }
+    requirement = ("仅返回发生变化的顶层字段；若修改 story_map，必须返回完整的 story_map 对象，不能为 null；"
+                   if partial else "story_map 为必填对象，不能省略或为 null；")
     return (
         "嵌套字段必须遵守以下 JSON Schema（来源版本、people 和事实账本版本由服务端绑定，不要生成）：\n"
         "<director_output_contract>" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
         + "</director_output_contract>\n"
+        '必须输出实际 Director 数据对象，不能输出 Schema 本身。' + requirement +
+        '必须保留 phases、relationship_arcs、story_threads，不能以 timeline/relationships/key_events 代替 story_map。'
         'relationship_arcs 每项必须含非空 relationship_id；story_threads 每项必须含非空 thread_id。'
         'person_refs、character_refs 必须为字符串数组，不是逗号分隔的单个字符串。'
         'milestones 不能是字符串数组；role 位于每个 milestone 对象内，不在 thread 上。'
@@ -2144,7 +2152,7 @@ relationship/thread 保留稳定 ID，states 仍使用 phase_id 与真实 trigge
 canon_state 只返回本次受影响的事实分类；优先复用已有
 fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id 表达冲突或替代，
 不要回显未变化的 canon_state 分类。只返回 JSON 对象，不要解释。
-{_director_profile_output_contract()}
+{_director_profile_output_contract(partial=True)}
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
         content = (self.llm.chat(
             messages=[{"role": "system", "content": prompt},

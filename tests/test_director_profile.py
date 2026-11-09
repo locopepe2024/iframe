@@ -2026,7 +2026,10 @@ def test_director_output_contract_defines_nested_ids_and_ledger_shape(refine):
     prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
     contract = prompt.split('<director_output_contract>', 1)[1].split('</director_output_contract>', 1)[0]
     schema = json.loads(contract)
+    assert ('story_map' in schema['required']) is (not refine)
+    assert schema['properties']['story_map'] == {'$ref': '#/$defs/DirectorStoryMap'}
     definitions = schema['$defs']
+    assert set(definitions['DirectorStoryMap']['required']) == {'schema_version', 'phases', 'relationship_arcs', 'story_threads'}
     arc = definitions['DirectorRelationshipArc']
     thread = definitions['DirectorStoryThread']
     assert 'relationship_id' in arc['required']
