@@ -19,7 +19,7 @@ import base64
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Response, UploadFile
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 from pydantic import BaseModel, Field, ValidationError
 
@@ -799,10 +799,24 @@ def start_character_design_draft_job(body: CharacterDesignRequest, ctx: UserCont
 
 
 @router.get("/character-design/draft/jobs/{job_id}")
-def get_character_design_draft_job(job_id: str, ctx: UserContext = Depends(require_user_context)):
+def get_character_design_draft_job(job_id: str, ctx: UserContext = Depends(require_user_context), response: Response = None):
+    if response is not None:
+        response.headers['Cache-Control'] = 'private, no-store'
     return character_design_jobs.get_for_project_prefix(
         ctx.owner_profile_id, "character-design", job_id, "character-design:",
     )
+
+
+@router.get("/character-design/draft/latest-job")
+def latest_character_design_draft_job(
+    response: Response,
+    character_name: str = Query(min_length=1, max_length=200),
+    project_id: str = Query(default='', max_length=200),
+    ctx: UserContext = Depends(require_user_context),
+):
+    response.headers['Cache-Control'] = 'private, no-store'
+    project = f"character-design:{project_id or 'personal'}:{character_name}"
+    return character_design_jobs.latest_for_project(ctx.owner_profile_id, project, 'character-design:')
 
 
 def _compile_asset_design_draft_input(body: AssetDesignRequest, ctx: UserContext) -> dict:

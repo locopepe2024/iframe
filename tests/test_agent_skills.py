@@ -81,6 +81,40 @@ def test_character_design_job_rejects_stale_preview_before_start(ctx, tmp_path, 
     assert rejected.value.status_code == 409
 
 
+def test_character_design_latest_result_is_owner_and_character_scoped(ctx, tmp_path, monkeypatch):
+    store = ExtractionJobs(tmp_path / 'jobs.sqlite3')
+    monkeypatch.setattr(agent, 'character_design_jobs', store)
+    complete = Mock(side_effect=AssertionError('Reading results must not call the model'))
+    monkeypatch.setattr(agent, 'complete', complete)
+    payload = {'identity': {'visual_notes': '已完成的外观'}, 'look': {'visual_notes': '原稿造型'}}
+    db = store.connect()
+    with db:
+        for job_id, owner, project, created in (
+            ('old', ctx.owner_profile_id, 'character-design:project:纲手', 1),
+            ('latest', ctx.owner_profile_id, 'character-design:project:纲手', 2),
+            ('other-character', ctx.owner_profile_id, 'character-design:project:小樱', 3),
+            ('other-project', ctx.owner_profile_id, 'character-design:another:纲手', 4),
+            ('other-owner', 'other', 'character-design:project:纲手', 5),
+        ):
+            db.execute('INSERT INTO jobs (id,owner,project,fingerprint,status,created,result) VALUES (?,?,?,?,?,?,?)',
+                       (job_id, owner, project, 'character-design:' + job_id, 'completed', created, json.dumps(payload)))
+    db.close()
+    app = FastAPI()
+    app.include_router(agent.router)
+    app.dependency_overrides[require_user_context] = lambda: ctx
+    with TestClient(app) as client:
+        response = client.get('/agent/character-design/draft/latest-job', params={'project_id': 'project', 'character_name': '纲手'})
+        assert response.status_code == 200
+        assert response.json()['id'] == 'latest'
+        assert response.json()['result'] == payload
+        assert response.headers['cache-control'] == 'private, no-store'
+        assert client.get('/agent/character-design/draft/jobs/latest').headers['cache-control'] == 'private, no-store'
+        assert client.get('/agent/character-design/draft/latest-job', params={'project_id': 'missing', 'character_name': '纲手'}).status_code == 404
+        app.dependency_overrides[require_user_context] = lambda: UserContext('unknown', 'unknown', '', '')
+        assert client.get('/agent/character-design/draft/latest-job', params={'project_id': 'project', 'character_name': '纲手'}).status_code == 404
+    complete.assert_not_called()
+
+
 def test_asset_image_prompt_refine_returns_reviewable_suggestion(ctx, monkeypatch):
     calls = []
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)

@@ -334,6 +334,17 @@ class ExtractionJobs:
                 raise HTTPException(404, 'Render task not found')
             return self.public(row)
 
+    def latest_for_project(self, owner, project, fingerprint_prefix):
+        with closing(self.connect()) as db:
+            row = db.execute(
+                'SELECT * FROM jobs WHERE owner=? AND project=? AND fingerprint LIKE ? '
+                'ORDER BY created DESC, rowid DESC LIMIT 1',
+                (owner, project, fingerprint_prefix + '%'),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, '没有可读取的优化任务，请先提交 AI 完善。')
+            return self.public(row)
+
     def forget_result(self, owner, project, key, value):
         """Remove completed jobs whose JSON result contains an exact key/value."""
         with closing(self.connect()) as db, db:
