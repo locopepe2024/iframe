@@ -18,6 +18,7 @@ import { toast } from "@/store/toastStore";
 import { extractErrorDetail } from "@/lib/utils";
 import ScriptFactLedgerPanel from "./ScriptFactLedgerPanel";
 import DirectorInterpretationVisualEditor from "./DirectorInterpretationVisualEditor";
+import { uncitedDirectorClaimPaths, reviewUncitedDirectorClaims } from "@/lib/directorEvidenceReview";
 
 const editableProfile = (profile?: DirectorProfile) => {
     if (!profile) return "";
@@ -232,6 +233,9 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, h
         if (!value || Array.isArray(value) || typeof value !== "object") throw new Error(t("directorInvalidJson"));
         return value;
     };
+    const uncitedClaimPaths = (() => {
+        try { return uncitedDirectorClaimPaths(parseDraft()); } catch { return []; }
+    })();
 
     const clearLocalDraft = () => {
         if (typeof window === "undefined" || !currentProject) return;
@@ -329,6 +333,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, h
                 throw new Error(t("directorDraftStaleActionRequired"));
             }
             const draft = parseDraft();
+            if (uncitedClaimPaths.length > 0) throw new Error(t("directorUncitedEvidence", { count: uncitedClaimPaths.length }));
             let expectedDraftRevision = draftRevision;
             let confirmedDraft = draft;
             if (isDirty || draftSourceRevision !== sourceRevision) {
@@ -538,6 +543,19 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, h
 
             {draftText ? (
                 <div className="space-y-3">
+                    {uncitedClaimPaths.length > 0 && (
+                        <div role="alert" className="rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+                            <p>{t("directorUncitedEvidence", { count: uncitedClaimPaths.length })}</p>
+                            <details className="mt-2"><summary className="cursor-pointer">{t("directorEvidenceLocations")}</summary>
+                                <ul className="mt-2 list-inside list-disc">{uncitedClaimPaths.map(path => <li key={path}>{path}</li>)}</ul>
+                            </details>
+                            <WorkflowActionButton variant="secondary" size="sm" className="mt-2"
+                                disabled={busy !== null || hasStaleDraft}
+                                onClick={() => setDraftText(JSON.stringify(reviewUncitedDirectorClaims(parseDraft()), null, 2))}>
+                                {t("directorReviewUncitedEvidence")}
+                            </WorkflowActionButton>
+                        </div>
+                    )}
                     {revisions.length > 0 && (
                         <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted" aria-label={t("directorVersionManagement")}>
                             <label htmlFor="director-version-management">{t("directorVersionManagement")}</label>
