@@ -10,7 +10,7 @@
  *   · default = all "create_new_in_series" for low-confidence (<75)
  *   · User can override per-row via inline dropdown
  *   · "[全部确认]" applies in one click
- *   · "[去 Cast 查看 →]" navigates to Step 3 after apply
+ *   · "[去资产查看 →]" navigates to Step 3 after apply
  */
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -24,7 +24,7 @@ interface ReconcileModalProps {
     scriptId: string | null;
     onClose: () => void;
     /** Called after successful apply. Frontend uses this to dispatch a
-     *  navigateStep("cast") event if the user clicks "去 Cast 查看 →". */
+     *  navigateStep("assets") event if the user clicks "去资产查看 →". */
     onApplied?: () => void;
 }
 
@@ -111,7 +111,7 @@ export default function ReconcileModal({ isOpen, scriptId, onClose, onApplied }:
         return payload;
     };
 
-    const handleApply = async (navigateToCast: boolean) => {
+    const handleApply = async (navigateToAssets: boolean) => {
         if (!scriptId || !rows) return;
         setApplying(true);
         setError(null);
@@ -119,8 +119,8 @@ export default function ReconcileModal({ isOpen, scriptId, onClose, onApplied }:
             await api.applyReconcile(scriptId, buildPayload());
             onApplied?.();
             onClose();
-            if (navigateToCast) {
-                document.dispatchEvent(new CustomEvent("lumenx:navigateStep", { detail: "cast" }));
+            if (navigateToAssets) {
+                document.dispatchEvent(new CustomEvent("lumenx:navigateStep", { detail: "assets" }));
             }
         } catch (err: any) {
             setError(err?.response?.data?.detail || err?.message || "Apply failed");
@@ -227,7 +227,7 @@ export default function ReconcileModal({ isOpen, scriptId, onClose, onApplied }:
                                 onClick={() => handleApply(true)}
                                 disabled={!rows || rows.length === 0}
                             >
-                                {t("confirmAndGoCast")}
+                                {t("confirmAndGoAssets")}
                             </WorkflowActionButton>
                         </footer>
                     </motion.div>

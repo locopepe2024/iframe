@@ -44,6 +44,18 @@ export default function ConsistencyVault() {
     const tStep = useTranslations("stepHeader");
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
+    const appearances = useMemo(() => {
+        const counts: Record<string, Map<string, number>> = { character: new Map(), scene: new Map(), prop: new Map() };
+        for (const frame of currentProject?.frames ?? []) {
+            for (const [type, ids] of Object.entries({
+                character: frame.character_ids ?? [], scene: frame.scene_id ? [frame.scene_id] : [], prop: frame.prop_ids ?? [],
+            })) {
+                for (const id of Array.from(new Set<string>(ids))) counts[type].set(id, (counts[type].get(id) ?? 0) + 1);
+            }
+        }
+        return counts;
+    }, [currentProject?.frames]);
+
 
 
 
@@ -807,6 +819,7 @@ export default function ConsistencyVault() {
                                 key={asset.id}
                                 asset={asset}
                                 type={activeTab}
+                                appearances={appearances[activeTab].get(asset.id) ?? 0}
                                 isGenerating={isAssetGenerating(asset.id)}
                                 onGenerate={() => {
                                     setSelectedAssetId(asset.id);
@@ -2285,7 +2298,7 @@ function AssetCardCover({ asset, type, projectId, seriesId }: { asset: any; type
     </div>;
 }
 
-function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState, planCount = 0 }: any) {
+function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload, onClearGenerationState, planCount = 0, appearances = 0 }: any) {
     const tv = useTranslations("vault");
     const isLocked = asset.locked || false;
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -2363,6 +2376,8 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
             {/* Bottom Info */}
             <div className="absolute bottom-0 left-0 right-0 p-4 z-30">
                 <h3 className="text-lg font-bold text-foreground mb-1 truncate">{asset.name}</h3>
+                <p className="mb-1 text-xs text-foreground/80">{tv("frameAppearances", { count: appearances })}</p>
+                {type === "character" && <p className="mb-1 text-xs text-foreground/80">{tv(asset.voice_id ? "voiceBound" : "voiceUnbound")}</p>}
                 <p className="text-xs text-foreground/80 line-clamp-2 mb-3 h-8">
                     {asset.description || "No description"}
                 </p>

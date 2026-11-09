@@ -827,7 +827,7 @@ export default function ShotCard({
                                             type="button"
                                             onClick={() => {
                                                 document.dispatchEvent(
-                                                    new CustomEvent("lumenx:navigateStep", { detail: "cast" }),
+                                                    new CustomEvent("lumenx:navigateStep", { detail: "assets" }),
                                                 );
                                             }}
                                             title={c.name}
