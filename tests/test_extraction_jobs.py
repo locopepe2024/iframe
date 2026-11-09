@@ -75,6 +75,31 @@ def test_failure_is_explicit_and_retryable(tmp_path):
     assert wait_done(store, retry)['status'] == 'completed'
 
 
+@pytest.mark.parametrize('fingerprint,label', [
+    ('entity-source-hash', '实体提取'),
+    ('director:source', '导演分析'),
+    ('series-director:source', '导演分析'),
+])
+def test_entity_and_director_failures_use_their_own_stage_label(tmp_path, fingerprint, label):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+        def fail():
+            raise ValueError('scenes[0].asset_baseline.basis 必须是字符串数组')
+        job = store.start('owner', 'project', fingerprint, fail)
+        done = wait_done(store, job)
+        assert done['error'].startswith(label + '失败：')
+        assert 'basis' in done['error']
+
+
+def test_entity_timeout_keeps_entity_stage_label(tmp_path):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+        def fail():
+            raise TimeoutError('request timed out')
+        job = store.start('owner', 'project', 'entity-source-hash', fail)
+        assert wait_done(store, job)['error'].startswith('实体提取请求超时')
+
+
 def test_shooting_plan_contract_failure_is_owner_scoped_and_specific(tmp_path):
     with ThreadPoolExecutor(max_workers=1) as executor:
         store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)

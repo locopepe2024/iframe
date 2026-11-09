@@ -290,10 +290,13 @@ class ExtractionJobs:
                     message = f'{label}失败：{detail[:300]}'
             elif row and not row['fingerprint'].startswith(('storyboard:', 'director_shooting_plan:')):
                 detail = str(exc).strip()
+                is_director = row['fingerprint'].startswith(('director:', 'series-director:'))
+                label = '导演分析' if is_director else '实体提取'
                 if 'timed out' in detail.lower() or 'timeout' in detail.lower():
-                    message = '导演分析请求超时；请稍后重试，已保留当前 Director 草稿。'
+                    message = ('导演分析请求超时；请稍后重试，已保留当前 Director 草稿。' if is_director
+                               else '实体提取请求超时，请稍后重试；已有资产不会受影响。')
                 elif detail:
-                    message = f'导演分析失败：{detail[:300]}'
+                    message = f'{label}失败：{detail[:300]}'
             # Preserve bounded Director evidence even when admission/validation
             # rejects the structured profile. This is deliberately stored in
             # the owner-scoped job row, never emitted to ordinary logs.

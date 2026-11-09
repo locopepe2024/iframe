@@ -40,6 +40,10 @@ class DirectorShootingChunkError(RuntimeError):
         super().__init__(f"拍摄计划模型结果连续两次未通过校验：{self.public_reason}")
 
 
+class SceneBasisFormatError(ValueError):
+    """A field-specific extraction error that permits one model correction."""
+
+
 def _strip_markdown_json(content: str) -> str:
     """Strip markdown code fences from LLM JSON output."""
     if "```json" in content:
@@ -954,7 +958,7 @@ class ScriptProcessor:
                 data = json.loads(_strip_markdown_json(content))
                 self._require_scene_baselines(data)
             self._require_crowd_coverage(text, data)
-            return self._create_script_from_data(title, text, data)
+            return self._create_script_with_basis_correction(title, text, data, prompt)
                 
         except json.JSONDecodeError as e:
             error_msg = f"LLM 返回的数据格式错误，无法解析 JSON: {e}"
@@ -996,7 +1000,7 @@ class ScriptProcessor:
                 raise ValueError("修订结果缺少 characters、scenes 或 props")
             self._require_scene_baselines(data)
             self._require_crowd_coverage(text, data)
-            return self._create_script_from_data(title, text, data)
+            return self._create_script_with_basis_correction(title, text, data, prompt)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"LLM 返回的数据格式错误，无法解析 JSON: {exc}") from exc
         except ValueError:
@@ -1010,6 +1014,27 @@ class ScriptProcessor:
             error_msg = f"剧本解析失败: {str(e)}"
             logger.error(error_msg, exc_info=True)
             raise RuntimeError(error_msg)
+
+    def _create_script_with_basis_correction(self, title: str, text: str, data: dict, prompt: str) -> Script:
+        try:
+            return self._create_script_from_data(title, text, data)
+        except SceneBasisFormatError as exc:
+            # Retry this known contract failure once; never flatten structured
+            # evidence into tags or silently relabel inferred content as fact.
+            correction = (str(exc) + '。请仅纠正来源标签格式，保留其他已正确的角色、场景、道具和群体。'
+                          'basis 必须是字符串数组，例如 "basis": ["observed", "inferred"]；'
+                          '元素仅允许 observed、inferred、authored，不是逐字段依据对象。'
+                          '依据原文重新核对标签，不把推断或创作补充改为 observed。返回完整实体提取 JSON。')
+            logger.warning("Correcting scene basis format: %s", exc)
+            content = self.llm.chat(messages=[
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": json.dumps(data, ensure_ascii=False)},
+                {"role": "user", "content": correction},
+            ])
+            revised = parse_model_json_object(content)
+            self._require_scene_baselines(revised)
+            self._require_crowd_coverage(text, revised)
+            return self._create_script_from_data(title, text, revised)
 
     @staticmethod
     def _require_scene_baselines(data: Dict[str, Any]) -> None:
@@ -1101,7 +1126,7 @@ class ScriptProcessor:
                 base_character.persona = base_name
             
         scenes = []
-        for scene_data in data.get("scenes", []):
+        for scene_index, scene_data in enumerate(data.get("scenes", [])):
             scene_uuid = str(uuid.uuid4())
             llm_id = scene_data.get("id")
             if llm_id:
@@ -1120,11 +1145,15 @@ class ScriptProcessor:
                 for key in ("scene_identity", "location_type", "time_baseline", "lighting_baseline", "composition_tendency"):
                     if not isinstance(baseline[key], str):
                         raise ValueError(f"Scene asset_baseline {key} must be text")
-                for key in ("fixed_geometry", "fixed_landmarks", "materials", "environment", "reusable_constraints", "basis"):
+                for key in ("fixed_geometry", "fixed_landmarks", "materials", "environment", "reusable_constraints"):
                     if not isinstance(baseline[key], list) or any(not isinstance(item, str) for item in baseline[key]):
                         raise ValueError(f"Scene asset_baseline {key} must be text items")
-                if any(item not in {"observed", "inferred", "authored"} for item in baseline["basis"]):
-                    raise ValueError("Scene asset_baseline basis is invalid")
+                basis = baseline["basis"]
+                if (not isinstance(basis, list) or any(not isinstance(item, str) or
+                        item not in {"observed", "inferred", "authored"} for item in basis)):
+                    raise SceneBasisFormatError(
+                        f"scenes[{scene_index}].asset_baseline.basis 必须是字符串数组，"
+                        "元素仅允许 observed、inferred、authored")
                 shot_only = scene_data.get("shot_only_content", reviewed_draft.get("shot_only_content", []))
                 uncertainties = scene_data.get("uncertainties", reviewed_draft.get("unresolved", []))
                 if any(not isinstance(value, list) or any(not isinstance(item, str) for item in value)
@@ -1701,7 +1730,8 @@ class ScriptProcessor:
                 "场景强制合同：每个 scenes 条目必须提供 asset_baseline、shot_only_content、uncertainties。"
                 "asset_baseline 恰含 scene_identity、location_type、fixed_geometry、fixed_landmarks、materials、"
                 "environment、time_baseline、lighting_baseline、composition_tendency、reusable_constraints、basis；"
-                "basis 仅用 observed/inferred/authored。description 和 scene_identity 只概述可复用地点，"
+                'basis 必须是字符串数组，例如 "basis": ["observed", "inferred"]，元素仅用 observed/inferred/authored，'
+                "不是逐字段依据对象，不使用对象数组或单个字符串。description 和 scene_identity 只概述可复用地点，"
                 "不得包含潜伏、围堵等当前事件。输出前逐一核对独立地点是否都有 scenes 条目；"
                 "宏观地点硬规则：当文本出现一个可复用的街道、街区、院落或建筑群名称，且同一范围内还出现粮铺、街角、阁楼等子地点时，必须同时输出宏观地点和每个独立子地点的 scenes 条目；"
                 "宏观地点不能只作为子地点名称前缀，也不能只写进子地点的 environment 或 shot_only_content。"
