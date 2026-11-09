@@ -52,7 +52,7 @@ def test_preferences_owner_scope_stage_and_clear(tmp_path, monkeypatch):
 def test_actual_analysis_prompt_only_selected_method():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = '{}'
+    processor.llm.chat.return_value = '{"story_map": {"schema_version": 1, "phases": [], "relationship_arcs": [], "story_threads": []}}'
     processor.analyze_director_profile('原文', {'scope': 'episode'}, {})
     prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
     assert '<selected_creative_methods>' not in prompt
