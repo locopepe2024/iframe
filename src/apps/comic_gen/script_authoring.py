@@ -13,6 +13,7 @@ from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from .models import ScriptWritingPlanDraft
 
@@ -229,6 +230,39 @@ class ScriptAuthoringStore:
                 "episode_number": selected, "plan_revision": plan["revision"]}
 
 
+def _outline_response(output: str) -> ScriptWritingPlanDraft:
+    """Read one complete object, allowing provider prose before the JSON only.
+
+    Do not search nested objects or repair truncated JSON: either could turn an
+    incomplete series into an apparently successful plan.
+    """
+    start = output.find("{")
+    try:
+        if start < 0 or output.startswith("["):
+            raise ValueError("Expected one JSON object")
+        value, end = json.JSONDecoder().raw_decode(output, start)
+        if output[end:].strip() not in ("", "```"):
+            raise ValueError("Unexpected content after JSON object")
+    except ValueError as exc:
+        logger.warning("Outline response JSON invalid: chars=%s", len(output))
+        raise RuntimeError("模型返回的 JSON 不完整或格式无效，请重新解析或切换剧本模型") from exc
+    try:
+        draft = ScriptWritingPlanDraft.model_validate(value)
+    except ValidationError as exc:
+        # Never log Pydantic's input values: they contain the user's screenplay.
+        errors = [{"field": ".".join(map(str, e["loc"])), "type": e["type"]}
+                  for e in exc.errors(include_input=False, include_context=False, include_url=False)]
+        logger.warning("Outline response validation failed: %s", json.dumps(errors))
+        if any(not e["field"] for e in errors):
+            message = "分集编号无效（须从第1集连续排列且不能重复），或标题、大纲为空"
+        else:
+            message = "总纲解析结果字段格式无效（" + "、".join(e["field"] for e in errors[:5]) + "）"
+        raise RuntimeError(message + "，请重新解析或切换剧本模型") from exc
+    if start:
+        logger.info("Outline JSON recovered from provider commentary: chars=%s episodes=%s", len(output), len(draft.episodes))
+    return draft
+
+
 def analyze_outline(llm: Any, text: str, *, model: str | None = None) -> dict:
     schema = ScriptWritingPlanDraft.model_json_schema()
     messages = [
@@ -246,12 +280,7 @@ def analyze_outline(llm: Any, text: str, *, model: str | None = None) -> dict:
     ]
     options = {"model": model} if model else {}
     output = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True, **options).strip()
-    if output.startswith("```"):
-        output = output.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-    try:
-        draft = ScriptWritingPlanDraft.model_validate_json(output)
-    except ValueError as exc:
-        raise RuntimeError("总纲解析结果不完整或分集编号无效，请重新解析") from exc
+    draft = _outline_response(output)
     declared = re.search(r"(?:共|全剧)\s*(\d+)\s*集", text)
     if declared and len(draft.episodes) != int(declared.group(1)):
         raise RuntimeError(f"总纲约定 {declared.group(1)} 集，解析返回 {len(draft.episodes)} 集，请重新解析")

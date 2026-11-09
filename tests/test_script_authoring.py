@@ -62,6 +62,38 @@ def test_analysis_keeps_all_24_episodes_and_source_facts():
         analyze_outline(SimpleNamespace(chat=lambda **_: json.dumps(wrong)), '两集')
 
 
+@pytest.mark.parametrize('prefix,suffix', [
+    ('（已激活逆向学习中---）「方案」以下为解析后的剧本写作规划 JSON。\n\n', ''),
+    ('以下为完整分集规划：\n```json\n', '\n```'),
+    ('```json\n', '\n```'),
+], ids=['provider-prose', 'prose-and-fence', 'fence'])
+def test_outline_accepts_complete_json_with_provider_commentary(prefix, suffix):
+    expected = plan()
+    expected['episodes'][0]['source_excerpt'] = '她说：“不要走。”\n手中是信物 {项链}。'
+    result = analyze_outline(SimpleNamespace(chat=lambda **_: prefix + json.dumps(expected, ensure_ascii=False) + suffix), '共24集')
+    assert result['draft'] == expected
+
+
+@pytest.mark.parametrize('response', [
+    '以下为解析结果：\n' + json.dumps(plan())[:-1],
+    json.dumps(plan()) + json.dumps(plan()),
+    '以下为结果：' + json.dumps(plan()) + '\n' + json.dumps(plan()),
+    '[' + json.dumps(plan()) + ']',
+], ids=['truncated', 'two-objects', 'wrapped-two-objects', 'array'])
+def test_outline_rejects_truncated_ambiguous_or_array_response(response):
+    with pytest.raises(RuntimeError, match='JSON'):
+        analyze_outline(SimpleNamespace(chat=lambda **_: response), '共24集')
+
+
+def test_outline_reports_field_error_separately_from_numbering_error(caplog):
+    wrong = plan()
+    wrong['characters'] = ['纲手']
+    with pytest.raises(RuntimeError, match='字段格式无效.*characters'):
+        analyze_outline(SimpleNamespace(chat=lambda **_: json.dumps(wrong)), '共24集')
+    assert 'string_type' in caplog.text
+    assert '纲手' not in caplog.text
+
+
 @pytest.mark.parametrize('provider', ['greena', 'uniart'])
 def test_model_choice_is_owner_scoped_and_routes_all_writing_operations(client, monkeypatch, provider):
     from src.apps.comic_gen import api
