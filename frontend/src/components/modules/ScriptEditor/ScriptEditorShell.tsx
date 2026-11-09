@@ -17,6 +17,7 @@ import { useSceneFolding } from './hooks/useSceneFolding';
 import { useViewMode } from './hooks/useViewMode';
 import { useOfflineCache } from './hooks/useOfflineCache';
 import { useAutoSave } from './hooks/useAutoSave';
+import { useProductionHandoff } from './hooks/useProductionHandoff';
 import { useDerivation } from './hooks/useDerivation';
 import { useL3Completion } from './hooks/useL3Completion';
 import { scriptEditorApi } from '@/lib/scriptEditorApi';
@@ -60,7 +61,6 @@ export default function ScriptEditorShell({
   const [seriesImportError, setSeriesImportError] = useState('');
   const [documentLoading, setDocumentLoading] = useState(Boolean(projectId || scriptDocumentId));
   const [documentLoadFailed, setDocumentLoadFailed] = useState(false);
-  const [creatingProject, setCreatingProject] = useState(false);
   const { showHint, analysis, applyFormatting, dismissHint } = usePasteHandler(editor);
   const { showShortcutHelp, closeShortcutHelp } = useKeyboardShortcuts(editor);
   const continuityReport = useContinuityCheck(editor);
@@ -70,6 +70,10 @@ export default function ScriptEditorShell({
   const { hasNewerLocal, restoreFromLocal, dismissLocalRestore, isOffline } = useOfflineCache(documentKey, editor);
   const canPersist = Boolean(documentKey) && !documentLoading && !documentLoadFailed;
   const { save } = useAutoSave(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined, projectTitle);
+  const productionDisabled = !canPersist || isOffline || navigating || outlineOpen || scriptWritingOpen || seriesImportOpen || seriesImportSaving;
+  const { isEntering: creatingProject, isChecking: checkingProduction, targetProjectId: productionProjectId, enterProduction: handleEnterProduction } = useProductionHandoff({
+    editor, projectId, scriptDocumentId, title: projectTitle, canEnter: !productionDisabled, save,
+  });
   const refreshDerivation = useDerivation(editor);
   useL3Completion(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined);
 
@@ -183,21 +187,6 @@ export default function ScriptEditorShell({
       setSeriesImportSaving(false);
     }
   }, [editor, canPersist, seriesImportSaving, save, t]);
-
-  const handleCreateProject = useCallback(async () => {
-    if (!editor || !scriptDocumentId || !canPersist || creatingProject) return;
-    setCreatingProject(true);
-    try {
-      const title = projectTitle.trim() || t('document.untitled');
-      if (!await save(false)) throw new Error(t('toolbar.saveFailed'));
-      const project = await api.createProject(title, editor.getText({ blockSeparator: '\n' }), true, 'r2v', undefined, scriptDocumentId);
-      window.location.hash = `#/project/${project.id}/editor`;
-    } catch (error) {
-      toast.error(t('document.createFailed'), { body: error instanceof Error ? error.message : t('toolbar.saveFailedHint') });
-    } finally {
-      setCreatingProject(false);
-    }
-  }, [editor, scriptDocumentId, canPersist, creatingProject, projectTitle, save, t]);
 
   const backToLibrary = useCallback(async () => {
     if (useEditorStore.getState().isDirty && !await save(false)) {
@@ -353,10 +342,11 @@ export default function ScriptEditorShell({
                   className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50">
                   <Library size={14} /> {t('document.library')}
                 </button>
-                <button type="button" onClick={() => { void handleCreateProject(); }}
-                  disabled={!canPersist || creatingProject || wordCount === 0}
+                <button type="button" onClick={() => { void handleEnterProduction(); }}
+                  disabled={productionDisabled || creatingProject || checkingProduction || (!productionProjectId && wordCount === 0)}
+                  aria-busy={creatingProject || checkingProduction}
                   className="flex items-center gap-1 rounded border border-primary/50 bg-primary/15 px-2 py-1 text-xs text-foreground hover:bg-primary/25 disabled:opacity-50">
-                  <FolderPlus size={14} /> {t(creatingProject ? 'document.creating' : 'document.createProject')}
+                  <FolderPlus size={14} /> {t(creatingProject || checkingProduction ? 'panels.productionEntering' : productionProjectId ? 'panels.enterPipeline' : 'panels.productionCreate')}
                 </button>
               </>
             )}
@@ -514,10 +504,10 @@ export default function ScriptEditorShell({
               editor={editor}
               mode={mode}
               projectId={projectId}
-              onEnterPipeline={() => {
-                if (projectId) { window.location.hash = `#/project/${projectId}`; }
-                else { void handleCreateProject(); }
-              }}
+              onEnterPipeline={() => { void handleEnterProduction(); }}
+              productionProjectId={productionProjectId ?? undefined}
+              productionDisabled={productionDisabled || checkingProduction}
+              productionPending={creatingProject || checkingProduction}
             />
           </aside>
         )}

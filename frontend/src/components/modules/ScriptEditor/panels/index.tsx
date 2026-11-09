@@ -19,6 +19,9 @@ export interface RightPanelContainerProps {
   mode?: 'full' | 'embedded' | 'focus';
   projectId?: string;
   onEnterPipeline?: () => void;
+  productionDisabled?: boolean;
+  productionProjectId?: string;
+  productionPending?: boolean;
 }
 
 type PanelTab = 'entities' | 'shots' | 'pipeline' | 'notes' | 'ai';
@@ -35,6 +38,9 @@ export default function RightPanelContainer({
   mode = 'full',
   projectId,
   onEnterPipeline,
+  productionDisabled,
+  productionProjectId,
+  productionPending,
 }: RightPanelContainerProps) {
   const t = useTranslations('scriptEditor');
   const activePanel = useEditorStore((s) => s.activeRightPanel);
@@ -178,8 +184,10 @@ export default function RightPanelContainer({
             )}
             {currentTab === 'pipeline' && (
               <PipelinePanel
-                projectId={projectId}
+                projectId={productionProjectId || projectId}
                 onEnterPipeline={onEnterPipeline}
+                disabled={productionDisabled}
+                isEntering={productionPending}
               />
             )}
             {currentTab === 'entities' && entityPanel === 'locations' && !isEmbedded && (
