@@ -502,6 +502,25 @@ def _character_design_visual_notes(section: dict) -> str:
 
 _CHARACTER_IDENTITY_FEATURES = ("gender", "age", "face", "face_shape", "forehead", "cheekbones", "jaw", "chin", "eyebrows", "eyes", "eye_detail", "nose", "lips", "makeup", "hair", "skin", "skin_tone", "skin_texture", "height", "build", "recognition_marks")
 _CHARACTER_LOOK_FEATURES = ("clothing", "palette", "footwear", "jewelry", "decoration", "condition", "garment_condition", "jewelry_condition", "accessories", "weapon")
+_CHARACTER_DESIGN_ROUTES = frozenset({"realistic-modern", "historical-costume", "xianxia-fantasy", "anime-stylized"})
+_CHARACTER_DESIGN_AGE_STAGES = frozenset({"child", "teen", "young-adult", "adult", "older-adult"})
+
+
+def _character_design_review_schema() -> dict:
+    """Describe the same exact option IDs enforced when reading model output."""
+    return {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "required": ["question", "suggestion"],
+            "properties": {
+                "question": {"type": "string", "pattern": r"\S"},
+                "suggestion": {"type": "string", "pattern": r"\S"},
+                "suggested_route": {"type": ["string", "null"], "enum": [*sorted(_CHARACTER_DESIGN_ROUTES), None]},
+                "suggested_age_stage": {"type": ["string", "null"], "enum": [*sorted(_CHARACTER_DESIGN_AGE_STAGES), None]},
+            },
+        },
+    }
 
 
 def _character_design_features(section: dict, allowed: tuple[str, ...]) -> dict[str, str]:
@@ -582,10 +601,10 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
         raise HTTPException(422, "角色结构化字段名称、类型或长度无效") from None
     if len(json.dumps(body.dictionary_configurations, ensure_ascii=False)) > 60000:
         raise HTTPException(422, "词典配置快照过大，请减少配置数量")
-    allowed_routes = {"realistic-modern", "historical-costume", "xianxia-fantasy", "anime-stylized"}
+    allowed_routes = _CHARACTER_DESIGN_ROUTES
     if body.route and body.route not in allowed_routes:
         raise HTTPException(422, "不支持的角色设计路由")
-    allowed_age_stages = {"child", "teen", "young-adult", "adult", "older-adult"}
+    allowed_age_stages = _CHARACTER_DESIGN_AGE_STAGES
     if len(body.user_answers) > 12 or any(
         len(question) > 300 or len(answer) > 1000
         for question, answer in body.user_answers.items()
@@ -615,6 +634,9 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
               + "不得把创意选择伪装成剧本事实；不要依据姓名、职业或族裔刻板推断肤色、阶层或其他身份事实。没有可靠史实上下文时，将服饰方案明确写成与题材相容的架空设计，而不是声称具体朝代规制。"
               + "review_items 只用于输入中有明确相互矛盾的事实或已确认设定时的关键抉择；资料未提及年龄观感、画风、五官、体型或服饰细节不是冲突，请直接设计并标为 creative_choice。每项只写一个原子问题，question 直接说明需要核对的两项要求，不要求固定关键词，同时提供一条可直接采纳的 suggestion；没有具体建议时不要输出 review_item。suggestion 必须是可直接加入图片 Prompt 的视觉值，不能是让用户修改表单、选择路由或回答问题的操作指令。不要把常规的造型细节放入 review_items，也不要输出旧字段 unresolved。"
               + "若建议改变年龄阶段或题材画风，同时提供与 suggestion 一致的 suggested_age_stage 或 suggested_route；否则工作台选项与图片 Prompt 会冲突。"
+              + "review_items 中的 suggested_route 和 suggested_age_stage 只接受下列 Schema 的精确 ID；不能使用空字符串、中文标签、组合值或自行创造的 ID。不改变对应选项时省略该字段或返回 null；与 features 的空字符串规则不同。"
+              + "<character_review_items_schema>" + json.dumps(_character_design_review_schema(), ensure_ascii=False, sort_keys=True) + "</character_review_items_schema>"
+              + '例如仅核对发色时返回 {"question":"原稿黑发与当前白发要求需要核对","suggestion":"白色长发"}，不要附 suggested_route；若建议动漫画风，则使用 "suggested_route":"anime-stylized"。'
               + "route 为空表示用户未另外指定题材路由，依据 profile 与 current_draft 中明确给出的时代、服装和画风设计，不默认补成现代写实。current_draft 可以是用户当前编辑的图片 Prompt，应保留其中明确的角色细节；白底、构图、拍摄景别等资产出图指令不写入 identity 或 look。"
               + "参考图片是只读视觉证据，只能描述图中清晰可见的内容；不要推断图外事实。不要把图中其他人物或物品混为本角色。")
     source = body.model_dump(exclude={"reviewed_messages", "review_token"})

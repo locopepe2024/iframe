@@ -448,6 +448,47 @@ def test_character_design_accepts_actionable_review_without_magic_words(ctx, mon
     assert '包含“冲突”或“矛盾”' not in complete.call_args.args[2][0]['content']
 
 
+def test_character_review_preview_declares_exact_optional_choice_contract(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='角色档案')
+    system = agent.preview_character_design_draft(body, ctx)['messages']['system']
+    schema = json.loads(system.split('<character_review_items_schema>', 1)[1].split('</character_review_items_schema>', 1)[0])
+    properties = schema['items']['properties']
+    assert set(properties['suggested_route']['enum']) == {
+        'realistic-modern', 'historical-costume', 'xianxia-fantasy', 'anime-stylized', None,
+    }
+    assert set(properties['suggested_age_stage']['enum']) == {
+        'child', 'teen', 'young-adult', 'adult', 'older-adult', None,
+    }
+    assert schema['items']['required'] == ['question', 'suggestion']
+    assert '不改变对应选项时省略该字段或返回 null' in system
+    assert '不能使用空字符串、中文标签、组合值或自行创造的 ID' in system
+    # The documented enum must be accepted by the actual response validator.
+    for key in ('suggested_route', 'suggested_age_stage'):
+        for value in properties[key]['enum']:
+            item = {'question': '需要核对的要求', 'suggestion': '可采纳的视觉值', key: value}
+            assert agent._character_design_reviews({'review_items': [item]},
+                set(properties['suggested_age_stage']['enum']) - {None},
+                set(properties['suggested_route']['enum']) - {None}) == [item]
+
+
+@pytest.mark.parametrize('options,expected', [
+    *[({'suggested_route': route}, {'route': route}) for route in (
+        'realistic-modern', 'historical-costume', 'xianxia-fantasy', 'anime-stylized')],
+    *[({'suggested_age_stage': age}, {'age_stage': age}) for age in (
+        'child', 'teen', 'young-adult', 'adult', 'older-adult')],
+    ({}, {}),
+    ({'suggested_route': None, 'suggested_age_stage': None}, {}),
+])
+def test_character_review_choices_preserve_exact_ids(ctx, monkeypatch, options, expected):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    answer = {'identity': {'visual_notes': '角色外观'}, 'look': {},
+              'review_items': [{'question': '设定需要核对', 'suggestion': '具体视觉建议', **options}]}
+    monkeypatch.setattr(agent, 'complete', Mock(return_value=json.dumps(answer, ensure_ascii=False)))
+    result = run_reviewed_character_draft(agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='角色档案'), ctx)
+    assert result['field_suggestion_choices'] == ({'设定需要核对': expected} if expected else {})
+
+
 @pytest.mark.parametrize('reviews,field,issue', [
     ({}, 'review_items', 'invalid_review_items'),
     (None, 'review_items', 'invalid_review_items'),
@@ -461,6 +502,12 @@ def test_character_design_accepts_actionable_review_without_magic_words(ctx, mon
     ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_age_stage': []}],
         'review_items[0].suggested_age_stage', 'invalid_age_stage'),
     ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_route': 'PRIVATE_ROUTE'}],
+        'review_items[0].suggested_route', 'invalid_route'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_route': ''}],
+        'review_items[0].suggested_route', 'invalid_route'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_route': '古装'}],
+        'review_items[0].suggested_route', 'invalid_route'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_route': 'historical-costume/anime-stylized'}],
         'review_items[0].suggested_route', 'invalid_route'),
 ])
 def test_character_review_rejection_identifies_safe_field(ctx, monkeypatch, caplog, reviews, field, issue):
