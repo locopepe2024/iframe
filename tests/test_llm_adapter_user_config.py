@@ -173,3 +173,26 @@ def test_adapter_default_model_is_used_when_call_has_no_override(monkeypatch):
 
     assert adapter.chat([{"role": "user", "content": "director analysis"}]) == "llm-nf-all"
     assert captured["model"] == "llm-nf-all"
+
+
+def test_script_adapter_uses_request_snapshot_without_changing_other_adapters(monkeypatch):
+    from contextvars import copy_context
+    from src.apps.studio_access import set_studio_script_model, reset_studio_script_model
+    monkeypatch.setenv('LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('OPENAI_MODEL', 'generic-default')
+    screenplay = LLMAdapter(default_model='greena/llm-nf-all', use_script_model=True)
+    generic = LLMAdapter(default_model='generic-model')
+    for adapter in [screenplay, generic]:
+        monkeypatch.setattr(adapter, '_get_client', lambda **_: object())
+        monkeypatch.setattr(adapter, '_chat_once', lambda _client, model, *_args, **_kwargs: model)
+    token = set_studio_script_model('greena/deepseek-v4.1-flash')
+    try:
+        frozen = copy_context()
+        assert screenplay.chat([]) == 'deepseek-v4.1-flash'
+        assert screenplay.chat([], model='explicit-polish') == 'explicit-polish'
+        assert generic.chat([]) == 'generic-model'
+    finally:
+        reset_studio_script_model(token)
+    assert screenplay.chat([]) == 'llm-nf-all'
+    assert frozen.run(screenplay.chat, []) == 'deepseek-v4.1-flash'
+    assert screenplay.default_model == 'greena/llm-nf-all'

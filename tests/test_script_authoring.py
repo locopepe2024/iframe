@@ -254,3 +254,65 @@ def test_episode_original_dialogue_and_emotional_beats_reach_writing_prompt(clie
     assert '不写其他集剧情' in prompt
     assert client.get(f'/script-documents/{root}').json()['content'] == content(original)
     assert document_text(client.get(f'/script-documents/{child}').json()['content']) == ''
+
+
+@pytest.mark.parametrize('provider', ['greena', 'uniart'])
+def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_keys(client, monkeypatch, provider):
+    from contextvars import copy_context
+    from src.apps.comic_gen import api
+    from src.apps.comic_gen.llm import ScriptProcessor
+    from src.apps.comic_gen.models import ArtifactLineage, PromptConfig, Script
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+    from src.apps import user_config
+    from src.apps.studio_access import studio_script_model
+
+    monkeypatch.setattr(user_config, 'get_user_config_store', lambda: SimpleNamespace(
+        get_public=lambda _user: {'catalog_name': provider}))
+    processor = ScriptProcessor()
+    source = Script(id='project', title='本集', original_text='source', created_at=1, updated_at=1,
+                    owner_profile_id='writer-profile', prompt_config=PromptConfig(polish_model='old-polish-model'))
+    engine = SimpleNamespace(scripts={'project': source}, series_store={}, get_script=lambda _: source,
+        script_processor=processor, get_effective_polish_model=lambda _: 'old-polish-model',
+        director_analysis_context=lambda _: (source, {}, {}),
+        storyboard_analysis_context=lambda *args, **kwargs: (source, {}, ''),
+        storyboard_visual_style=lambda _: {}, effective_director_profile=lambda _: None,
+        storyboard_workflow_lineage=lambda *args: ArtifactLineage(),
+        director_shooting_plan_lineage=lambda _: {},
+        resolve_episode_assets=lambda _: {'characters': [], 'scenes': [], 'props': []})
+    engine.get_effective_script_model = lambda script: ComicGenPipeline.get_effective_script_model(engine, script)
+    calls = []
+    monkeypatch.setattr(processor.llm, '_get_client', lambda **kwargs: calls.append(kwargs) or object())
+    monkeypatch.setattr(processor.llm, '_chat_once', lambda _client, model, *args, **kwargs: model)
+    def generate(**kwargs):
+        model = processor.llm.chat([{'role': 'user', 'content': 'test'}], model=kwargs.get('model'))
+        assert model == studio_script_model().split('/', 1)[1]
+        return {'model': model, 'source_cache': processor._director_source_cache_key('source')}
+    engine.preview_director_profile = lambda *args, **kwargs: generate()
+    engine.preview_storyboard_analysis = lambda *args, **kwargs: generate(**kwargs)
+    monkeypatch.setattr(api, 'pipeline', engine)
+    pending = []
+    def queue(owner, resource, fingerprint, work, **kwargs):
+        context = copy_context()
+        pending.append((fingerprint, lambda: context.run(work, 'test-job') if kwargs.get('pass_job_id') else context.run(work)))
+        return {'id': 'test-job', 'status': 'queued'}
+    monkeypatch.setattr(api.extraction_jobs, 'start', queue)
+    paths = ['/projects/project/director-profile-jobs', '/projects/project/storyboard-analysis-jobs']
+    fingerprints = []
+    for model in ['deepseek-v4.1-flash', 'llm-nf-all']:
+        assert client.put('/script-writing/settings', json={'model': model}).status_code == 200
+        for path in paths:
+            response = client.post(path, json={'text': 'source'} if 'storyboard' in path else {})
+            assert response.status_code == 202, response.text
+            fingerprints.append(pending[-1][0])
+    assert fingerprints[0] != fingerprints[2]
+    assert fingerprints[1] != fingerprints[3]
+    # The preference is now LLM; both earlier queued operations still use DeepSeek.
+    results = [work() for _, work in pending]
+    assert results[0]['profile']['model'] == 'deepseek-v4.1-flash'
+    assert results[1]['frames']['model'] == 'deepseek-v4.1-flash'
+    assert results[2]['profile']['model'] == 'llm-nf-all'
+    assert results[3]['frames']['model'] == 'llm-nf-all'
+    assert results[0]['profile']['source_cache'] != results[2]['profile']['source_cache']
+    assert calls == [{'gateway': provider}] * 4
+    assert source.prompt_config.polish_model == 'old-polish-model'
+    assert processor.llm.default_model is None

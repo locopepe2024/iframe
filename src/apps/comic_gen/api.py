@@ -154,8 +154,10 @@ from ..studio_access import (
     require_studio_user,
     resolve_studio_reference,
     reset_studio_user,
+    reset_studio_script_model,
     sign_studio_media_paths,
     set_studio_user,
+    set_studio_script_model,
     studio_owner_dir,
     studio_media_dir,
     studio_owner_key,
@@ -550,7 +552,16 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     context_token = set_studio_user(user)
+    script_model_token = None
     try:
+        # Freeze the account's screenplay model before any background job is
+        # queued. copy_context() keeps this choice for the entire operation.
+        if path.startswith(("/projects", "/series", "/script-documents")) or path == "/script-writing/generate":
+            try:
+                model = await asyncio.to_thread(_script_model_for_request, user, None)
+            except HTTPException as exc:
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            script_model_token = set_studio_script_model(model)
         handler_started = time.perf_counter()
         response = await call_next(request)
         if path.startswith("/projects/") and path.endswith("/assets/update_attributes"):
@@ -566,6 +577,8 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
             _set_browser_profile_cookie(response, request, user)
         return response
     finally:
+        if script_model_token is not None:
+            reset_studio_script_model(script_model_token)
         reset_studio_user(context_token)
 
 # Allow-list map for uploaded file extensions: keys come from the (untrusted)
@@ -3861,7 +3874,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
     director_profile = resolve_director(script) if resolve_director else None
     visual_style = pipeline.storyboard_visual_style(script)
     llm = pipeline.script_processor.llm
-    resolver = getattr(pipeline, "get_effective_polish_model", None)
+    resolver = getattr(pipeline, "get_effective_script_model", None) or getattr(pipeline, "get_effective_polish_model", None)
     selected_model = resolver(script) if callable(resolver) else ""
     return hashlib.sha256(json.dumps([
         text,
@@ -3894,7 +3907,8 @@ def start_storyboard_analysis(
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, lineage=lineage,
     )
-    selected_model = pipeline.get_effective_polish_model(pipeline.get_script(script_id))
+    resolver = getattr(pipeline, "get_effective_script_model", None) or pipeline.get_effective_polish_model
+    selected_model = resolver(pipeline.get_script(script_id))
     job_fingerprint = "storyboard:" + fingerprint
     from .llm import split_director_source
     total_batches = len(split_director_source(
@@ -3953,7 +3967,8 @@ def start_storyboard_analysis_refinement(
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, request.draft, instructions, lineage,
     )
-    selected_model = pipeline.get_effective_polish_model(pipeline.get_script(script_id))
+    resolver = getattr(pipeline, "get_effective_script_model", None) or pipeline.get_effective_polish_model
+    selected_model = resolver(pipeline.get_script(script_id))
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -7694,8 +7709,9 @@ def start_director_shooting_plan(
     chunks = split_director_source(
         script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
     )
-    model = _get_polish_model_for_project(script_id).strip() or None
-    if model:
+    from ..studio_access import studio_script_model
+    model = studio_script_model() or _get_polish_model_for_project(script_id).strip() or None
+    if model and not studio_script_model():
         try:
             published = fetch_uniart_catalog(studio_uniart_config())
         except Exception as exc:
@@ -9455,9 +9471,11 @@ def update_script_writing_settings(request: ScriptWritingModelSettings,
 
 
 def _script_model_for_request(user: UserContext, requested: ScriptWritingModel | None) -> str | None:
-    model = requested or _authoring_store(user).writing_model()
-    if not model:
-        return None  # Existing callers retain the deployment's configured model.
+    from ..studio_access import studio_script_model
+
+    if not requested and studio_script_model():
+        return studio_script_model()
+    model = requested or _authoring_store(user).writing_model() or "llm-nf-all"
     from ..user_config import get_user_config_store
 
     provider = get_user_config_store().get_public(user).get("catalog_name")

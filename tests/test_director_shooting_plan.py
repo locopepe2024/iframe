@@ -1354,7 +1354,7 @@ def test_plan_api_keeps_large_resource_separate_and_confirms_without_touching_fr
             }])
             def preview_plan(project_id, **kwargs):
                 assert project_id == "film"
-                assert kwargs["model"] == "deepseek-v4.1-flash-peak"
+                assert kwargs["model"] == "llm-nf-all"  # Account screenplay choice supersedes the polish-only override.
                 assert kwargs["load_batches"]() == {}
                 assert kwargs["save_batch"](
                     0,

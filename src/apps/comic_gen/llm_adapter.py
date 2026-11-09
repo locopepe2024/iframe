@@ -36,9 +36,10 @@ def get_script_writing_model() -> Optional[str]:
 class LLMAdapter:
     """Unified LLM call interface supporting DashScope and OpenAI-compatible APIs."""
 
-    def __init__(self, default_model: Optional[str] = None):
+    def __init__(self, default_model: Optional[str] = None, *, use_script_model: bool = False):
         self.provider = os.getenv("LLM_PROVIDER", "dashscope").lower()
         self.default_model = default_model
+        self.use_script_model = use_script_model
         self._client = None
         self._client_config_key = None
         logger.info(f"LLM Adapter initialized with provider: {self.provider}")
@@ -93,7 +94,7 @@ class LLMAdapter:
 
     @property
     def is_configured(self) -> bool:
-        return self.is_configured_for_model(self.default_model)
+        return self.is_configured_for_model(None if self.use_script_model else self.default_model)
 
     @staticmethod
     def _model_gateway(model: Optional[str]) -> tuple[Optional[str], Optional[str]]:
@@ -106,7 +107,7 @@ class LLMAdapter:
 
     def is_configured_for_model(self, model: Optional[str]) -> bool:
         try:
-            configured_model = model or self.default_model or (
+            configured_model = model or (self._get_default_model() if self.use_script_model else self.default_model) or (
                 self._get_default_model() if self.provider == "openai" else None
             )
             gateway, _ = self._model_gateway(configured_model)
@@ -140,6 +141,14 @@ class LLMAdapter:
     _DASHSCOPE_MODEL_FALLBACK_CHAIN = ["qwen3.7-plus", "qwen3.6-plus", "qwen-plus"]
 
     def _get_default_model(self) -> str:
+        if self.use_script_model:
+            from ..studio_access import studio_script_model
+
+            selected = studio_script_model()
+            if selected:
+                return selected
+            if self.default_model:
+                return self.default_model
         if self.provider == "openai":
             return os.getenv("OPENAI_MODEL", "gpt-4o")
         return self._DASHSCOPE_MODEL_FALLBACK_CHAIN[0]
@@ -174,7 +183,7 @@ class LLMAdapter:
         Raises:
             RuntimeError: If the API call fails.
         """
-        model = model or self.default_model or (
+        model = model or (self._get_default_model() if self.use_script_model else self.default_model) or (
             self._get_default_model() if self.provider == "openai" else None
         )
         gateway, model = self._model_gateway(model)

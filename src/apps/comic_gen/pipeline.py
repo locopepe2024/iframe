@@ -6498,7 +6498,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script, entities_json, prompt = self.storyboard_analysis_context(
             script_id, include_plan=not (expected_lineage and expected_lineage.storyboard_mode == "script"),
         )
-        selected_model = model if model is not None else self.get_effective_polish_model(script)
+        selected_model = model if model is not None else self.get_effective_script_model(script)
         source_range = self._source_range_for_text(script, text)
         confirmed_director_profile = self.effective_director_profile(script)
         director_profile = self.director_execution_context(
@@ -6586,7 +6586,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script, entities_json, prompt = self.storyboard_analysis_context(
             script_id, include_plan=not (lineage and lineage.storyboard_mode == "script"),
         )
-        selected_model = model if model is not None else self.get_effective_polish_model(script)
+        selected_model = model if model is not None else self.get_effective_script_model(script)
         if lineage and lineage.status == "pinned":
             self.validate_storyboard_lineage(script_id, text, lineage)
         if skill_snapshot is not None:
@@ -6720,7 +6720,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             director_profile=director_profile,
             visual_style=self.storyboard_visual_style(script),
             source_range=source_range,
-            model=self.get_effective_polish_model(script) or None,
+            model=self.get_effective_script_model(script) or None,
         )
 
         if not raw_frames:
@@ -13092,6 +13092,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             target.updated_at = time.time()
             self._save_series_data_unlocked()
             return target, imported_ids, skipped_ids
+
+    def get_effective_script_model(self, episode: Script) -> str:
+        """Narrative work shares the account selection captured by the request."""
+        from ..studio_access import studio_script_model
+
+        return studio_script_model() or self.get_effective_polish_model(episode)
 
     def get_effective_polish_model(self, episode: Script) -> str:
         """Resolve the LLM model selected for an episode or its series."""

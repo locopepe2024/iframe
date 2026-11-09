@@ -904,7 +904,7 @@ class ScriptProcessor:
     def __init__(self, api_key: str = None):
         self._api_key = api_key
         from .llm_adapter import LLMAdapter, get_script_writing_model
-        self.llm = LLMAdapter(default_model=get_script_writing_model())
+        self.llm = LLMAdapter(default_model=get_script_writing_model(), use_script_model=True)
         # Long Director sources are expensive to map. Keep only compact source
         # digests in-process; the raw script remains owned by Script storage.
         self._director_source_cache: Dict[str, str] = {}

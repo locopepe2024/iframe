@@ -29,6 +29,9 @@ _studio_user: ContextVar[Optional[UserContext]] = ContextVar(
 _studio_uniart: ContextVar[Optional[Dict[str, str]]] = ContextVar(
     "iframe_studio_uniart", default=None
 )
+_studio_script_model: ContextVar[Optional[str]] = ContextVar(
+    "iframe_studio_script_model", default=None
+)
 STUDIO_MEDIA_PREVIEW_SIZES = frozenset({160, 320, 512, 960})
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,18 @@ def set_studio_user(user: UserContext) -> Token:
 
 def reset_studio_user(token: Token) -> None:
     _studio_user.reset(token)
+
+
+def set_studio_script_model(model: Optional[str]) -> Token:
+    return _studio_script_model.set(model)
+
+
+def reset_studio_script_model(token: Token) -> None:
+    _studio_script_model.reset(token)
+
+
+def studio_script_model() -> Optional[str]:
+    return _studio_script_model.get()
 
 
 def set_studio_uniart_config(config: Dict[str, str]) -> Token:
