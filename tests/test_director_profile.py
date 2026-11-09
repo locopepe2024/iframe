@@ -2030,6 +2030,15 @@ def test_director_output_contract_defines_nested_ids_and_ledger_shape(refine):
     assert schema['properties']['story_map'] == {'$ref': '#/$defs/DirectorStoryMap'}
     definitions = schema['$defs']
     assert set(definitions['DirectorStoryMap']['required']) == {'schema_version', 'phases', 'relationship_arcs', 'story_threads'}
+    for name in ('DirectorStoryEvent', 'DirectorRelationshipState'):
+        claim = definitions[name]
+        if refine:
+            rule = claim['allOf'][0]
+            assert rule['if']['properties']['evidence_status']['const'] == 'explicit'
+            assert rule['then']['properties']['source_fact_ids']['minItems'] == 1
+        else:
+            assert 'explicit' not in claim['properties']['evidence_status']['enum']
+            assert claim['properties']['source_fact_ids']['maxItems'] == 0
     arc = definitions['DirectorRelationshipArc']
     thread = definitions['DirectorStoryThread']
     assert 'relationship_id' in arc['required']
@@ -2079,3 +2088,18 @@ def test_new_director_generation_rejects_missing_story_map(value):
     with pytest.raises(RuntimeError, match='缺少 story_map 故事结构对象'):
         processor.analyze_director_profile('原文', {'characters': []}, {})
     assert processor.llm.chat.call_count == 1
+
+
+@pytest.mark.parametrize('kind', ['event', 'relationship'])
+def test_director_confirmation_explains_uncited_explicit_claim_and_preserves_guard(kind):
+    pipeline, script = make_pipeline()
+    story_map = valid_story_map()
+    story_map['relationship_arcs'] = [{'relationship_id': 'arc-1', 'states': [{'phase_id': 'phase-campus'}]}]
+    claim = story_map['phases'][0]['events'][0] if kind == 'event' else story_map['relationship_arcs'][0]['states'][0]
+    claim['evidence_status'] = 'explicit'
+    claim['source_fact_ids'] = []
+    with pytest.raises(ValueError, match='导演解读'):
+        pipeline._validate_director_story_map_for_confirmation(story_map)
+    claim['evidence_status'] = 'interpretation'
+    pipeline._validate_director_story_map_for_confirmation(story_map)
+    assert not script.fact_ledger_revisions

@@ -59,6 +59,16 @@ def _director_profile_output_contract(*, partial: bool = False) -> str:
     for key in server_fields:
         story_map["properties"].pop(key, None)
     story_map["required"] = ["schema_version", "phases", "relationship_arcs", "story_threads"]
+    for name in ("DirectorStoryEvent", "DirectorRelationshipState"):
+        claim = schema["$defs"][name]
+        if partial:
+            claim["allOf"] = [{
+                "if": {"properties": {"evidence_status": {"const": "explicit"}}, "required": ["evidence_status"]},
+                "then": {"properties": {"source_fact_ids": {"minItems": 1}}, "required": ["source_fact_ids"]},
+            }]
+        else:
+            claim["properties"]["evidence_status"]["enum"] = ["interpretation", "uncertain", "conflicted"]
+            claim["properties"]["source_fact_ids"]["maxItems"] = 0
     # The ledger is stored as a bounded dictionary, so specify its category
     # shapes here rather than leaving the schema's generic object ambiguous.
     schema["properties"]["canon_state"] = {

@@ -4610,11 +4610,17 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if not str(event.get("description", "")).strip():
                     raise ValueError("Describe every story event before confirming the story map")
                 if event.get("evidence_status") == "explicit" and not event.get("source_fact_ids"):
-                    raise ValueError("Explicit story events must link confirmed Fact Ledger entries")
+                    raise ValueError(
+                        f"故事事件 {event.get('event_id', '')} 标为“已证实”但未关联已确认的事实账本条目；"
+                        "请关联事实，或将证据状态改为“导演解读”后再确认。"
+                    )
         for arc in story_map.get("relationship_arcs", []):
             for state in arc.get("states", []):
                 if state.get("evidence_status") == "explicit" and not state.get("source_fact_ids"):
-                    raise ValueError("Explicit relationship states must link confirmed Fact Ledger entries")
+                    raise ValueError(
+                        f"人物关系 {arc.get('relationship_id', '')} / 阶段 {state.get('phase_id', '')} "
+                        "标为“已证实”但未关联已确认的事实账本条目；请关联事实，或将证据状态改为“导演解读”后再确认。"
+                    )
         for thread in story_map.get("story_threads", []):
             if not str(thread.get("label", "")).strip():
                 raise ValueError("Name every story thread before confirming the story map")
