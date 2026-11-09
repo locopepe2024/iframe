@@ -22,7 +22,12 @@ RATIOS = frozenset({"1:1", "3:4", "4:3", "16:9", "9:16", "3:2", "2:3", "21:9"})
 
 
 def gateway_config(owner_config: dict) -> dict:
-    if owner_config.get("provider") in ("greena", "nsfw"):
+    from ..utils.provider_catalog import catalog_name
+
+    provider = catalog_name(owner_config)
+    if provider == "uniart":
+        raise ValueError("GreenA adapter provider does not match UniArt credentials")
+    if provider == "greena":
         from ..apps.user_config import validate_provider_base_url
         base = validate_provider_base_url("nsfw", owner_config.get("base_url", ""))
         key = owner_config.get("api_key")

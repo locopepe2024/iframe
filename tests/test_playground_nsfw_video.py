@@ -15,7 +15,7 @@ def generation(model="nsfw/wan3.0", mode=PlaygroundMode.I2V):
     )
 
 
-@pytest.mark.parametrize("model_id", ["nsfw/wan3.0", "nsfw/wan3.0-Prime"])
+@pytest.mark.parametrize("model_id", ["nsfw/wan3.0", "nsfw/wan3.0-Prime", "uniart/wan3.0", "uniart/wan3.0-Prime"])
 def test_agent_wan_video_uses_new_one_and_saves_task(monkeypatch, tmp_path, model_id):
     storage = Mock(output_dir=str(tmp_path))
     service = PlaygroundService(storage, provider_config_loader=lambda: {"api_key": "test"})
@@ -28,6 +28,7 @@ def test_agent_wan_video_uses_new_one_and_saves_task(monkeypatch, tmp_path, mode
 
     adapter.generate.side_effect = submit
     monkeypatch.setattr("src.models.nsfw_new_one.NSFWNewOneVideoModel", lambda _config: adapter)
+    monkeypatch.setattr("src.models.uniart.UniArtVideoModel", Mock(side_effect=AssertionError("UniArt selected")))
     monkeypatch.setattr(service, "_generate_video_wanx", Mock(side_effect=AssertionError("DashScope selected")))
     gen = generation(model_id)
 
@@ -36,7 +37,7 @@ def test_agent_wan_video_uses_new_one_and_saves_task(monkeypatch, tmp_path, mode
     assert gen.provider_tasks == {"0": "upstream-video"}
     assert storage.update_generation.called
     assert adapter.generate.call_args.kwargs["model"] == model_id
-    if model_id == "nsfw/wan3.0":
+    if model_id.endswith("/wan3.0"):
         assert adapter.generate.call_args.kwargs["img_url"] == "https://example.com/frame.jpg"
         assert adapter.generate.call_args.kwargs["ref_image_urls"] == []
     else:

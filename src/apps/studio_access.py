@@ -85,6 +85,25 @@ def studio_nsfw_new_one_config() -> Dict[str, str]:
     return runtime_nsfw_for_owner(user.user_id, user.owner_profile_id)
 
 
+def runtime_gateway_for_owner(owner_user_id: str, owner_profile_id: str, provider: str) -> Dict[str, str]:
+    """Resolve an explicit gateway; runtime_uniart_for_owner means active gateway."""
+    from .user_config import get_user_config_store
+
+    identity = UserContext(owner_user_id, owner_profile_id, owner_user_id, "")
+    return get_user_config_store().get_runtime_gateway(identity, provider)
+
+
+def studio_gateway_config(provider: str) -> Dict[str, str]:
+    from ..utils.provider_catalog import catalog_name
+
+    provider = "greena" if provider == "nsfw" else provider
+    configured = _studio_uniart.get()
+    if configured and catalog_name(configured) == provider:
+        return dict(configured)
+    user = require_studio_user()
+    return runtime_gateway_for_owner(user.user_id, user.owner_profile_id, provider)
+
+
 def runtime_nsfw_for_owner(owner_user_id: str, owner_profile_id: str) -> Dict[str, str]:
     from .user_config import get_user_config_store
     identity = UserContext(owner_user_id, owner_profile_id, owner_user_id, "")

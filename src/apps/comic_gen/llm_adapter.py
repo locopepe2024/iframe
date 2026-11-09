@@ -17,6 +17,8 @@ import logging
 import time
 from typing import Dict, List, Optional, Any
 
+from fastapi import HTTPException
+
 from ...utils.endpoints import get_provider_base_url
 
 logger = logging.getLogger(__name__)
@@ -41,15 +43,28 @@ class LLMAdapter:
         self._client_config_key = None
         logger.info(f"LLM Adapter initialized with provider: {self.provider}")
 
-    def _runtime_credentials(self) -> tuple[str | None, str | None]:
+    def _runtime_credentials(self, gateway: Optional[str] = None) -> tuple[str | None, str | None]:
         """Resolve credentials for the current request context.
 
-        Studio requests are owner-scoped.  Their UniArt credential must win
+        Studio requests are owner-scoped. Their selected gateway must win
         over the process environment, otherwise a stale shared token can be
         used after login (and two users can accidentally share one client).
         Desktop/background calls without an authenticated Studio context keep
         the environment fallback for compatibility.
         """
+        if gateway:
+            from ..studio_access import studio_gateway_config
+
+            config = studio_gateway_config(gateway)
+            if gateway == "greena":
+                from ...models.nsfw_new_one import gateway_config
+
+                config = gateway_config(config)
+            api_key = (config.get("api_key") or "").strip()
+            base_url = (config.get("base_url") or "").strip().rstrip("/")
+            if not api_key or not base_url:
+                raise RuntimeError(f"{gateway} LLM credentials are not configured")
+            return api_key, base_url
         if self.provider == "openai":
             from ..studio_access import current_studio_user, runtime_uniart_for_owner
 
@@ -61,13 +76,13 @@ class LLMAdapter:
                     )
                 except Exception as exc:
                     raise RuntimeError(
-                        "UniArt API key is not configured for the current user"
+                        "LLM gateway API key is not configured for the current user"
                     ) from exc
                 api_key = (configured.get("api_key") or "").strip()
                 base_url = (configured.get("base_url") or "").strip().rstrip("/")
                 if not api_key:
                     raise RuntimeError(
-                        "UniArt API key is not configured for the current user"
+                        "LLM gateway API key is not configured for the current user"
                     )
                 return api_key, base_url or "https://uniart.fun/v1"
             return (
@@ -78,19 +93,35 @@ class LLMAdapter:
 
     @property
     def is_configured(self) -> bool:
+        return self.is_configured_for_model(self.default_model)
+
+    @staticmethod
+    def _model_gateway(model: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+        prefix, separator, raw_model = (model or "").partition("/")
+        if separator and prefix in {"nsfw", "greena", "uniart"}:
+            if not raw_model:
+                raise ValueError("LLM model ID is empty")
+            return ("greena" if prefix in {"nsfw", "greena"} else "uniart"), raw_model
+        return None, model
+
+    def is_configured_for_model(self, model: Optional[str]) -> bool:
         try:
-            return bool(self._runtime_credentials()[0])
-        except RuntimeError:
+            configured_model = model or self.default_model or (
+                self._get_default_model() if self.provider == "openai" else None
+            )
+            gateway, _ = self._model_gateway(configured_model)
+            return bool(self._runtime_credentials(gateway)[0])
+        except (RuntimeError, ValueError, HTTPException):
             return False
 
-    def _get_client(self):
+    def _get_client(self, *, gateway: Optional[str] = None):
         """Get or create the OpenAI-compatible client (lazy, cached)."""
-        api_key, configured_base_url = self._runtime_credentials()
-        if self.provider == "openai":
+        api_key, configured_base_url = self._runtime_credentials(gateway)
+        if gateway or self.provider == "openai":
             base_url = configured_base_url or "https://api.openai.com/v1"
         else:
             base_url = f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1"
-        config_key = (self.provider, api_key, base_url)
+        config_key = (gateway or self.provider, api_key, base_url)
         if self._client is None or self._client_config_key != config_key:
             try:
                 from openai import OpenAI
@@ -143,8 +174,12 @@ class LLMAdapter:
         Raises:
             RuntimeError: If the API call fails.
         """
-        model = model or self.default_model
-        client = self._get_client()
+        model = model or self.default_model or (
+            self._get_default_model() if self.provider == "openai" else None
+        )
+        gateway, model = self._model_gateway(model)
+        client = self._get_client(gateway=gateway)
+        logger.info("LLM route selected: gateway=%s model=%s", gateway or self.provider, model)
 
         # 显式 model override 路径：单次尝试，失败就抛。
         if model:

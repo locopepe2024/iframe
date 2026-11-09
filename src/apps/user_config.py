@@ -195,12 +195,29 @@ class UserConfigStore:
             return self._get_legacy_runtime_uniart(identity)
         if self._provider_row(identity, "nsfw") is not None:
             return self.get_runtime_provider(identity, "nsfw")
+        if config.get("catalog_name") == "uniart":
+            raise HTTPException(409, "GreenA provider profile API key is not configured")
         # Compatibility for installations predating independent profiles.
         # New explicit catalog/profile APIs never take this legacy path.
         runtime = self._get_legacy_runtime_uniart(identity)
         if runtime.get("catalog_name") == "greena":
             return runtime
         return {"api_key": runtime["api_key"]}
+
+    def get_runtime_gateway(self, identity: UserContext, provider: ProviderId) -> Dict[str, str]:
+        """Resolve a model's gateway without borrowing the active gateway's key.
+
+        The selected settings pair can serve its own provider. Models from the
+        other provider require that owner's independent profile.
+        """
+        provider = provider_storage_id(provider)
+        if provider == "nsfw":
+            return self.get_runtime_nsfw(identity)
+        row = self._row(identity.owner_profile_id)
+        config = json.loads(row["config_json"]) if row else {}
+        if config.get("catalog_name") == "greena":
+            return self.get_runtime_provider(identity, "uniart")
+        return self.get_runtime_uniart(identity)
 
     def _encryption_key(self, identity: UserContext | None = None) -> bytes:
         # Prefer a per-user key derived from stable owner identity.

@@ -171,5 +171,5 @@ def test_adapter_default_model_is_used_when_call_has_no_override(monkeypatch):
     monkeypatch.setattr(adapter, "_get_client", lambda **_: object())
     monkeypatch.setattr(adapter, "_chat_once", lambda _client, model, *_args, **_kwargs: captured.setdefault("model", model))
 
-    assert adapter.chat([{"role": "user", "content": "director analysis"}]) == "nsfw/llm-nf-all"
-    assert captured["model"] == "nsfw/llm-nf-all"
+    assert adapter.chat([{"role": "user", "content": "director analysis"}]) == "llm-nf-all"
+    assert captured["model"] == "llm-nf-all"
