@@ -232,6 +232,13 @@ export interface DirectorShootingPlanConfirmResult {
 }
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Submission returns a durable task id; model generation continues separately
+// and polling has no overall generation deadline.
+const PLAN_SUBMIT_TIMEOUT_MS = 60_000;
+const PLAN_POLL_TIMEOUT_MS = 15_000;
+const isTimeout = (error: unknown) => axios.isAxiosError(error) &&
+    (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT" ||
+        String(error.message || "").toLowerCase().includes("timeout"));
 const transient = (error: unknown) => axios.isAxiosError(error) &&
     (!error.response || [408, 429, 502, 503, 504].includes(error.response.status));
 const pending = (job: DirectorShootingPlanJob | undefined) => Boolean(job && !job.result?.plan &&
@@ -244,20 +251,34 @@ async function runJob(
     skills: import("./directorSkills").CreativeSkillSelection[] = [],
 ): Promise<DirectorShootingPlan> {
     const base = `${baseUrl}/projects/${projectId}/director-shooting-plan-jobs`;
-    let job = (await axios.post<DirectorShootingPlanJob>(base, { skills }, { timeout: 15000 })).data;
+    let response;
+    try {
+        response = await axios.post<DirectorShootingPlanJob>(base, { skills }, { timeout: PLAN_SUBMIT_TIMEOUT_MS });
+    } catch (error) {
+        if (isTimeout(error)) {
+            throw new Error("导演拍摄计划任务提交连接超时；任务可能已经创建，请稍后重试以恢复任务状态。", { cause: error });
+        }
+        throw error;
+    }
+    let job = response.data;
     if (!job?.id) throw new Error("Invalid Director shooting-plan task response");
     onStatus?.(job);
     let failures = 0;
     while (pending(job)) {
         await pause(2000);
         try {
-            const next = (await axios.get<DirectorShootingPlanJob>(`${base}/${job.id}`, { timeout: 15000 })).data;
+            const next = (await axios.get<DirectorShootingPlanJob>(`${base}/${job.id}`, { timeout: PLAN_POLL_TIMEOUT_MS })).data;
             if (!next || next.id !== job.id) throw new Error("Invalid Director shooting-plan task response");
             job = next;
             onStatus?.(job);
             failures = 0;
         } catch (error) {
-            if (!transient(error) || ++failures >= 5) throw error;
+            if (!transient(error) || ++failures >= 5) {
+                if (isTimeout(error)) {
+                    throw new Error("导演拍摄计划状态查询连接超时；后台任务可能仍在运行，请稍后重试以恢复任务状态。", { cause: error });
+                }
+                throw error;
+            }
         }
     }
     if (job.result?.plan) {
