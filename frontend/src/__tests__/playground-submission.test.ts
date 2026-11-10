@@ -91,4 +91,11 @@ describe('selected candidates versus submitted references', () => {
       mode: 'i2i', inputMedia: [candidates[3], candidates[6]], prompt: '@reference-4.png 与 @2',
     });
   });
+
+  it('keeps ambiguous names for server rejection instead of silently selecting one', () => {
+    const duplicateNames = { [candidates[1]]: 'portrait.png', [candidates[3]]: 'portrait.png' };
+    expect(normalizePlaygroundSubmission('i2i', candidates, '@portrait.png', duplicateNames).inputMedia)
+      .toEqual([candidates[1], candidates[3]]);
+    expect(normalizePlaygroundSubmission('i2i', candidates, '@refer...', names).inputMedia).toEqual(candidates);
+  });
 });

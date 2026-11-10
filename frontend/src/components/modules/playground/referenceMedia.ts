@@ -56,7 +56,9 @@ export function selectMentionedReferences(prompt: string, paths: string[], names
         const candidate = candidates.find(({ label }) => prompt.startsWith(`@${label}`, index)
             && !/[A-Za-z0-9_.-]/.test(prompt[index + label.length + 1] || ''));
         if (candidate) {
-            mentioned.add(candidate.path);
+            // Keep ambiguous matches for the server to reject; pruning to the
+            // first match would silently turn a duplicate name into consent.
+            for (const match of candidates.filter(item => item.label === candidate.label)) mentioned.add(match.path);
             index += candidate.label.length;
             continue;
         }
