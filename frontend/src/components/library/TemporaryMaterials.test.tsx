@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import TemporaryMaterials from './TemporaryMaterials';
-const mocks = vi.hoisted(() => ({ inventory: vi.fn(), list: vi.fn(), save: vi.fn(), trash: vi.fn(), remove: vi.fn(), restore: vi.fn(), edit: vi.fn() }));
+const mocks = vi.hoisted(() => ({ inventory: vi.fn(), list: vi.fn(), save: vi.fn(), trash: vi.fn(), remove: vi.fn(), restore: vi.fn(), edit: vi.fn(), preview: vi.fn() }));
 vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
 vi.mock('@/lib/api', () => ({ API_URL: '' }));
 vi.mock('@/lib/materialLibrary', () => ({ materialLibrary: mocks }));
@@ -13,9 +13,10 @@ beforeEach(() => {
   mocks.inventory.mockResolvedValue({ items: [temporary], diagnostics: [], next_offset: null, total: 1, date_counts: {} });
   mocks.list.mockResolvedValue([]);
   mocks.trash.mockResolvedValue([]);
+  mocks.preview.mockResolvedValue(new Blob(['cover'], { type: 'image/webp' }));
   mocks.save.mockImplementation(async () => { mocks.list.mockResolvedValue([saved]); mocks.inventory.mockResolvedValue({ items: [], diagnostics: [], next_offset: null, total: 0, date_counts: {} }); return saved; });
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it('explains paused expiry, promotes a temporary material and edits a saved exact version', async () => {
   render(<TemporaryMaterials />);
   await screen.findByText('Original image');
@@ -119,4 +120,34 @@ it('filters saved audio and video by the same local date and preserves unknown d
   expect(screen.queryByText('Saved video')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'All dates' }));
   expect(screen.getByText('Saved audio')).toBeInTheDocument();
+});
+
+it('loads temporary and saved video covers through the authenticated preview client', async () => {
+  const video = { ...temporary, title: 'Temporary video', reference: '/playground/input-media/clip.mp4', media_type: 'video' };
+  const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:video-cover');
+  const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  vi.stubGlobal('IntersectionObserver', undefined);
+  mocks.inventory.mockResolvedValue({ items: [video], diagnostics: [], next_offset: null, total: 1, date_counts: {} });
+  mocks.list.mockResolvedValue([{ ...saved, title: 'Saved video', media_type: 'video' }]);
+  render(<TemporaryMaterials />);
+  await screen.findByRole('img', { name: 'Temporary video video cover' });
+  expect(mocks.preview).toHaveBeenCalledWith(video.reference, expect.any(AbortSignal));
+  const signal = mocks.preview.mock.calls[0][1] as AbortSignal;
+  fireEvent.click(screen.getByRole('button', { name: 'Saved materials' }));
+  await screen.findByRole('img', { name: 'Saved video video cover' });
+  expect(mocks.preview).toHaveBeenLastCalledWith(saved.content_url, expect.any(AbortSignal));
+  expect(signal.aborted).toBe(true);
+  expect(revokeObjectURL).toHaveBeenCalledWith('blob:video-cover');
+  createObjectURL.mockRestore();
+  revokeObjectURL.mockRestore();
+});
+
+it('keeps an unavailable video cover previewable without hiding the material', async () => {
+  vi.stubGlobal('IntersectionObserver', undefined);
+  mocks.preview.mockRejectedValue(new Error('Preview unavailable'));
+  mocks.inventory.mockResolvedValue({ items: [{ ...temporary, title: 'Video without cover', reference: '/playground/input-media/clip.mp4', media_type: 'video' }], diagnostics: [], next_offset: null, total: 1, date_counts: {} });
+  render(<TemporaryMaterials />);
+  expect(await screen.findByRole('button', { name: 'Preview Video without cover' })).toBeEnabled();
+  await waitFor(() => expect(mocks.preview).toHaveBeenCalled());
+  expect(screen.queryByRole('img', { name: /video cover/ })).not.toBeInTheDocument();
 });

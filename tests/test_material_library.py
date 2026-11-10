@@ -108,3 +108,58 @@ def test_api_promotes_and_versions_saved_edits_with_owner_isolation(tmp_path, mo
     app.dependency_overrides[require_user_context] = lambda: UserContext('b', 'b', '', '')
     assert client.get(saved['content_url']).status_code == 404
     assert client.get('/playground/material-library').json() == []
+
+
+def test_video_preview_resolves_temporary_and_saved_materials_for_owner(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.apps.playground import api
+    from src.apps.identity import UserContext, require_user_context
+    storage = make_storage(tmp_path)
+    other_storage = make_storage(tmp_path, 'b')
+    video = Path(storage.output_dir) / 'uploads' / 'clip.mp4'
+    video.parent.mkdir(parents=True)
+    video.write_bytes(b'video fixture')
+    reference = '/playground/input-media/clip.mp4'
+    saved = MaterialLibrary(storage).promote(reference, 'clip')
+    preview = Path(storage.media_root) / 'preview.webp'
+    preview.write_bytes(b'webp fixture')
+    generated = []
+
+    def make_preview(source, owner_root, max_edge):
+        generated.append((source, owner_root, max_edge))
+        return str(preview)
+
+    monkeypatch.setattr(api, '_storage_for', lambda identity: storage if identity.owner_profile_id == 'a' else other_storage)
+    monkeypatch.setattr('src.utils.media_thumbnails.create_media_thumbnail', make_preview)
+    app = FastAPI()
+    app.include_router(api.router, prefix='/playground')
+    app.dependency_overrides[require_user_context] = lambda: UserContext('a', 'a', '', '')
+    client = TestClient(app)
+
+    temporary_response = client.get('/playground/material-preview', params={'reference': reference})
+    saved_response = client.get('/playground/material-preview', params={'reference': saved['content_url']})
+    assert temporary_response.status_code == saved_response.status_code == 200
+    assert temporary_response.headers['content-type'] == 'image/webp'
+    assert temporary_response.headers['cache-control'] == 'private, no-store'
+    assert temporary_response.content == saved_response.content == b'webp fixture'
+    assert generated == [(str(video), storage.media_root, 320), (str(MaterialLibrary(storage).content(saved['id'])), storage.media_root, 320)]
+
+    image = Path(storage.output_dir) / 'uploads' / 'photo.png'
+    image.write_bytes(b'image fixture')
+    assert client.get('/playground/material-preview', params={'reference': '/playground/input-media/photo.png'}).status_code == 415
+    assert client.get('/playground/material-preview', params={'reference': '/playground/input-media/missing.mp4'}).status_code == 404
+    assert client.get('/playground/material-preview', params={'reference': 'https://example.test/video.mp4'}).status_code == 422
+    assert len(generated) == 2
+
+    def unavailable(*args):
+        raise ValueError('Private path and decoder details')
+
+    monkeypatch.setattr('src.utils.media_thumbnails.create_media_thumbnail', unavailable)
+    failed = client.get('/playground/material-preview', params={'reference': reference})
+    assert failed.status_code == 415
+    assert failed.json() == {'detail': 'Video preview unavailable'}
+
+    app.dependency_overrides[require_user_context] = lambda: UserContext('b', 'b', '', '')
+    assert client.get('/playground/material-preview', params={'reference': reference}).status_code == 404
+    assert client.get('/playground/material-preview', params={'reference': saved['content_url']}).status_code == 404

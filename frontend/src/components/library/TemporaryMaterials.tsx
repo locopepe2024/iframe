@@ -11,6 +11,49 @@ import PlaygroundImageEditor, { usePlaygroundImageEditor } from '../modules/play
 type Material = TemporaryMaterial | MaterialVersion;
 export default function TemporaryMaterials() { return <PlaygroundImageEditor standalone><MaterialBrowser /></PlaygroundImageEditor>; }
 
+function VideoCover({ reference, title }: { reference: string; title: string }) {
+  const container = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [cover, setCover] = useState<{ reference: string; url: string } | null>(null);
+
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '160px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    const controller = new AbortController();
+    let objectUrl: string | null = null;
+    void materialLibrary.preview(reference, controller.signal).then((blob) => {
+      if (controller.signal.aborted) return;
+      objectUrl = URL.createObjectURL(blob);
+      setCover({ reference, url: objectUrl });
+    }).catch(() => {});
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [reference, visible]);
+
+  const coverUrl = cover?.reference === reference ? cover.url : '';
+  return <div ref={container} className="flex h-full w-full items-center justify-center bg-black/40 text-text-muted">
+    {coverUrl ? <img className="h-full w-full object-contain" src={coverUrl} loading="lazy" alt={`${title} video cover`} /> : <Film size={32} aria-hidden="true" />}
+  </div>;
+}
+
 function MaterialBrowser() {
   const zh = useLocale().startsWith('zh');
   const t = (cn: string, en: string) => zh ? cn : en;
@@ -136,7 +179,7 @@ function MaterialBrowser() {
         const deleted = tab === 'trash' ? trash.find(row => row.material.id === item.id && row.scope === (permanent ? 'saved' : 'temporary')) : undefined;
         return <article key={item.id} className="overflow-hidden rounded-xl border border-glass-border bg-surface" aria-label={item.title}>
           <button type="button" className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-black/40 text-text-muted" disabled={!url || busy} aria-label={`${t('预览', 'Preview')} ${item.title}`} onClick={() => setPreview({ url, kind: item.media_type, title: item.title })}>
-            {url && item.media_type === 'image' ? <img className="h-full w-full object-contain" src={url} loading="lazy" alt={item.title} /> : item.media_type === 'video' ? <Film size={32} aria-hidden="true" /> : item.media_type === 'audio' ? <Music size={32} aria-hidden="true" /> : <FileImage size={32} aria-hidden="true" />}
+            {url && item.media_type === 'image' ? <img className="h-full w-full object-contain" src={url} loading="lazy" alt={item.title} /> : item.media_type === 'video' && reference ? <VideoCover reference={reference} title={item.title} /> : item.media_type === 'audio' ? <Music size={32} aria-hidden="true" /> : <FileImage size={32} aria-hidden="true" />}
           </button>
           <div className="space-y-2 p-3"><p className="truncate font-medium" title={item.title}>{item.title}</p><p className="text-xs text-text-muted">{materialDateKey(item.created_at) !== 'unknown' ? new Date(item.created_at! * 1000).toLocaleString() : t('时间待核对', 'Date pending review')}</p>
             {deleted ? <p className="text-xs text-text-secondary">{t('删除于', 'Deleted')} {new Date(deleted.deleted_at * 1000).toLocaleString()}</p> : <p className="text-xs text-text-secondary">{permanent ? `${t('长期保留', 'Kept')} · ${t('版本', 'Version')} ${item.id.slice(0, 8)}` : t('引用核对中，暂不自动删除', 'Under review; automatic deletion paused')}</p>}

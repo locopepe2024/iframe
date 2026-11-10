@@ -24,6 +24,12 @@ export const materialLibrary = {
     if (!Array.isArray(data)) throw new Error('Invalid saved material list');
     return data;
   },
+  preview: async (reference: string, signal?: AbortSignal): Promise<Blob> => {
+    const { data } = await axios.get(`${API_URL}/playground/material-preview`, {
+      params: { reference }, responseType: 'blob', signal,
+    });
+    return data;
+  },
   save: async (reference: string, title: string): Promise<MaterialVersion> =>
     (await axios.post(`${API_URL}/playground/material-library`, { reference, title })).data,
   trash: async (): Promise<MaterialTrashEntry[]> => {
