@@ -23,7 +23,8 @@ import { api } from "@/lib/api";
 import { debugLog } from "@/lib/debugLog";
 import BorderGlow from "@/components/shared/BorderGlow/BorderGlow";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
-import OptimizerSelector, { compatibleOptimizationSkills, defaultOptimizationSkills, type OptimizerProvider } from "./OptimizerSelector";
+import { useOptimizerProvider } from "./useOptimizerProvider";
+import OptimizerSelector, { compatibleOptimizationSkills, defaultOptimizationSkills } from "./OptimizerSelector";
 import VideoPolishReview from "./VideoPolishReview";
 import { VIDEO_I2V_MODELS, VIDEO_R2V_MODELS } from "@/lib/modelCatalog";
 
@@ -179,8 +180,8 @@ export default function PolishPanel({
     const [feedback, setFeedback] = useState("");
     /** 跟踪两栏的 "已复制" 闪烁状态。 */
     const [copiedCol, setCopiedCol] = useState<"cn" | "en" | "original" | null>(null);
-    const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
-    const [optimizationSkills, setOptimizationSkills] = useState<string[]>(() => defaultOptimizationSkills(videoModel, "qwen"));
+    const { provider: optimizerProvider, setProvider: setOptimizerProvider, ready: optimizerReady, selectorProps } = useOptimizerProvider();
+    const [optimizationSkills, setOptimizationSkills] = useState<string[]>(() => defaultOptimizationSkills(videoModel, "local_llm"));
     const selectedSkills = compatibleOptimizationSkills(videoModel, optimizerProvider, optimizationSkills);
     const targetModel = [...VIDEO_I2V_MODELS, ...VIDEO_R2V_MODELS]
         .find((model) => model.id === videoModel)?.name ?? videoModel;
@@ -359,7 +360,7 @@ export default function PolishPanel({
         }
     }, []);
 
-    const disabled = !prompt.trim() || isPolishing;
+    const disabled = !prompt.trim() || isPolishing || !optimizerReady;
     const isEchoWarning = error?.reason === "model_echo";
     const isHardError = !!error && !isEchoWarning;
 
@@ -370,6 +371,7 @@ export default function PolishPanel({
         <div className="mb-2">
             {targetModel && <p className="mb-1 text-xs text-text-secondary">当前镜头目标模型：<span className="text-foreground">{targetModel}</span></p>}
             <OptimizerSelector
+                {...selectorProps}
                 provider={optimizerProvider}
                 modelId={videoModel}
                 skills={selectedSkills}

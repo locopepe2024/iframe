@@ -1,4 +1,6 @@
 import axios from "axios";
+export type OptimizerProvider = "local_llm" | "llm" | "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm";
+
 import type { ImageEditMode } from "@/lib/imageEditing";
 import { extractScriptPreview, refineScriptPreview } from "./scriptExtraction";
 import {
@@ -1867,7 +1869,7 @@ export const api = {
         generateAudio?: boolean,
         targetDuration?: number,
         dialogue?: { speaker: string; line: string },
-        optimizerProvider: "local_llm" | "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm" = "local_llm",
+        optimizerProvider: OptimizerProvider = "local_llm",
         optimizationSkills: string[] = [],
         targetRatio: string = "16:9",
         frameId: string = "",
@@ -1918,7 +1920,7 @@ export const api = {
         generateAudio?: boolean,
         targetDuration?: number,
         dialogue?: { speaker: string; line: string },
-        optimizerProvider: "local_llm" | "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm" = "local_llm",
+        optimizerProvider: OptimizerProvider = "local_llm",
         optimizationSkills: string[] = [],
         targetRatio: string = "16:9",
         frameId: string = "",
@@ -2675,6 +2677,12 @@ export const api = {
         const res = await axios.get<EnvConfigPayload>(`${API_URL}/config/env`);
         return res.data;
     },
+
+    getPolishOptimizers: async (): Promise<{
+        catalog_name: string;
+        default_provider: OptimizerProvider;
+        providers: { id: OptimizerProvider; label: string }[];
+    }> => (await axios.get(`${API_URL}/video/polish_prompt/optimizers`)).data,
 
     getUserConfig: async (): Promise<UserConfigPayload> => {
         const res = await axios.get<UserConfigPayload>(`${API_URL}/user/config`);

@@ -1,6 +1,7 @@
 "use client";
 
-export type OptimizerProvider = "minimax_context_ir" | "gpt" | "qwen" | "deepseek" | "glm";
+import type { OptimizerProvider } from "@/lib/api";
+export type { OptimizerProvider } from "@/lib/api";
 
 export const OPTIMIZATION_SKILLS = [
     ["minimax-h3-director", "MiniMax H3 导演", "h3"],
@@ -27,6 +28,10 @@ export function compatibleOptimizationSkills(modelId: string, provider: Optimize
 
 interface OptimizerSelectorProps {
     provider: OptimizerProvider;
+    options: { id: OptimizerProvider; label: string }[];
+    loading: boolean;
+    error: string;
+    onRetry: () => void;
     modelId?: string;
     skills: string[];
     onProviderChange: (provider: OptimizerProvider) => void;
@@ -34,7 +39,7 @@ interface OptimizerSelectorProps {
 }
 
 /** Shared optimizer choice used by both the unified Shot Design and legacy VideoCreator surfaces. */
-export default function OptimizerSelector({ provider, modelId = "", skills, onProviderChange, onToggleSkill }: OptimizerSelectorProps) {
+export default function OptimizerSelector({ provider, options, loading, error, onRetry, modelId = "", skills, onProviderChange, onToggleSkill }: OptimizerSelectorProps) {
     const model = modelId.toLowerCase();
     const family = model.includes("h3") ? "h3" : model.includes("seedance") ? "seedance" : "";
     const availableSkills = provider === "minimax_context_ir" ? [] : OPTIMIZATION_SKILLS.filter(([, , target]) => !family || target === family || target === "both");
@@ -43,18 +48,18 @@ export default function OptimizerSelector({ provider, modelId = "", skills, onPr
             <label className="inline-flex items-center gap-1.5">
                 <span>优化器</span>
                 <select
-                    value={provider}
+                    disabled={loading || !!error}
+                    value={loading || error ? "" : provider}
                     onChange={(event) => onProviderChange(event.target.value as OptimizerProvider)}
                     className="rounded border border-glass-border bg-surface px-1.5 py-1 text-[11px] text-foreground"
                     aria-label="选择提示词优化器"
                 >
-                    {(!family || family === "h3") && <option value="minimax_context_ir">MiniMax 官方 IR</option>}
-                    <option value="gpt">GPT</option>
-                    <option value="qwen">Qwen</option>
-                    <option value="deepseek">DeepSeek</option>
-                    <option value="glm">GLM</option>
+                    {(loading || error) && <option value="">{loading ? "加载优化器…" : "优化器加载失败"}</option>}
+                    {options.filter((option) => option.id !== "minimax_context_ir" || !family || family === "h3")
+                        .map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
                 </select>
             </label>
+            {error && <span role="alert">{error} <button type="button" onClick={onRetry}>重试</button></span>}
             {availableSkills.length > 0 && <span>技能</span>}
             {availableSkills.map(([id, label]) => (
                 <label key={id} className="inline-flex items-center gap-1">

@@ -228,7 +228,7 @@ export default function ScriptEditorShell({
       try {
         const workspace = await scriptEditorApi.getWritingPlan(scriptDocumentId);
         setWritingWorkspace(workspace);
-        if ((!workspace.selected_episode_number && (nextMode === 'expand_outline' || workspace.plan)) || workspace.source_changed) {
+        if ((!workspace.selected_episode_number && (nextMode === 'expand_outline' || workspace.plan || workspace.interpretation_draft)) || workspace.source_changed) {
           setOutlineOpen(true);
           return;
         }

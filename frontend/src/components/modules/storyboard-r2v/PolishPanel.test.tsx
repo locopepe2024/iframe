@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("@/lib/api", () => ({
     api: {
-        polishVideoPrompt: vi.fn(),
+        getPolishOptimizers: vi.fn(), polishVideoPrompt: vi.fn(),
         polishR2VPrompt: vi.fn(),
     },
 }));
@@ -18,7 +18,13 @@ vi.mock("@/components/shared/WorkflowActionButton", () => ({
     default: ({ children, leftIcon: _leftIcon, ...props }: any) => <button {...props}>{children}</button>,
 }));
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.getPolishOptimizers).mockResolvedValue({ catalog_name: "uniart", default_provider: "qwen", providers: [
+        { id: "minimax_context_ir", label: "MiniMax 官方 IR" }, { id: "qwen", label: "Qwen" },
+        { id: "gpt", label: "GPT" }, { id: "deepseek", label: "DeepSeek" }, { id: "glm", label: "GLM" },
+    ] });
+});
 
 it("shows the provider diagnostic returned by the backend", async () => {
     vi.mocked(api.polishVideoPrompt).mockRejectedValue({
@@ -42,6 +48,7 @@ it("shows the provider diagnostic returned by the backend", async () => {
         />,
     );
 
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
 
     await waitFor(() => {
@@ -54,6 +61,7 @@ it("shows editable compiled input and waits for confirmation before optimization
         .mockResolvedValueOnce({ messages: { system: "残阳如血", user: "原始镜头；黄昏光影；远景" }, media: [], review_token: "token", format_note: "格式要求" } as any)
         .mockResolvedValueOnce({ prompt_cn: "中文结果", prompt_en: "English result" } as any);
     render(<PolishPanel prompt="原始镜头" optimizationDraft="原始镜头；黄昏光影；远景" tabMode="t2i_i2v" scriptId="project-1" onApply={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     expect(api.polishVideoPrompt).toHaveBeenCalledTimes(1);
@@ -86,6 +94,7 @@ it("refreshes R2V references for preview and submits the same reviewed images", 
     render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
         imageUrls={[]} resolveR2VImageUrls={resolveR2VImageUrls} onApply={vi.fn()} />);
 
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     expect(vi.mocked(api.polishR2VPrompt).mock.calls[0][5]).toEqual(["series/elder.jpg", "series/chief.jpg"]);
@@ -117,6 +126,7 @@ it("requires a scene lighting choice and submits the reviewed reference priority
         .mockResolvedValueOnce({ prompt_cn: "中文", prompt_en: "English" } as any);
     render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
         resolveR2VImageUrls={vi.fn().mockResolvedValue(["shop.jpg"])} onApply={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("场景参考光影 · 粮铺门前");
     expect(screen.getByText("确认输入并润色")).toBeDisabled();
@@ -135,6 +145,7 @@ it("requires a scene lighting choice and submits the reviewed reference priority
 it("blocks R2V polish when fresh reference resolution yields no images", async () => {
     render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
         resolveR2VImageUrls={vi.fn().mockResolvedValue([])} onApply={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("R2V 优化需要已选参考图，请先在参考素材中选择图片。");
     expect(api.polishR2VPrompt).not.toHaveBeenCalled();
@@ -153,6 +164,7 @@ it("accepts a refreshed URL for the same reviewed reference variant", async () =
     render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
         resolveR2VImageUrls={resolveR2VImageUrls} onApply={vi.fn()} />);
 
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     fireEvent.click(screen.getByText("确认输入并润色"));
@@ -180,6 +192,7 @@ it("refreshes R2V review after a reference variant changes and waits for confirm
     render(<PolishPanel prompt="粮铺冲突" tabMode="direct_r2v" scriptId="project"
         resolveR2VImageUrls={resolveR2VImageUrls} onApply={vi.fn()} />);
 
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     fireEvent.click(screen.getByText("确认输入并润色"));
@@ -211,6 +224,7 @@ it("shows a readable shot summary while preserving the full model input", async 
         .mockResolvedValueOnce({ prompt_cn: "中文结果", prompt_en: "English result" } as any);
     render(<PolishPanel prompt="商贩穿行青石长街" videoModel="uniart/minimax-h3-vip"
         tabMode="t2i_i2v" scriptId="project" onApply={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     expect(screen.getByLabelText("用户／镜头文字")).toHaveValue("商贩穿行青石长街");
@@ -235,6 +249,7 @@ it("flushes pending shot edits before compiling model input", async () => {
     });
     render(<PolishPanel prompt="镜头" tabMode="t2i_i2v" scriptId="project"
         onBeforePreview={async () => { sequence.push("flush"); }} onApply={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     expect(sequence).toEqual(["flush", "preview"]);
@@ -243,6 +258,7 @@ it("flushes pending shot edits before compiling model input", async () => {
 it("rejects confirmation after the shot lighting changes", async () => {
     vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "old light", user: "action" }, media: [], review_token: "token", format_note: "" } as any);
     const { rerender } = render(<PolishPanel prompt="action" tabMode="t2i_i2v" scriptId="project" shotOverrides={{ style: "", lighting: "old light" }} onApply={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     rerender(<PolishPanel prompt="action" tabMode="t2i_i2v" scriptId="project" shotOverrides={{ style: "", lighting: "current light" }} onApply={vi.fn()} />);
@@ -262,6 +278,7 @@ it("switches the default skill when the target video model changes", async () =>
     rerender(<PolishPanel {...props} videoModel="uniart/seedance-2.5-vip" />);
     await waitFor(() => expect(screen.getByLabelText("Seedance 提示词")).toBeChecked());
     expect(screen.queryByLabelText("MiniMax H3 导演")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledTimes(1));
     expect(screen.getByText("目标模型：", { exact: false })).toHaveTextContent("Seedance");
@@ -273,6 +290,7 @@ it("switches the default skill when the target video model changes", async () =>
 it("submits the H3 model and its matching skill for preview", async () => {
     vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "H3 contract", user: "shot" }, media: [], review_token: "token", format_note: "" } as any);
     render(<PolishPanel prompt="镜头" videoModel="uniart/minimax-h3-vip" tabMode="t2i_i2v" scriptId="project" onApply={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][6]).toBe("uniart/minimax-h3-vip");
@@ -284,6 +302,7 @@ it("closes a stale preview when the shot target model changes", async () => {
     vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "Seedance contract", user: "shot" }, media: [], review_token: "token", format_note: "" } as any);
     const props = { prompt: "镜头", tabMode: "t2i_i2v" as const, scriptId: "project", onApply: vi.fn() };
     const { rerender } = render(<PolishPanel {...props} videoModel="uniart/seedance-2.5-vip" />);
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await screen.findByText("提交前检查模型输入");
     rerender(<PolishPanel {...props} videoModel="uniart/minimax-h3-vip" />);
@@ -295,8 +314,10 @@ it("closes a stale preview when the shot target model changes", async () => {
 it("hides optional skills and submits none with the official IR optimizer", async () => {
     vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "", user: "shot" }, media: [], review_token: "token", format_note: "" } as any);
     render(<PolishPanel prompt="镜头" videoModel="uniart/minimax-h3-vip" tabMode="t2i_i2v" scriptId="project" onApply={vi.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText("选择提示词优化器")).toBeEnabled());
     fireEvent.change(screen.getByLabelText("选择提示词优化器"), { target: { value: "minimax_context_ir" } });
     expect(screen.queryByLabelText("MiniMax H3 导演")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledTimes(1));
     expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][10]).toBe("minimax_context_ir");
@@ -306,8 +327,38 @@ it("hides optional skills and submits none with the official IR optimizer", asyn
 it("leaves the H3-only IR optimizer when switching to Seedance", async () => {
     const props = { prompt: "镜头", tabMode: "t2i_i2v" as const, scriptId: "project", onApply: vi.fn() };
     const { rerender } = render(<PolishPanel {...props} videoModel="uniart/minimax-h3-vip" />);
+    await waitFor(() => expect(screen.getByLabelText("选择提示词优化器")).toBeEnabled());
     fireEvent.change(screen.getByLabelText("选择提示词优化器"), { target: { value: "minimax_context_ir" } });
     rerender(<PolishPanel {...props} videoModel="uniart/seedance-2.5-vip" />);
     await waitFor(() => expect(screen.getByLabelText("选择提示词优化器")).toHaveValue("qwen"));
     expect(screen.getByLabelText("Seedance 提示词")).toBeChecked();
+});
+
+it.each(["t2i_i2v", "direct_r2v"] as const)("offers only GreenA text optimizers and submits DeepSeek for %s", async (tabMode) => {
+    vi.mocked(api.getPolishOptimizers).mockResolvedValue({ catalog_name: "greena", default_provider: "local_llm", providers: [
+        { id: "local_llm", label: "跟随工作区剧本模型" }, { id: "llm", label: "LLM · llm-nf-all" },
+        { id: "deepseek", label: "DeepSeek · deepseek-v4.1-flash" },
+    ] });
+    const polish = tabMode === "direct_r2v" ? api.polishR2VPrompt : api.polishVideoPrompt;
+    vi.mocked(polish).mockResolvedValue({ messages: { system: "规则", user: "镜头" }, media: [], review_token: "token" } as any);
+    render(<PolishPanel scriptId="" prompt="镜头" tabMode={tabMode} videoModel="uniart/minimax-h3-vip" imageUrls={["ref.jpg"]} onApply={vi.fn()} />);
+    const select = screen.getByLabelText("选择提示词优化器");
+    await waitFor(() => expect(select).toHaveValue("local_llm"));
+    expect(screen.queryByRole("option", { name: "Qwen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "MiniMax 官方 IR" })).not.toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "deepseek" } });
+    fireEvent.click(screen.getByTitle("查看并确认模型输入"));
+    await screen.findByText("提交前检查模型输入");
+    expect(vi.mocked(polish).mock.calls[0][tabMode === "direct_r2v" ? 11 : 10]).toBe("deepseek");
+});
+
+it("blocks optimization while account choices load and permits retry after a load error", async () => {
+    vi.mocked(api.getPolishOptimizers).mockRejectedValueOnce(new Error("network"));
+    render(<PolishPanel scriptId="" prompt="镜头" tabMode="t2i_i2v" onApply={vi.fn()} />);
+    expect(screen.getByTitle("查看并确认模型输入")).toBeDisabled();
+    await screen.findByRole("alert");
+    expect(screen.getByTitle("查看并确认模型输入")).toBeDisabled();
+    expect(api.polishVideoPrompt).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
 });

@@ -302,7 +302,6 @@ export default function SeriesSidebar({
           )}
           <Clapperboard size={18} className={activeItem.kind === "assembly" ? "text-primary" : "group-hover:text-foreground"} />
           <span className="text-sm font-medium flex-1 text-left truncate">{t("assemblyNav")}</span>
-          <span className="text-[0.625rem] px-1.5 py-0.5 rounded-md font-mono bg-glass text-text-muted">60s</span>
         </button>
       </div>
 

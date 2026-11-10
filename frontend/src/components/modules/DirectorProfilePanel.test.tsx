@@ -216,6 +216,25 @@ it("restores a saved Director draft independently from the confirmed profile", a
     expect(screen.getByLabelText("geography")).toHaveValue("User-edited geography");
 });
 
+it("allows saving an unchanged draft repeatedly", async () => {
+    vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({
+        project_id: "film", draft_revision: 3, source_revision: 1,
+        draft: profile, updated_at: 10,
+    });
+    const save = vi.spyOn(api, "saveDirectorProfileDraft");
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
+    await screen.findByText("Director draft save r3 (not confirmed)");
+    const button = screen.getByRole("button", { name: "Save draft" });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    await waitFor(() => expect(save).toHaveBeenCalledWith("film", 1, 3, profile, "Named draft"));
+    await screen.findByText("Director draft save r4 (not confirmed)");
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    await waitFor(() => expect(save).toHaveBeenCalledWith("film", 1, 4, profile, "Named draft"));
+    await screen.findByText("Director draft save r5 (not confirmed)");
+});
+
 it("keeps a draft named r6 separate from confirmed Director v5", async () => {
     useProjectStore.setState(state => ({
         currentProject: {

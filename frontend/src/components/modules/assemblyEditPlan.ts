@@ -2,8 +2,6 @@ import type { AssemblyClip, AssemblyEditPlan, AssemblyLane, AssemblyMarker } fro
 import type { Project } from "@/store/projectStore";
 import { resolveAssemblyVideo } from "./assemblyReadiness";
 
-export const ASSEMBLY_DEFAULT_DURATION_MS = 60_000;
-
 export function hasAssemblyPlanChanges(
     draft: AssemblyEditPlan | null,
     saved: AssemblyEditPlan | null | undefined,
@@ -86,7 +84,7 @@ export function buildDraftAssemblyPlan(project: Project): AssemblyEditPlan {
     };
 }
 
-/** Build the same bounded proposal across ordered series episodes. */
+/** Build a proposal from all completed shots across ordered series episodes. */
 export function buildDraftSeriesAssemblyPlan(
     seriesId: string,
     episodes: Project[],

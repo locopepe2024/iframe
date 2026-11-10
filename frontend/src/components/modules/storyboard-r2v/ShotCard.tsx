@@ -31,10 +31,9 @@ import PolishPanel from "./PolishPanel";
 import MicroExpressionPanel from "./MicroExpressionPanel";
 import CameraMovementPanel from "./CameraMovementPanel";
 import ShotFieldPanel from "./ShotFieldPanel";
-import type { ExtraRosterEntry, ExtraShotInstance } from "@/store/projectStore";
+import type { ExtraShotInstance } from "@/store/projectStore";
 import FieldTagChip, { AddFieldButton, type FieldType } from "./FieldTagChip";
 import { buildGenerationPrompt, directorShotSuggestions } from "./buildAssembledPrompt";
-import { CHARACTER_MOVE_DICTIONARY, findCharacterMove } from "@/lib/characterMoveDictionary";
 import { directorFieldProposals } from "./directorFieldProposals";
 import { resolveShotVideoInput } from "./shotVideoInput";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
@@ -198,7 +197,6 @@ export interface ShotNode {
 
 /** Cap on T2I image history per shot. Older drops off FIFO when adding. */
 export const T2I_HISTORY_LIMIT = 10;
-type PerformanceMoveValue = { characterId: string; moveRef: string; moveVariant?: string | null }[];
 
 interface ShotCardProps {
     projectId?: string;
@@ -214,11 +212,9 @@ interface ShotCardProps {
     characters: any[];
     scenes: any[];
     props: any[];
-    extraRoster?: ExtraRosterEntry[];
-    onUpdateCrowdInstances?: (instances: ExtraShotInstance[]) => void;
     assetIndex?: AssetReferenceIndexEntry[];
     onUpdatePrompt: (prompt: string, optimized?: boolean) => void;
-    onUpdateField: (field: string, value: string | number | null | PerformanceMoveValue) => void;
+    onUpdateField: (field: string, value: string | number | null) => void;
     globalStylePrompt?: string;
     effectiveVisual?: { style: string; lighting: string; scene: string; assets: string };
     effectiveFields?: Record<string, { value: unknown; source_kind: string; source_revision: number | null }>;
@@ -284,8 +280,6 @@ export default function ShotCard({
     characters,
     scenes,
     props,
-    extraRoster = [],
-    onUpdateCrowdInstances,
     assetIndex,
     onUpdatePrompt,
     onUpdateField,
@@ -1120,120 +1114,6 @@ export default function ShotCard({
                             onBeforePreview={onMicroExpressionBeforePreview}
                             onApplied={onMicroExpressionApplied}
                         />}
-
-                        {onUpdateCrowdInstances && <details className="border-t border-glass-border pt-3 text-xs text-text-secondary">
-                            <summary className="cursor-pointer text-foreground">群演与背景人群</summary>
-                            <div className="mt-3 space-y-2">
-                                {(shot.crowdInstances ?? []).map((instance, index) => {
-                                    const id = instance.extra_id || instance.template_id || "";
-                                    const entry = extraRoster.find(item => item.extra_id === id);
-                                    const availableVariants = Array.from(new Set([
-                                        ...(entry?.reference_variant_ids ?? []),
-                                        ...(entry?.reference_variant_id ? [entry.reference_variant_id] : []),
-                                    ]));
-                                    const selectedVariants = instance.variant_ids ?? [];
-                                    const missingVariants = selectedVariants.filter(variantId => !availableVariants.includes(variantId));
-                                    return <div key={index} className="grid grid-cols-2 gap-2 border-b border-glass-border pb-2">
-                                        <span className="col-span-2 text-foreground">{entry?.label || ("已失效：" + id)}</span>
-                                        <select aria-label="群演可见层" value={instance.layer} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, layer: event.target.value as ExtraShotInstance["layer"] } : item))} className="bg-input-bg border border-glass-border p-1">
-                                            <option value="near">近景</option><option value="mid">中景</option><option value="far">远景</option>
-                                        </select>
-                                        <input aria-label="群演位置" value={instance.region} placeholder="空间位置" onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, region: event.target.value } : item))} className="min-w-0 bg-input-bg border border-glass-border p-1" />
-                                        {availableVariants.length > 0 && <fieldset className="col-span-2 space-y-1"><legend className="text-text-muted">群演变体</legend><div className="flex flex-wrap gap-x-3 gap-y-1">{availableVariants.map(variantId => <label key={variantId} className="inline-flex items-center gap-1"><input type="checkbox" checked={selectedVariants.includes(variantId)} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => {
-                                            if (i !== index) return item;
-                                            const next = event.target.checked
-                                                ? Array.from(new Set([...selectedVariants, variantId]))
-                                                : selectedVariants.filter(value => value !== variantId);
-                                            return { ...item, variant_ids: next };
-                                        }))} />{variantId}</label>)}</div></fieldset>}
-                                        {missingVariants.length > 0 && <p className="col-span-2 text-danger">缺失变体：{missingVariants.join(", ")}。请重新选择已保存变体，系统不会自动替换。</p>}
-                                        {entry?.kind === "fixed_extra" && <label className="col-span-2 flex items-center gap-2"><input type="checkbox" checked={instance.face_readable} onChange={event => onUpdateCrowdInstances((shot.crowdInstances ?? []).map((item, i) => i === index ? { ...item, face_readable: event.target.checked } : item))} />面孔需要可辨认</label>}
-                                        <button type="button" className="col-span-2 justify-self-start text-danger" onClick={() => onUpdateCrowdInstances((shot.crowdInstances ?? []).filter((_, i) => i !== index))}>移除</button>
-                                    </div>;
-                                })}
-                                <select aria-label="添加群演" value="" onChange={event => {
-                                    const entry = extraRoster.find(item => item.extra_id === event.target.value);
-                                    if (!entry) return;
-                                    onUpdateCrowdInstances([...(shot.crowdInstances ?? []), {
-                                        ...(entry.kind === "fixed_extra" ? { extra_id: entry.extra_id } : { template_id: entry.extra_id }),
-                                        layer: entry.kind === "fixed_extra" ? "near" : "far",
-                                        region: "", face_readable: false, text_readable: false, variant_ids: [],
-                                    }]);
-                                }} className="w-full bg-input-bg border border-glass-border p-1">
-                                    <option value="">添加已确认群演或模板</option>
-                                    {extraRoster.map(entry => <option key={entry.extra_id} value={entry.extra_id}>{entry.label}</option>)}
-                                </select>
-                            </div>
-                        </details>}
-
-                        <details className="border-t border-glass-border pt-3 text-xs text-text-secondary">
-                            <summary className="cursor-pointer text-foreground">角色动作引用</summary>
-                            <div className="mt-3 space-y-2">
-                                {(shot.performanceMoves ?? []).map((performanceMove, moveIndex) => {
-                                    const selectedMove = findCharacterMove(performanceMove.moveRef);
-                                    return <div key={`${performanceMove.characterId}-${moveIndex}`} className="space-y-1 rounded-md border border-glass-border p-2">
-                                        <label className="block">
-                                            <span className="mb-1 block text-text-muted">表演角色</span>
-                                            <select aria-label={`表演角色 ${moveIndex + 1}`} value={performanceMove.characterId}
-                                                onChange={(event) => onUpdateField("performance_moves", (shot.performanceMoves ?? []).map((item, index) => index === moveIndex ? { ...item, characterId: event.target.value } : item))}
-                                                className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground">
-                                                <option value="">选择角色</option>
-                                                {characters.map((character: any) => <option key={character.id} value={character.id}>{character.name ?? character.id}</option>)}
-                                            </select>
-                                        </label>
-                                        <label className="block">
-                                            <span className="mb-1 block text-text-muted">动作词典</span>
-                                            <select aria-label={`角色动作 ${moveIndex + 1}`} value={performanceMove.moveRef}
-                                                onChange={(event) => onUpdateField("performance_moves", (shot.performanceMoves ?? []).map((item, index) => index === moveIndex ? { ...item, moveRef: event.target.value, moveVariant: "" } : item))}
-                                                className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground">
-                                                <option value="">不引用动作</option>
-                                                {CHARACTER_MOVE_DICTIONARY.map((move) => <option key={move.move_ref} value={move.move_ref}>{move.character_name} · {move.label}</option>)}
-                                            </select>
-                                        </label>
-                                        {selectedMove && <select aria-label={`动作变体 ${moveIndex + 1}`} value={performanceMove.moveVariant ?? ""}
-                                            onChange={(event) => onUpdateField("performance_moves", (shot.performanceMoves ?? []).map((item, index) => index === moveIndex ? { ...item, moveVariant: event.target.value } : item))}
-                                            className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground">
-                                            <option value="">默认动作表现</option>
-                                            {selectedMove.variants.map((variant) => <option key={variant} value={variant}>{variant}</option>)}
-                                        </select>}
-                                        <button type="button" className="text-[0.6875rem] text-danger" onClick={() => onUpdateField("performance_moves", (shot.performanceMoves ?? []).filter((_, index) => index !== moveIndex))}>移除角色动作</button>
-                                    </div>;
-                                })}
-                                <button type="button" className="min-h-8 rounded border border-glass-border px-2 text-[0.6875rem] text-text-secondary" onClick={() => onUpdateField("performance_moves", [...(shot.performanceMoves ?? []), { characterId: characters[0]?.id ?? "", moveRef: CHARACTER_MOVE_DICTIONARY[0]?.move_ref ?? "", moveVariant: null }])}>添加角色动作</button>
-                                <p className="leading-relaxed text-text-muted">每个角色独立引用动作；不会把一个角色的招式套用到其他角色。</p>
-                                {/* Legacy single-move controls remain available for older saved shots. */}
-                                <label className="block">
-                                    <span className="mb-1 block text-text-muted">旧版单角色动作</span>
-                                    <select
-                                        aria-label="主角招式词典"
-                                        value={shot.moveRef ?? ""}
-                                        onChange={(event) => {
-                                            onUpdateField("move_ref", event.target.value);
-                                            if (!event.target.value) onUpdateField("move_variant", "");
-                                        }}
-                                        className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground"
-                                    >
-                                        <option value="">不引用招式</option>
-                                        {CHARACTER_MOVE_DICTIONARY.map((move) => <option key={move.move_ref} value={move.move_ref}>{move.character_name} · {move.label}</option>)}
-                                    </select>
-                                </label>
-                                {findCharacterMove(shot.moveRef) && <>
-                                    <label className="block">
-                                        <span className="mb-1 block text-text-muted">本镜变体</span>
-                                        <select
-                                            aria-label="招式变体"
-                                            value={shot.moveVariant ?? ""}
-                                            onChange={(event) => onUpdateField("move_variant", event.target.value)}
-                                            className="min-h-9 w-full rounded-md border border-glass-border bg-surface px-2 text-xs text-foreground"
-                                        >
-                                            <option value="">默认招式表现</option>
-                                            {findCharacterMove(shot.moveRef)!.variants.map((variant) => <option key={variant} value={variant}>{variant}</option>)}
-                                        </select>
-                                    </label>
-                                    <p className="leading-relaxed text-text-muted">招式会进入当前镜头组装提示词；它不会自动新增受伤、击飞或其他剧情。</p>
-                                </>}
-                            </div>
-                        </details>
 
                         {/* Dialogue text display (read-only — editing via 配音工作台 modal) */}
                         {shot.dialogueStructured?.line && (
