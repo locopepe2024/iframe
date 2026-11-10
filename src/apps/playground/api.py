@@ -659,3 +659,20 @@ def promote_material(body: PromoteMaterialRequest, identity: UserContext = Depen
 def saved_material_content(version_id: str, identity: UserContext = Depends(require_user_context)):
     from .material_library import MaterialLibrary
     return FileResponse(MaterialLibrary(_storage_for(identity)).content(version_id))
+
+
+@router.get('/material-preview')
+def material_preview(reference: str = Query(max_length=2000), identity: UserContext = Depends(require_user_context)):
+    """Return a cached still for an owner-scoped temporary or saved video."""
+    from .material_library import MaterialLibrary
+    from ...utils.media_thumbnails import create_media_thumbnail
+
+    storage = _storage_for(identity)
+    source = MaterialLibrary(storage).resolve(reference)
+    if source.suffix.lower() not in {'.mp4', '.mov', '.webm', '.mkv'}:
+        raise HTTPException(status_code=415, detail='Video preview is only available for video materials')
+    try:
+        preview = create_media_thumbnail(str(source), storage.media_root, 320)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=415, detail='Video preview unavailable') from exc
+    return FileResponse(preview, media_type='image/webp', headers={'Cache-Control': 'private, no-store'})
