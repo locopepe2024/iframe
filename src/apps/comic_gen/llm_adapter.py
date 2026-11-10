@@ -40,8 +40,7 @@ class LLMAdapter:
         self.provider = os.getenv("LLM_PROVIDER", "dashscope").lower()
         self.default_model = default_model
         self.use_script_model = use_script_model
-        self._client = None
-        self._client_config_key = None
+        self._client_cache = None
         logger.info(f"LLM Adapter initialized with provider: {self.provider}")
 
     def _runtime_credentials(self, gateway: Optional[str] = None) -> tuple[str | None, str | None]:
@@ -123,17 +122,20 @@ class LLMAdapter:
         else:
             base_url = f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1"
         config_key = (gateway or self.provider, api_key, base_url)
-        if self._client is None or self._client_config_key != config_key:
-            try:
-                from openai import OpenAI
-            except ImportError:
-                raise RuntimeError(
-                    "openai package not installed. Run: pip install openai>=1.0.0"
-                )
-
-            self._client = OpenAI(api_key=api_key, base_url=base_url)
-            self._client_config_key = config_key
-        return self._client
+        # Hold the matched key/client pair locally. Another worker may replace
+        # the shared cache after comparison; it must not replace our result.
+        cached = self._client_cache
+        if cached is not None and cached[0] == config_key:
+            return cached[1]
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise RuntimeError(
+                "openai package not installed. Run: pip install openai>=1.0.0"
+            )
+        client = OpenAI(api_key=api_key, base_url=base_url)
+        self._client_cache = (config_key, client)
+        return client
 
     # DashScope qwen 系列：首选 qwen3.7-plus（最新），不可用时回退到 qwen3.6-plus，
     # 最终回退到 qwen-plus alias（始终指向最新稳定通用版）。

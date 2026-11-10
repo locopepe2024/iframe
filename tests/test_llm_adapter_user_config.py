@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 import sys
 import pytest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 
 from src.apps.comic_gen.llm_adapter import LLMAdapter
 from src.apps.identity import UserContext
@@ -65,6 +67,103 @@ def test_openai_adapter_keeps_environment_fallback_without_studio_user(monkeypat
     adapter = LLMAdapter()
     assert adapter._get_client() is adapter._get_client()
     assert captured == {"api_key": "desktop-key", "base_url": "https://desktop.example/v1"}
+
+
+def test_concurrent_owner_cache_hit_cannot_return_other_owners_client(monkeypatch):
+    """Pause A's cache comparison while B replaces the shared cache."""
+    entered, release = Event(), Event()
+    armed = Event()
+
+    class Key(str):
+        __hash__ = str.__hash__
+
+        def strip(self, chars=None):
+            return Key(str(self).strip(chars))
+
+        def __eq__(self, other):
+            equal = str(self) == str(other)
+            if armed.is_set() and equal and str(self) == 'key-a' and not entered.is_set():
+                entered.set()
+                assert release.wait(3)
+            return equal
+
+    class Client:
+        def __init__(self, api_key, base_url):
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=lambda **kwargs: SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=str(api_key)))]
+            )))
+
+    monkeypatch.setitem(sys.modules, 'openai', SimpleNamespace(OpenAI=Client))
+    monkeypatch.setenv('LLM_PROVIDER', 'openai')
+    monkeypatch.setattr('src.apps.studio_access.runtime_uniart_for_owner',
+        lambda user_id, profile_id: {'api_key': Key('key-'+profile_id), 'base_url': 'https://example.test/v1'})
+    adapter = LLMAdapter()
+
+    def request(owner):
+        token = set_studio_user(UserContext(owner, owner, '', ''))
+        try:
+            return adapter.chat([{'role': 'user', 'content': owner}], model='test-model')
+        finally:
+            reset_studio_user(token)
+
+    assert request('a') == 'key-a'
+    armed.set()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        pending_a = executor.submit(request, 'a')
+        try:
+            assert entered.wait(2)
+            assert executor.submit(request, 'b').result(timeout=2) == 'key-b'
+        finally:
+            release.set()
+        assert pending_a.result(timeout=2) == 'key-a'
+
+
+def test_parallel_owner_calls_send_their_own_authorization(monkeypatch):
+    import json
+    import httpx
+    import openai
+    from threading import Barrier
+
+    real_client = openai.OpenAI
+    meeting = Barrier(2)
+
+    def receive(request):
+        owner = json.loads(request.content)['messages'][0]['content']
+        assert request.headers['authorization'] == 'Bearer key-'+owner
+        meeting.wait(timeout=3)
+        return httpx.Response(200, json={'id': 'test', 'object': 'chat.completion', 'created': 0,
+            'model': 'test-model', 'choices': [{'index': 0, 'finish_reason': 'stop',
+                'message': {'role': 'assistant', 'content': owner}}]})
+
+    clients = []
+
+    def make_client(**kwargs):
+        client = real_client(**kwargs, http_client=httpx.Client(transport=httpx.MockTransport(receive)))
+        clients.append(client)
+        return client
+
+    monkeypatch.setattr(openai, 'OpenAI', make_client)
+    monkeypatch.setenv('LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('OPENAI_API_KEY', 'shared-key-must-not-be-used')
+    monkeypatch.setattr('src.apps.studio_access.runtime_uniart_for_owner',
+        lambda user_id, profile_id: {'api_key': 'key-'+profile_id, 'base_url': 'https://example.test/v1'})
+    adapter = LLMAdapter()
+
+    def request(owner):
+        token = set_studio_user(UserContext(owner, owner, '', ''))
+        try:
+            return adapter.chat([{'role': 'user', 'content': owner}], model='test-model')
+        finally:
+            reset_studio_user(token)
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            a, b = (executor.submit(request, owner) for owner in ('a', 'b'))
+            assert a.result(timeout=5) == 'a'
+            assert b.result(timeout=5) == 'b'
+    finally:
+        for client in clients:
+            client.close()
 
 
 def test_chat_forwards_per_request_timeout_and_retry_options(monkeypatch):
