@@ -445,6 +445,7 @@ async def add_cache_control_header(request: Request, call_next):
         "/files/assets/",
         "/files/audio/",
         "/files/cache/",
+        "/files/script_documents/",
         "/files/export/",
         "/files/outputs/",
         "/files/playground/",
@@ -9566,7 +9567,8 @@ def start_outline_analysis(document_id: str, request: ScriptWritingModelSettings
     model = _script_model_for_request(user, request.model if request else None)
     return extraction_jobs.start(user.owner_profile_id, "script-outline:document:" + document_id,
         workspace["source_hash"] + ":" + str(model or llm.default_model) + ":" + uuid.uuid4().hex,
-        lambda: analyze_outline(llm, workspace["source_text"], model=model))
+        lambda: analyze_outline(llm, workspace["source_text"], model=model,
+            cache_dir=_authoring_store(user).directory(document_id) / "outline-analysis-cache"))
 
 
 @app.get("/script-documents/{document_id}/outline-analysis/jobs/{job_id}")

@@ -348,3 +348,26 @@ def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_k
     assert calls == [{'gateway': provider}] * 4
     assert source.prompt_config.polish_model == ''
     assert processor.llm.default_model is None
+
+
+def test_outline_endpoint_checkpoints_stay_in_the_authenticated_document(client, monkeypatch):
+    from src.apps.comic_gen import api
+    seen = []
+    def analyze(_llm, text, **kwargs):
+        seen.append((text, kwargs))
+        return {'draft': plan(2), 'source_hash': 'hash'}
+    monkeypatch.setattr(api, 'analyze_outline', analyze)
+    root = client.post('/script-documents', json={'title': '总纲', 'content': content('共2集。')}).json()['id']
+    assert client.post(f'/script-documents/{root}/outline-analysis').status_code == 202
+    assert seen[0][1]['cache_dir'] == api._script_document_dir('writer-profile', root) / 'outline-analysis-cache'
+    assert client.post(f'/script-documents/{root}/outline-analysis', headers={'Authorization': 'Bearer other'}).status_code == 404
+    assert len(seen) == 1
+
+
+def test_outline_checkpoint_files_cannot_be_read_through_public_static_route(client, monkeypatch):
+    from starlette.responses import PlainTextResponse
+    from starlette.staticfiles import StaticFiles
+    async def private_file(*_args, **_kwargs):
+        return PlainTextResponse('private screenplay checkpoint')
+    monkeypatch.setattr(StaticFiles, 'get_response', private_file)
+    assert client.get('/files/script_documents/owner/document/outline-analysis-cache/hash/map-0001.json').status_code == 404

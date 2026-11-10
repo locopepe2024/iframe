@@ -54,3 +54,23 @@ it('preserves edits on a stale revision error and blocks invalid targets', async
   expect(await screen.findByRole('alert')).toHaveTextContent('规划已更新');
   expect(screen.getByLabelText('episodeTitle')).toHaveValue('保留我的修改');
 });
+
+it('keeps polling a running multi-stage outline beyond the old fifteen-minute deadline', async () => {
+  const { act } = await import('@testing-library/react');
+  vi.useFakeTimers();
+  try {
+    vi.mocked(scriptEditorApi.startOutlineAnalysis).mockResolvedValue({ id: 'long-analysis', status: 'running' });
+    let polls = 0;
+    vi.mocked(scriptEditorApi.getOutlineAnalysisJob).mockImplementation(async () => ++polls > 601
+      ? { id: 'long-analysis', status: 'completed', result: { draft: structuredClone(draft), source_hash: 'hash' } }
+      : { id: 'long-analysis', status: 'running' });
+    render(<ScriptOutlineDialog open workspace={workspace} onClose={vi.fn()} onWorkspace={vi.fn()} onNavigate={vi.fn()} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'analyze' }));
+      await vi.advanceTimersByTimeAsync(905000);
+    });
+    expect(polls).toBe(602);
+    expect(screen.getByLabelText('background')).toHaveValue('梦境');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  } finally { vi.useRealTimers(); }
+});

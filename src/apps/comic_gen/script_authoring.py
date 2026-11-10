@@ -259,7 +259,11 @@ def _outline_response(output: str) -> ScriptWritingPlanDraft:
     return draft
 
 
-def analyze_outline(llm: Any, text: str, *, model: str | None = None) -> dict:
+def analyze_outline(llm: Any, text: str, *, model: str | None = None,
+                    cache_dir: Path | None = None) -> dict:
+    from .outline_analysis import needs_chunked_analysis, analyze_chunked_outline
+    if needs_chunked_analysis(text):
+        return analyze_chunked_outline(llm, text, model=model, cache_dir=cache_dir)
     schema = ScriptWritingPlanDraft.model_json_schema()
     messages = [
         {"role": "system", "content": (

@@ -61,8 +61,9 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
     setError('');
     try {
       let job = await scriptEditorApi.startOutlineAnalysis(workspace.root_document_id);
-      for (let attempt = 0; job.status === 'running' || job.status === 'queued'; attempt += 1) {
-        if (attempt >= 600) throw new Error(t('timeout'));
+      // Multi-stage analysis finishes as a durable job; connection timeouts
+      // remain bounded per poll instead of imposing a total generation deadline.
+      while (job.status === 'running' || job.status === 'queued') {
         await pause(1500);
         if (run.current !== currentRun) return;
         job = await scriptEditorApi.getOutlineAnalysisJob(workspace.root_document_id, job.id);
