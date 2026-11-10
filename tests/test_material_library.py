@@ -84,6 +84,7 @@ def test_api_promotes_and_versions_saved_edits_with_owner_isolation(tmp_path, mo
     storage = make_storage(tmp_path)
     other = make_storage(tmp_path, 'b')
     monkeypatch.setattr(api, '_storage_for', lambda identity: storage if identity.owner_profile_id == 'a' else other)
+    monkeypatch.setattr(api, 'media_root', lambda: str(tmp_path))
     app = FastAPI()
     app.include_router(api.router, prefix='/playground')
     app.dependency_overrides[require_user_context] = lambda: UserContext('a', 'a', '', '')

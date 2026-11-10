@@ -1,6 +1,8 @@
 """Read-only owner media inventory. Never authorizes physical deletion."""
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from collections import Counter
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import json
 import math
 import hashlib
@@ -28,7 +30,9 @@ def timestamp(value):
         return None
 
 
-def inventory(storage, *, limit=50, offset=0, now=None):
+def inventory(storage, *, limit=50, offset=0, now=None, query='', media_type=None,
+              created_after=None, created_before=None, utc_offset_minutes=0,
+              timezone_name=None, temporary_only=False, hidden_ids=()):
     """Query existing stores without initializing them or resolving signed URLs.
 
     Historical timestamps are informational. All records stay under review until
@@ -86,14 +90,33 @@ def inventory(storage, *, limit=50, offset=0, now=None):
         if saved:
             item.update(retention_state='permanent', asset_id=saved['asset_id'], version_id=saved['id'],
                         protection_reasons=['saved_to_material_library'])
-    items.sort(key=lambda item: (item['created_at'] or 0, item['id']), reverse=True)
+    items = [item for item in items if item['id'] not in hidden_ids
+             and (not temporary_only or item['retention_state'] != 'permanent')
+             and query.casefold() in item['title'].casefold()
+             and (not media_type or item['media_type'] == media_type)]
+    try:
+        tz = ZoneInfo(timezone_name) if timezone_name else timezone(timedelta(minutes=utc_offset_minutes))
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        from fastapi import HTTPException
+        raise HTTPException(422, 'Invalid review timezone') from exc
+    dates = Counter()
+    for item in items:
+        try:
+            key = datetime.fromtimestamp(item['created_at'], tz).strftime('%Y-%m-%d') if item['created_at'] is not None else 'unknown'
+        except (ValueError, OverflowError, OSError):
+            key = 'unknown'
+        dates[key] += 1
+    items = [item for item in items if (created_after is None or item['created_at'] is not None and item['created_at'] >= created_after)
+             and (created_before is None or item['created_at'] is not None and item['created_at'] < created_before)]
+    items.sort(key=lambda item: (item['created_at'] if item['created_at'] is not None else float('-inf'), item['id']), reverse=True)
     return dict(items=items[offset:offset+limit], total=len(items),
         next_offset=offset+limit if offset+limit < len(items) else None,
+        date_counts=dict(dates),
         retention_days=7, cleanup_enabled=False, reference_scan_complete=False,
         diagnostics=diagnostics, coverage=['generation_history', 'image_edits', 'registered_temporary_inputs'])
 
 
-def owner_inventory(identity, output_root, *, limit=50, offset=0):
+def owner_inventory(identity, output_root, *, limit=50, offset=0, **filters):
     """Read persisted history without triggering Playground legacy migration."""
     from .models import PlaygroundGeneration
     owner_dir = Path(output_root) / 'users' / hashlib.sha256(identity.owner_profile_id.encode('utf-8')).hexdigest()[:24]
@@ -114,6 +137,8 @@ def owner_inventory(identity, output_root, *, limit=50, offset=0):
             diagnostics.append('history_unreadable')
     storage = SimpleNamespace(owner_profile_id=identity.owner_profile_id, media_root=str(output_root),
         output_dir=str(owner_dir / 'playground'), asset_dir=str(owner_dir / 'assets'), list_history=lambda **kwargs: generations)
-    result = inventory(storage, limit=limit, offset=offset)
+    from .material_trash import MaterialTrash
+    hidden = MaterialTrash(identity.owner_profile_id, output_root).hidden('temporary')
+    result = inventory(storage, limit=limit, offset=offset, hidden_ids=hidden, **filters)
     result['diagnostics'].extend(diagnostics)
     return result

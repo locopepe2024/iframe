@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Expand, Download, Video, Copy, Check, Replace, Crown, Bookmark, PencilLine, LibraryBig } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { playgroundApi } from '@/lib/api';
+import { useGeneratedMaterialSave } from './useGeneratedMaterialSave';
 import { getAssetUrl } from '@/lib/utils';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 
@@ -142,7 +142,6 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const editLabel = useTranslations('imageEditor');
   const lightbox = useLightbox();
   const isVideo = output?.media_type === 'video' || ['t2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(mode);
-  const [saving, setSaving] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [actionError, setActionError] = useState('');
@@ -152,7 +151,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
   const coverRequest = useRef(0);
   const aspectRatio = getOutputAspectRatio(generation.parameters);
 
-  const saved = output?.saved_to_library ?? false;
+  const { saved, saving, confirmed, error: saveError, save } = useGeneratedMaterialSave(generation, output);
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
   const coverUrl = freshCover || (output?.thumbnail_path ? getMediaUrl(output.thumbnail_path) : mediaUrl);
   useEffect(() => {
@@ -176,7 +175,6 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
       setImgError(false);
     }).catch(() => { if (request === coverRequest.current) setImgError(true); });
   }, [output?.media_path]);
-  const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
   const restoreGeneration = usePlaygroundStore((s) => s.restoreGeneration);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
   const toggleFeatured = usePlaygroundStore((s) => s.toggleFeatured);
@@ -195,26 +193,9 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
     }
   }, [generation.id, output, downloading]);
 
-  const handleSaveToLibrary = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!output || saving) return;
-    setSaving(true);
-    setActionError('');
-    try {
-      const newSaved = !saved;
-      if (newSaved) {
-        await playgroundApi.saveToLibrary(generation.id, output.id);
-      }
-      const updatedOutputs = generation.outputs.map((o) =>
-        o.id === output.id ? { ...o, saved_to_library: newSaved } : o
-      );
-      updateGeneration({ ...generation, outputs: updatedOutputs });
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : '保存到资产库失败，请重试');
-    } finally {
-      setSaving(false);
-    }
-  }, [generation, output, saved, saving, updateGeneration]);
+  const handleSaveToLibrary = (event: React.MouseEvent) => {
+    event.stopPropagation(); setActionError(''); void save();
+  };
 
   const handleUseAsReference = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -346,7 +327,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
           </button>
           <button
             onClick={handleSaveToLibrary}
-            disabled={saving}
+            disabled={saving || saved}
             aria-busy={saving}
             aria-label={saved ? t('card.saved') : t('card.saveToLibrary')}
             className={`w-7 h-7 rounded-full backdrop-blur-sm flex items-center justify-center transition ${saved ? 'bg-primary/15' : 'bg-elevated hover:bg-hover-bg'}`}
@@ -371,6 +352,8 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail,
       <div className="px-3 py-[10px]">
         {downloading && <p role="status" className="mb-1 text-xs text-text-muted">正在准备下载…</p>}
         {saving && <p role="status" className="mb-1 text-xs text-text-muted">正在保存到资产库…</p>}
+        {confirmed && <p role="status" className="mb-1 text-xs text-primary">{t('card.savedToLibraryNotice')}</p>}
+        {saveError && <p role="alert" className="mb-1 text-xs text-status-failed-fg">{saveError}</p>}
         {actionError && <p role="alert" className="mb-1 text-xs text-status-failed-fg">{actionError}</p>}
         <p className="text-[0.6875rem] text-text-secondary line-clamp-2 mb-1.5">{prompt}</p>
         <div className="flex items-center gap-1.5 flex-wrap">

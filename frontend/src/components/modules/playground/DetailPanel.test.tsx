@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { playgroundApi } from '@/lib/api';
 import { beforeEach, expect, it, vi } from 'vitest';
 import DetailPanel from './DetailPanel';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
@@ -29,7 +30,25 @@ const imageGeneration: PlaygroundGeneration = {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks();
   usePlaygroundStore.setState({ history: [] });
+});
+
+it('saves the focused video rather than using the first batch output saved state and reports retryable errors', async () => {
+  vi.mocked(playgroundApi.saveToLibrary).mockRejectedValueOnce({ response: { data: { detail: 'Video unavailable' } } }).mockResolvedValueOnce({ ok: true });
+  const generation: PlaygroundGeneration = { ...imageGeneration, id: 'video-batch', mode: 't2v', outputs: [
+    { id: 'first', media_path: '/first.mp4', media_type: 'video', saved_to_library: true },
+    { id: 'second', media_path: '/second.mp4', media_type: 'video', saved_to_library: false },
+  ] };
+  usePlaygroundStore.setState({ history: [generation] });
+  render(<DetailPanel generation={generation} focusOutputId="second" allGenerations={[generation]} onClose={vi.fn()} onNavigate={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'detail.saveToLibrary' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Video unavailable');
+  expect(screen.getByRole('button', { name: 'detail.saveToLibrary' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'detail.saveToLibrary' }));
+  await waitFor(() => expect(playgroundApi.saveToLibrary).toHaveBeenLastCalledWith('video-batch', 'second'));
+  expect(await screen.findByRole('status')).toHaveTextContent('card.savedToLibraryNotice');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 it('opens the asset recording flow for image and video outputs', () => {
