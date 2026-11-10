@@ -674,7 +674,7 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, h
                                 variant="secondary"
                                 leftIcon={<Save />}
                                 loading={busy === "save"}
-                                disabled={busy !== null || !needsDraftSave || hasStaleDraft}
+                                disabled={busy !== null || !draftText.trim() || hasStaleDraft}
                                 onClick={saveDraft}
                             >
                                 {t("directorSaveDraft")}

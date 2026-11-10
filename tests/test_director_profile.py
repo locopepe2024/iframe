@@ -1282,6 +1282,40 @@ def test_director_profile_cannot_confirm_unsaved_or_stale_drafts():
         )
 
 
+@pytest.mark.parametrize("edited", [False, True])
+def test_saved_director_draft_can_be_confirmed_after_character_extraction(edited):
+    pipeline, script = make_pipeline()
+    characters = script.characters
+    script.characters = []
+    story_map = valid_story_map()
+    story_map["source_revision_id"] = ""
+    story_map["phases"][0]["events"][0]["character_refs"] = ["沈夏"]
+    pipeline.save_director_profile_draft(
+        "film", script.source_revision, 0,
+        {**profile_payload(), "execution_summary": "Reviewed Director summary", "story_map": story_map},
+    )
+    # The browser holds the saved draft while entity extraction finishes.
+    draft = script.director_profile_draft.model_dump()
+    assert draft["story_map"]["people"] == []
+    script.characters = characters
+    if edited:
+        draft["pacing"] = "Unsaved user edit"
+        with pytest.raises(ValueError, match="unsaved edits"):
+            pipeline.apply_director_profile(
+                "film", draft, expected_current_revision=0, expected_draft_revision=1,
+            )
+        assert script.art_direction.director_profile is None
+        return
+
+    result = pipeline.apply_director_profile(
+        "film", draft, expected_current_revision=0, expected_draft_revision=1,
+    )
+    confirmed = result.art_direction.director_profile
+    assert confirmed.revision == 1
+    assert confirmed.story_map.people[0].person_id == "shen"
+    assert confirmed.story_map.phases[0].events[0].character_ids == ["shen"]
+
+
 def test_director_profile_draft_api_accepts_blank_story_map_source_identity(monkeypatch):
     from src.apps.comic_gen import api
     pipeline, script = make_pipeline()

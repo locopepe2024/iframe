@@ -6199,7 +6199,16 @@ class ComicGenPipeline(StudioOwnerMixin):
         clean = _director_profile_content(normalized)
         if expected_draft_revision is not None:
             saved_draft = script.director_profile_draft
-            saved_content = _director_profile_content(saved_draft) if saved_draft else None
+            saved_content = None
+            if saved_draft is not None:
+                # Entity extraction may finish after the draft was saved.
+                # Compare both drafts with the same current server-owned
+                # bindings so refreshed references are not treated as edits.
+                saved_normalized = _director_profile_content(saved_draft)
+                self._bind_director_story_map(
+                    script, self.director_source_assets(script), saved_normalized,
+                )
+                saved_content = _director_profile_content(saved_normalized)
             if saved_content != clean:
                 raise ValueError("Director draft has unsaved edits; save it before confirming")
         changed = current is None or _director_profile_content(current) != clean
