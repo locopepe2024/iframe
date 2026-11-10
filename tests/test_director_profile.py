@@ -2199,6 +2199,66 @@ def test_story_map_completion_reuses_bounded_source_context_without_remapping(mo
     assert json.loads(completion)['source_is_digest'] is True
 
 
+def test_director_mixed_relationship_objects_and_prose_preserve_unverified_summaries():
+    from copy import deepcopy
+    payload = profile_payload()
+    payload['story_map'] = valid_story_map()
+    structured = {'relationship_id': 'arc-existing', 'person_refs': ['沈夏', '周涵'],
+                  'states': [{'phase_id': 'phase-campus', 'state': '相识'}]}
+    summary = '沈夏与周涵的关系有所变化，具体阶段待核验。'
+    payload['story_map']['relationship_arcs'] = [structured, summary, summary]
+    original = deepcopy(payload)
+    normalized = normalize_director_profile_draft(payload)
+    profile = DirectorProfile(**normalized)
+    arcs = profile.story_map.relationship_arcs
+    assert len(arcs) == 3
+    assert arcs[0].relationship_id == 'arc-existing'
+    assert arcs[0].states[0].state == '相识'
+    for arc in arcs[1:]:
+        assert arc.legacy_summary == summary
+        assert arc.evidence_status == 'uncertain'
+        assert arc.person_ids == arc.person_refs == arc.states == []
+    assert len({arc.relationship_id for arc in arcs}) == 3
+    assert payload == original
+    assert normalize_director_profile_draft(normalized)['story_map'] == normalized['story_map']
+    assert [arc.relationship_id for arc in DirectorProfile(**original).story_map.relationship_arcs] == [
+        arc.relationship_id for arc in arcs]
+
+
+@pytest.mark.parametrize('invalid', ['', '   ', 7, None, ['关系'], '长' * 1201])
+def test_director_prose_arc_conversion_does_not_accept_empty_or_invalid_items(invalid):
+    payload = profile_payload()
+    payload['story_map'] = valid_story_map()
+    payload['story_map']['relationship_arcs'] = [invalid]
+    with pytest.raises((ValueError, TypeError)):
+        DirectorProfile(**normalize_director_profile_draft(payload))
+
+
+def test_missing_map_completion_with_prose_relationships_admits_without_extra_model_calls():
+    pipeline, script = make_pipeline()
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    completed_map = valid_story_map()
+    completed_map.pop('source_revision_id')
+    completed_map['relationship_arcs'] = [
+        {'relationship_id': 'arc-original', 'states': []},
+        *[f'待核验的人物关系描述 {i}' for i in range(14)],
+    ]
+    raw = json.dumps({'story_map': completed_map}, ensure_ascii=False)
+    processor.llm.chat.side_effect = [json.dumps(profile_payload()), raw]
+    pipeline.script_processor = processor
+    result = pipeline.preview_director_profile_with_audit(script.id)
+    assert processor.llm.chat.call_count == 2
+    arcs = result['profile']['story_map']['relationship_arcs']
+    assert len(arcs) == 15
+    assert arcs[1]['legacy_summary'] == completed_map['relationship_arcs'][1]
+    assert arcs[1]['evidence_status'] == 'uncertain'
+    assert arcs[1]['states'] == arcs[1]['person_ids'] == []
+    assert result['source_audit']['story_map_completion']['raw_response'] == raw
+    assert result['source_audit']['admission_status'] == 'confirmable'
+    pipeline._save_data.assert_not_called()
+
+
 @pytest.mark.parametrize('raw', ['', '{"setting":', '[]'])
 def test_non_object_director_responses_do_not_trigger_story_map_completion(raw):
     processor = ScriptProcessor.__new__(ScriptProcessor)

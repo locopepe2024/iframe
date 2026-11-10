@@ -89,6 +89,8 @@ def _director_profile_output_contract(*, partial: bool = False, story_map_only: 
         '必须输出实际 Director 数据对象，不能输出 Schema 本身。' + requirement +
         '必须保留 phases、relationship_arcs、story_threads，不能以 timeline/relationships/key_events 代替 story_map。'
         'relationship_arcs 每项必须含非空 relationship_id；story_threads 每项必须含非空 thread_id。'
+        'relationship_arcs 必须是对象数组，不能夹杂文字字符串。只有关系文字、没有阶段依据时，'
+        '将原文描述放入该关系对象的 legacy_summary，states=[]、evidence_status="uncertain"；不要猜测阶段和人物绑定。'
         'person_refs、character_refs 必须为字符串数组，不是逗号分隔的单个字符串。'
         'milestones 不能是字符串数组；role 位于每个 milestone 对象内，不在 thread 上。'
         '例如：{"thread_id":"thread-main","milestones":[{"event_id":"event-1","role":"setup","note":""}]}。'
