@@ -558,7 +558,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
     try:
         # Freeze the account's screenplay model before any background job is
         # queued. copy_context() keeps this choice for the entire operation.
-        if path.startswith(("/projects", "/series", "/script-documents", "/video/polish_")) or path == "/script-writing/generate":
+        if path.startswith(("/projects", "/series", "/script-documents", "/video/polish_")) or path in {"/script-writing/generate", "/script-writing/rewrite"}:
             try:
                 model = await asyncio.to_thread(_script_model_for_request, user, None)
             except HTTPException as exc:
@@ -9696,6 +9696,51 @@ def start_script_writing(
         "script-writing:" + resource_key,
         fingerprint,
         lambda: _run_script_writing(normalized, series_context, previous_context, model),
+    )
+
+
+class ScriptRewriteRequest(BaseModel):
+    project_id: Optional[str] = None
+    script_document_id: Optional[str] = None
+    title: str = Field("未命名剧本", max_length=160)
+    selected_text: str = Field(min_length=1, max_length=12000)
+    before_text: str = Field("", max_length=1600)
+    after_text: str = Field("", max_length=1600)
+    instruction: str = Field(min_length=1, max_length=4000)
+    model: ScriptWritingModel | None = None
+
+
+@app.post("/script-writing/rewrite", status_code=202)
+def start_script_rewrite(request: ScriptRewriteRequest, user: UserContext = Depends(require_studio_user)):
+    from .script_writing import generate_passage_rewrite
+
+    if bool(request.project_id) == bool(request.script_document_id):
+        raise HTTPException(422, "必须且只能指定一个剧本或制作项目")
+    if not request.selected_text.strip() or not request.instruction.strip():
+        raise HTTPException(422, "请选择正文并填写修改意见")
+    title = request.title.strip()
+    if request.project_id:
+        script = pipeline.get_script(request.project_id, user.owner_profile_id)
+        if not script:
+            raise HTTPException(404, "剧本项目不存在")
+        title = title if title and title != "未命名剧本" else script.title
+        resource_key = "project:" + request.project_id
+    else:
+        directory = _script_document_dir(user.owner_profile_id, request.script_document_id or "")
+        metadata = _script_document_metadata(directory)
+        title = title if title and title != "未命名剧本" else metadata.get("title", title)
+        resource_key = "document:" + (request.script_document_id or "")
+
+    # Preview passages need not exist in the saved document. Ownership is checked
+    # above; source/range staleness is checked by the editor before adoption.
+    model = _script_model_for_request(user, request.model)
+    return extraction_jobs.start(
+        user.owner_profile_id, "script-writing:" + resource_key, uuid.uuid4().hex,
+        lambda: generate_passage_rewrite(
+            pipeline.script_processor.llm, model=model, title=title,
+            selected_text=request.selected_text, before_text=request.before_text,
+            after_text=request.after_text, instruction=request.instruction.strip(),
+        ),
     )
 
 

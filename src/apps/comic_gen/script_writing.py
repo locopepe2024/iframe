@@ -64,3 +64,37 @@ def generate_episode_text(llm: Any, *, model: str | None = None, **kwargs: Any) 
     if not draft:
         raise RuntimeError("写作模型没有返回剧本正文，请重试")
     return {"draft": draft, "mode": kwargs["mode"], "title": kwargs["title"]}
+
+
+def generate_passage_rewrite(
+    llm: Any, *, title: str, selected_text: str, instruction: str,
+    before_text: str = "", after_text: str = "", model: str | None = None,
+) -> dict[str, str]:
+    """Rewrite a bounded selection, including unsaved writing-preview passages.
+
+    The caller owns the source/range and decides whether to adopt the proposal.
+    Never resolve a whole episode or outline here: it would replace that scope.
+    """
+    messages = [
+        {"role": "system", "content": (
+            "你是 GreenA 剧本局部修改助手。按用户意见修改选中片段，保持人物事实、视角、时态和剧本风格。"
+            "前后文仅用于衔接，不是改写范围。不得复述前后文，不续写整集，不改写未选中内容。"
+            "只输出选中片段的替换正文，不输出解释、标题标签、分析过程或 Markdown 代码围栏。"
+            "除非修改意见明确要求改变长度，保持与原片段相近的篇幅。"
+        )},
+        {"role": "user", "content": "\n\n".join([
+            "剧本标题：" + title,
+            "修改意见：\n" + instruction,
+            "前文（只读衔接参考）：\n<before>\n" + before_text + "\n</before>",
+            "选中片段（仅替换此处）：\n<selection>\n" + selected_text + "\n</selection>",
+            "后文（只读衔接参考）：\n<after>\n" + after_text + "\n</after>",
+            "只输出选中片段的替换正文。",
+        ])},
+    ]
+    options = {"model": model} if model else {}
+    draft = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True, **options).strip()
+    if draft.startswith("```"):
+        draft = draft.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    if not draft:
+        raise RuntimeError("写作模型没有返回修改正文，请重试")
+    return {"draft": draft, "mode": "rewrite", "title": title}
