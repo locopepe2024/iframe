@@ -3267,7 +3267,7 @@
       "locationCount": "Locations ({count})",
       "emptyNote": "(empty note)",
       "unknownAuthor": "Unknown",
-      "notesEmpty": "Use Cmd+/ to insert a note",
+      "notesEmpty": "Use Cmd/Ctrl+/ in the script to insert a note",
       "notesEmptyHint": "Notes are used to mark suggestions and reminders",
       "notesCount": "Notes ({count})",
       "filterAll": "All",

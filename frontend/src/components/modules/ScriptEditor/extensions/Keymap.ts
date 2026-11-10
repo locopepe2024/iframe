@@ -15,6 +15,7 @@ const ENTER_NEXT: Record<string, string> = {
   parenthetical: 'dialogue',
   action: 'action',
   sceneHeading: 'action',
+  note: 'action',
 }
 
 function getNodeNameAtCursor(editor: { state: { selection: { $from: { parent: { type: { name: string } } } } } }): string {

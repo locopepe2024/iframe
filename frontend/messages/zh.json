@@ -3267,7 +3267,7 @@
       "locationCount": "地点 ({count})",
       "emptyNote": "(空批注)",
       "unknownAuthor": "未知",
-      "notesEmpty": "使用 Cmd+/ 插入批注",
+      "notesEmpty": "在正文中使用 Cmd/Ctrl+/ 插入批注",
       "notesEmptyHint": "批注用于标记修改建议和备忘",
       "notesCount": "笔记 ({count})",
       "filterAll": "全部",
