@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.apps.comic_gen.models import ScriptWritingPlanDraft
-from src.apps.comic_gen.script_authoring import analyze_outline, document_text
+from src.apps.comic_gen.script_authoring import analyze_outline, document_text, source_hash
 
 
 def content(text):
@@ -355,7 +355,7 @@ def test_outline_endpoint_checkpoints_stay_in_the_authenticated_document(client,
     seen = []
     def analyze(_llm, text, **kwargs):
         seen.append((text, kwargs))
-        return {'draft': plan(2), 'source_hash': 'hash'}
+        return {'draft': plan(2), 'source_hash': source_hash(text)}
     monkeypatch.setattr(api, 'analyze_outline', analyze)
     root = client.post('/script-documents', json={'title': '总纲', 'content': content('共2集。')}).json()['id']
     assert client.post(f'/script-documents/{root}/outline-analysis').status_code == 202
@@ -371,3 +371,102 @@ def test_outline_checkpoint_files_cannot_be_read_through_public_static_route(cli
         return PlainTextResponse('private screenplay checkpoint')
     monkeypatch.setattr(StaticFiles, 'get_response', private_file)
     assert client.get('/files/script_documents/owner/document/outline-analysis-cache/hash/map-0001.json').status_code == 404
+
+
+def test_interpretation_generation_saves_a_recoverable_draft_without_confirming(client, monkeypatch):
+    from src.apps.comic_gen import api
+    root = client.post('/script-documents', json={'title': '总纲', 'content': content('共24集。')}).json()['id']
+    path = f'/script-documents/{root}'
+    monkeypatch.setattr(api.pipeline.script_processor.llm, 'chat', lambda **_: json.dumps(plan()))
+    result = client.post(path + '/outline-analysis')
+    assert result.status_code == 202
+    saved = client.get(path + '/writing-plan').json()
+    assert saved['plan'] is None
+    assert saved['interpretation_draft']['draft'] == plan()
+    assert saved['interpretation_draft']['revision'] == result.json()['result']['interpretation_draft']['revision']
+    assert len(client.get('/script-documents').json()) == 1
+    assert client.post('/script-writing/generate', json={'script_document_id': root, 'mode': 'expand_outline', 'source_text': '占位'}).status_code == 409
+    assert client.post('/script-writing/generate', json={'script_document_id': root, 'mode': 'continue', 'source_text': '占位'}).status_code == 409
+
+
+def test_interpretation_draft_save_confirm_and_conflicts(client):
+    root, ws, _ = create_plan(client)
+    path = f'/script-documents/{root}'
+    draft = plan()
+    draft['background'] = '尚未采用的新背景'
+    payload = {'draft': draft, 'source_hash': ws['source_hash'], 'base_revision': ws['plan']['revision'], 'base_draft_revision': None}
+    response = client.put(path + '/writing-plan/draft', json=payload)
+    assert response.status_code == 200, response.text
+    saved = response.json()
+    assert saved['plan']['background'] == '梦境牢笼'
+    revision = saved['interpretation_draft']['revision']
+    assert client.put(path + '/writing-plan/draft', json=payload).status_code == 409
+    assert client.put(path + '/writing-plan', json=payload).status_code == 409
+    payload['base_draft_revision'] = revision
+    overwritten = client.put(path + '/writing-plan/draft', json=payload)
+    assert overwritten.status_code == 200  # Explicit save works even with no text changes.
+    assert overwritten.json()['interpretation_draft']['revision'] != revision
+    assert client.put(path + '/writing-plan', json=payload).status_code == 409
+    payload['base_draft_revision'] = overwritten.json()['interpretation_draft']['revision']
+    confirmed = client.put(path + '/writing-plan', json=payload)
+    assert confirmed.status_code == 200
+    assert confirmed.json()['plan']['background'] == draft['background']
+    assert confirmed.json()['interpretation_draft'] is None
+    assert confirmed.json()['plan']['episodes'][0]['document_id'] == ws['plan']['episodes'][0]['document_id']
+
+
+def test_draft_owner_episode_and_stale_source_boundaries(client):
+    root, ws, _ = create_plan(client)
+    payload = {'draft': plan(), 'source_hash': ws['source_hash'], 'base_revision': ws['plan']['revision']}
+    path = f'/script-documents/{root}'
+    assert client.put(path + '/writing-plan/draft', json=payload, headers={'Authorization': 'Bearer other'}).status_code == 404
+    child = ws['plan']['episodes'][0]['document_id']
+    assert client.put(f'/script-documents/{child}/writing-plan/draft', json=payload).status_code == 422
+    client.put(path, json={'content': content('已修改总纲')})
+    assert client.put(path + '/writing-plan/draft', json=payload).status_code == 409
+
+
+def test_inflight_interpretation_cannot_replace_newer_draft(client, monkeypatch):
+    from src.apps.comic_gen import api
+    root, ws, _ = create_plan(client)
+    path = f'/script-documents/{root}'
+    pending = []
+    monkeypatch.setattr(api.extraction_jobs, 'start', lambda owner, resource, fingerprint, work:
+        pending.append(work) or {'id': 'queued', 'status': 'queued'})
+    monkeypatch.setattr(api, 'analyze_outline', lambda *args, **kw: {'draft': plan(), 'source_hash': ws['source_hash']})
+    assert client.post(path + '/outline-analysis').status_code == 202
+    revised = plan()
+    revised['background'] = '用户在等待时保存的修改'
+    assert client.put(path + '/writing-plan/draft', json={'draft': revised, 'source_hash': ws['source_hash'], 'base_revision': ws['plan']['revision']}).status_code == 200
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as failure:
+        pending[0]()
+    assert failure.value.status_code == 409
+    assert client.get(path + '/writing-plan').json()['interpretation_draft']['draft']['background'] == revised['background']
+
+
+def test_episode_writing_uses_confirmed_interpretation_without_resending_total_outline(client, monkeypatch):
+    from src.apps.comic_gen import api
+    text = '第1集素材，尚未确认的原文措辞。\n第2集专属原文不应发送。\n' + '其他集大量设定。' * 1000
+    root = client.post('/script-documents', json={'title': '总纲', 'content': content(text)}).json()['id']
+    ws = client.get(f'/script-documents/{root}/writing-plan').json()
+    draft = plan(2)
+    draft['episodes'][0]['source_excerpt'] = '已确认第一集对白：“别走。”'
+    confirmed = client.put(f'/script-documents/{root}/writing-plan', json={'draft': draft, 'source_hash': ws['source_hash']}).json()
+    child = confirmed['plan']['episodes'][0]['document_id']
+    calls = []
+    monkeypatch.setattr(api.pipeline.script_processor.llm, 'chat', lambda **kw: calls.append(kw) or '本集正文')
+    payload = {'script_document_id': child, 'mode': 'expand_outline', 'source_text': '客户端占位'}
+    assert client.post('/script-writing/generate', json=payload).status_code == 202
+    prompt = calls[-1]['messages'][1]['content']
+    assert '第2集专属原文' not in prompt and '其他集大量设定' not in prompt
+    assert '<original_outline>' not in prompt
+    assert prompt.count(draft['episodes'][0]['source_excerpt']) == 1
+    assert prompt.count('第1集事件') == 1
+    assert '梦境牢笼' in prompt and '不能出现主角面部' in prompt
+    client.put(f'/script-documents/{child}', json={'content': content('本集已写正文')})
+    assert client.post('/script-writing/generate', json={**payload, 'mode': 'continue'}).status_code == 202
+    prompt = calls[-1]['messages'][1]['content']
+    assert '本集已写正文' in prompt
+    assert prompt.count(draft['episodes'][0]['source_excerpt']) == 1
+    assert '第2集专属原文' not in prompt

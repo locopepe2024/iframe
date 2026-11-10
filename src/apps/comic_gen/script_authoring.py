@@ -126,6 +126,10 @@ class ScriptAuthoringStore:
         text = document_text(_read(root / "document.json"))
         plan_path = root / "writing-plan.json"
         plan = _read(plan_path) if plan_path.exists() else None
+        draft_path = root / "writing-interpretation-draft.json"
+        saved_draft = _read(draft_path) if draft_path.exists() else None
+        if saved_draft and plan and saved_draft["revision"] == plan.get("confirmed_draft_revision"):
+            saved_draft = None
         if plan:
             plan["revision"] = source_hash(plan_path.read_text(encoding="utf-8"))
             for episode in plan["episodes"]:
@@ -139,19 +143,45 @@ class ScriptAuthoringStore:
             "source_hash": source_hash(text),
             "source_changed": bool(plan and plan["source_hash"] != source_hash(text)),
             "plan": plan,
+            "interpretation_draft": saved_draft,
         }
 
-    def confirm(self, root_id: str, draft: ScriptWritingPlanDraft,
-                expected_revision: str | None, expected_source_hash: str) -> dict:
+    @staticmethod
+    def _check_revisions(workspace: dict, expected_revision: str | None,
+                         expected_draft_revision: str | None, expected_source_hash: str) -> None:
+        current = workspace["plan"]
+        if (current["revision"] if current else None) != expected_revision:
+            raise HTTPException(409, "编剧解读确认版已更新，请重新加载后保存")
+        saved_draft = workspace["interpretation_draft"]
+        if (saved_draft["revision"] if saved_draft else None) != expected_draft_revision:
+            raise HTTPException(409, "编剧解读草稿已更新，请重新加载后保存")
+        if workspace["source_hash"] != expected_source_hash:
+            raise HTTPException(409, "总纲已修改，请重新生成当前总纲的编剧解读")
+
+    def save_draft(self, root_id: str, draft: ScriptWritingPlanDraft,
+                   expected_revision: str | None, expected_draft_revision: str | None,
+                   expected_source_hash: str) -> dict:
         with _LOCK:
             workspace = self.workspace(root_id)
             if workspace["root_document_id"] != root_id:
-                raise HTTPException(422, "请在总纲文档确认分集规划")
+                raise HTTPException(422, "请在总纲文档保存编剧解读")
+            self._check_revisions(workspace, expected_revision, expected_draft_revision, expected_source_hash)
+            _write(self.directory(root_id) / "writing-interpretation-draft.json", {
+                "draft": draft.model_dump(), "source_hash": expected_source_hash,
+                "revision": uuid4().hex, "base_plan_revision": expected_revision,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            return self.workspace(root_id)
+
+    def confirm(self, root_id: str, draft: ScriptWritingPlanDraft,
+                expected_revision: str | None, expected_source_hash: str,
+                expected_draft_revision: str | None = None) -> dict:
+        with _LOCK:
+            workspace = self.workspace(root_id)
+            if workspace["root_document_id"] != root_id:
+                raise HTTPException(422, "请在总纲文档确认编剧解读")
             current = workspace["plan"]
-            if (current["revision"] if current else None) != expected_revision:
-                raise HTTPException(409, "分集规划已更新，请重新加载后保存")
-            if workspace["source_hash"] != expected_source_hash:
-                raise HTTPException(409, "总纲已修改，请重新解析当前总纲")
+            self._check_revisions(workspace, expected_revision, expected_draft_revision, expected_source_hash)
             existing = {e["number"]: e for e in current["episodes"]} if current else {}
             # Removing a planned episode must never orphan its written body.
             for number, episode in existing.items():
@@ -175,7 +205,8 @@ class ScriptAuthoringStore:
                         _write(directory / "document.json", _EMPTY_DOCUMENT)
                     episodes.append({**episode.model_dump(), "document_id": document_id})
                 plan = {**draft.model_dump(exclude={"episodes"}), "episodes": episodes,
-                        "source_text": workspace["source_text"], "source_hash": workspace["source_hash"]}
+                        "source_text": workspace["source_text"], "source_hash": workspace["source_hash"],
+                        "confirmed_draft_revision": expected_draft_revision}
                 root = self.directory(root_id)
                 plan_path = root / "writing-plan.json"
                 if current:
@@ -187,6 +218,10 @@ class ScriptAuthoringStore:
                 for directory in created:
                     shutil.rmtree(directory)
                 raise HTTPException(500, "保存分集规划失败，请重试") from exc
+            try:
+                (root / "writing-interpretation-draft.json").unlink(missing_ok=True)
+            except OSError:
+                logger.warning("Confirmed interpretation draft awaits cleanup")
             return self.workspace(root_id)
 
     def writing_context(self, document_id: str, mode: str) -> dict | None:
@@ -194,13 +229,13 @@ class ScriptAuthoringStore:
         plan = workspace["plan"]
         selected = workspace["selected_episode_number"]
         if not selected:
-            if plan or mode == "expand_outline":
-                raise HTTPException(409, "请先解析并确认总纲，选择要写的集数")
+            if plan or workspace["interpretation_draft"] or mode == "expand_outline":
+                raise HTTPException(409, "请先生成并确认编剧解读，选择要写的集数")
             return None  # A standalone, manually written screenplay can continue.
         if not plan:
-            raise HTTPException(409, "分集规划不存在，请返回总纲重新确认")
+            raise HTTPException(409, "编剧解读尚未确认，请返回总纲确认")
         if workspace["source_changed"]:
-            raise HTTPException(409, "总纲已修改，请重新解析并确认分集规划")
+            raise HTTPException(409, "总纲已修改，请重新生成并确认编剧解读")
         episode = next((e for e in plan["episodes"]
                         if e["number"] == selected and e["document_id"] == document_id), None)
         if not episode:
@@ -214,9 +249,6 @@ class ScriptAuthoringStore:
             outline += "\n本集原文素材（保留对白、动作和情感节点）：\n" + episode["source_excerpt"]
         body = document_text(_read(self.directory(document_id) / "document.json"))
         effective_mode = "expand_outline" if not body.strip() else mode
-        reference = ("\n原始总纲参考（仅提取属于当前第 " + str(selected) +
-                     " 集的细节与共用设定，不写其他集剧情；用户确认的规划优先）：\n<original_outline>\n" +
-                     workspace["source_text"] + "\n</original_outline>")
         previous_context = ""
         if selected > 1:
             previous = plan["episodes"][selected - 2]
@@ -226,7 +258,8 @@ class ScriptAuthoringStore:
                                 f"上一集尚无正文，以下仅为已确认规划的结尾：{previous['ending_state']}")
         return {"title": episode["title"], "source_text": outline if effective_mode == "expand_outline" else body,
                 "mode": effective_mode,
-                "series_context": series_context + "\n本集已确认规划：\n" + outline + reference,
+                "series_context": series_context + "\n仅依据已确认的编剧解读写当前集，不写其他集剧情。" +
+                    ("\n本集已确认规划：\n" + outline if effective_mode != "expand_outline" else ""),
                 "previous_episode_context": previous_context,
                 "episode_number": selected, "plan_revision": plan["revision"]}
 
@@ -252,7 +285,7 @@ def _outline_response(output: str) -> ScriptWritingPlanDraft:
         if any(not e["field"] for e in errors):
             message = "分集编号无效（须从第1集连续排列且不能重复），或标题、大纲为空"
         else:
-            message = "总纲解析结果字段格式无效（" + "、".join(e["field"] for e in errors[:5]) + "）"
+            message = "编剧解读字段格式无效（" + "、".join(e["field"] for e in errors[:5]) + "）"
         raise RuntimeError(message + "，请重新解析或切换剧本模型") from exc
     if not output.startswith("{"):
         logger.info("Outline JSON recovered from provider commentary: chars=%s episodes=%s", len(output), len(draft.episodes))

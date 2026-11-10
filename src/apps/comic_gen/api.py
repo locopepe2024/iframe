@@ -9540,6 +9540,7 @@ class ConfirmWritingPlanRequest(BaseModel):
     draft: ScriptWritingPlanDraft
     base_revision: Optional[str] = None
     source_hash: str = Field(min_length=64, max_length=64)
+    base_draft_revision: Optional[str] = None
 
 
 @app.get("/script-documents/{document_id}/writing-plan")
@@ -9550,7 +9551,15 @@ def get_writing_plan(document_id: str, user: UserContext = Depends(require_studi
 @app.put("/script-documents/{document_id}/writing-plan")
 def confirm_writing_plan(document_id: str, request: ConfirmWritingPlanRequest,
                          user: UserContext = Depends(require_studio_user)):
-    return _authoring_store(user).confirm(document_id, request.draft, request.base_revision, request.source_hash)
+    return _authoring_store(user).confirm(document_id, request.draft, request.base_revision,
+        request.source_hash, request.base_draft_revision)
+
+
+@app.put("/script-documents/{document_id}/writing-plan/draft")
+def save_writing_interpretation_draft(document_id: str, request: ConfirmWritingPlanRequest,
+                                      user: UserContext = Depends(require_studio_user)):
+    return _authoring_store(user).save_draft(document_id, request.draft, request.base_revision,
+        request.base_draft_revision, request.source_hash)
 
 
 @app.post("/script-documents/{document_id}/outline-analysis", status_code=202)
@@ -9565,10 +9574,17 @@ def start_outline_analysis(document_id: str, request: ScriptWritingModelSettings
         raise HTTPException(422, "总纲最多支持80000字，请先整理原文")
     llm = pipeline.script_processor.llm
     model = _script_model_for_request(user, request.model if request else None)
+    def generate_draft():
+        result = analyze_outline(llm, workspace["source_text"], model=model,
+            cache_dir=_authoring_store(user).directory(document_id) / "outline-analysis-cache")
+        saved = _authoring_store(user).save_draft(document_id, ScriptWritingPlanDraft.model_validate(result["draft"]),
+            workspace["plan"]["revision"] if workspace["plan"] else None,
+            workspace["interpretation_draft"]["revision"] if workspace["interpretation_draft"] else None,
+            result["source_hash"])
+        return {**result, "interpretation_draft": saved["interpretation_draft"]}
     return extraction_jobs.start(user.owner_profile_id, "script-outline:document:" + document_id,
         workspace["source_hash"] + ":" + str(model or llm.default_model) + ":" + uuid.uuid4().hex,
-        lambda: analyze_outline(llm, workspace["source_text"], model=model,
-            cache_dir=_authoring_store(user).directory(document_id) / "outline-analysis-cache"))
+        generate_draft)
 
 
 @app.get("/script-documents/{document_id}/outline-analysis/jobs/{job_id}")
