@@ -2122,6 +2122,90 @@ def test_new_director_generation_rejects_missing_story_map(value):
     processor.llm.chat.return_value = json.dumps(payload)
     with pytest.raises(RuntimeError, match='缺少 story_map 故事结构对象'):
         processor.analyze_director_profile('原文', {'characters': []}, {})
+    assert processor.llm.chat.call_count == 2
+
+
+def test_director_completes_only_missing_story_map_and_keeps_both_responses_in_audit():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    original = profile_payload()
+    original_raw = json.dumps(original, ensure_ascii=False)
+    completion = {'story_map': valid_story_map(), 'setting': {'era': '不能覆盖已有导演设定'}}
+    completion_raw = json.dumps(completion, ensure_ascii=False)
+    processor.llm.chat.side_effect = [original_raw, completion_raw]
+    source = '沈夏和周涵毕业离校。'
+    result = processor.analyze_director_profile_with_audit(source, {'characters': []}, {})
+
+    assert result['profile'] == {**original, 'story_map': completion['story_map']}
+    assert processor.llm.chat.call_count == 2
+    call = processor.llm.chat.call_args.kwargs
+    assert call['stream'] is True and call['response_format'] == {'type': 'json_object'}
+    assert call['timeout_seconds'] == 1800
+    prompt = call['messages'][0]['content']
+    schema = json.loads(prompt.split('<director_output_contract>', 1)[1].split('</director_output_contract>', 1)[0])
+    assert schema['required'] == ['story_map']
+    assert set(schema['properties']) == {'story_map'}
+    assert source in call['messages'][1]['content']
+    assert original_raw not in call['messages'][1]['content']
+    assert result['source_audit']['raw_response'] == original_raw
+    assert result['source_audit']['raw_response_sha256'] == hashlib.sha256(original_raw.encode()).hexdigest()
+    evidence = result['source_audit']['story_map_completion']
+    assert evidence['raw_response'] == completion_raw
+    assert evidence['raw_response_sha256'] == hashlib.sha256(completion_raw.encode()).hexdigest()
+    assert evidence['applied_fields'] == ['story_map']
+
+
+def test_missing_story_map_completion_failure_keeps_original_response_and_stops():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    raw = json.dumps(profile_payload())
+    processor.llm.chat.side_effect = [raw, RuntimeError('provider failed')]
+    with pytest.raises(RuntimeError, match='provider failed') as raised:
+        processor.analyze_director_profile_with_audit('原文', {'characters': []}, {})
+    assert processor.llm.chat.call_count == 2
+    audit = raised.value.director_audit
+    assert audit['raw_response'] == raw
+    assert audit['failure_stage'] == 'story_map_completion'
+    assert audit['story_map_completion']['status'] == 'failed'
+
+
+def test_completed_story_map_still_passes_through_pipeline_reference_validation():
+    pipeline, script = make_pipeline()
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    broken = valid_story_map()
+    broken['story_threads'][0]['milestones'][0]['event_id'] = 'unknown-event'
+    processor.llm.chat.side_effect = [json.dumps(profile_payload()), json.dumps({'story_map': broken})]
+    pipeline.script_processor = processor
+    with pytest.raises(ValueError) as raised:
+        pipeline.preview_director_profile_with_audit(script.id)
+    assert processor.llm.chat.call_count == 2
+    assert raised.value.director_audit['admission_status'] == 'blocked'
+    assert raised.value.director_audit['story_map_completion']['raw_response']
+    pipeline._save_data.assert_not_called()
+
+
+def test_story_map_completion_reuses_bounded_source_context_without_remapping(monkeypatch):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    source = '长篇原文不应在补全请求重发。' * 1000
+    monkeypatch.setattr(processor, '_director_source_context', lambda *_: ('有界来源摘要与原文锚点', True))
+    processor.llm.chat.side_effect = [json.dumps(profile_payload()), json.dumps({'story_map': valid_story_map()})]
+    processor.analyze_director_profile(source, {'characters': []}, {})
+    assert processor.llm.chat.call_count == 2
+    completion = processor.llm.chat.call_args.kwargs['messages'][1]['content']
+    assert '有界来源摘要与原文锚点' in completion
+    assert '长篇原文不应在补全请求重发' not in completion
+    assert json.loads(completion)['source_is_digest'] is True
+
+
+@pytest.mark.parametrize('raw', ['', '{"setting":', '[]'])
+def test_non_object_director_responses_do_not_trigger_story_map_completion(raw):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = raw
+    with pytest.raises((RuntimeError, ValueError)):
+        processor.analyze_director_profile('原文', {'characters': []}, {})
     assert processor.llm.chat.call_count == 1
 
 

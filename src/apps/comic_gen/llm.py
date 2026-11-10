@@ -45,7 +45,7 @@ class SceneBasisFormatError(ValueError):
     """A field-specific extraction error that permits one model correction."""
 
 
-def _director_profile_output_contract(*, partial: bool = False) -> str:
+def _director_profile_output_contract(*, partial: bool = False, story_map_only: bool = False) -> str:
     """Keep the model's nested field contract derived from runtime validation."""
     schema = DirectorProfile.model_json_schema()
     for key in ("revision", "content_hash", "confirmed_at", "creative_skill_run"):
@@ -76,6 +76,10 @@ def _director_profile_output_contract(*, partial: bool = False) -> str:
         "properties": {key: {"type": "array", "items": {"type": "object"}} for key in (
             "characters", "relationships", "world_rules", "timeline", "events", "open_threads", "conflicts", "uncertainties")},
     }
+    if story_map_only:
+        schema["properties"] = {"story_map": schema["properties"]["story_map"]}
+        schema["required"] = ["story_map"]
+        schema["additionalProperties"] = False
     requirement = ("仅返回发生变化的顶层字段；若修改 story_map，必须返回完整的 story_map 对象，不能为 null；"
                    if partial else "story_map 为必填对象，不能省略或为 null；")
     return (
@@ -89,8 +93,10 @@ def _director_profile_output_contract(*, partial: bool = False) -> str:
         'milestones 不能是字符串数组；role 位于每个 milestone 对象内，不在 thread 上。'
         '例如：{"thread_id":"thread-main","milestones":[{"event_id":"event-1","role":"setup","note":""}]}。'
         '所有 phase_id/event_id 引用须对应本次 story_map 中的实际条目。'
+        + ('' if story_map_only else
         'canon_state 必须是按分类组织的对象，例如 {"events":[{"subject":"角色","value":"原文支持的事件",'
         '"source_refs":[],"status":"uncertain"}]}，没有事实时用 {}，不能返回平铺事实数组。'
+        )
     )
 
 
@@ -213,6 +219,10 @@ DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS = 1800
 # keep this bounded so a costly analysis cannot loop indefinitely.
 DIRECTOR_PROFILE_MAX_RETRIES = 1
 DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS = 4000
+DIRECTOR_STORY_MAP_OUTPUT_BUDGET = (
+    "story_map 最多 24 个 phase、60 个 event、40 条 relationship arc、12 条 story thread；"
+    "phase、event、relationship、thread ID 在本草稿内唯一。"
+)
 DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "输出预算（必须遵守）：setting 最多 6 个键；timeline、relationships、"
     "key_events 各最多 8 项，sample_plan 最多 4 项；这些对象每项最多 4 个键、"
@@ -227,8 +237,7 @@ DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "按 characters、relationships、world_rules、timeline、events、open_threads、conflicts、"
     "uncertainties 分类；每条尽量包含 fact_id、subject、value、source_refs、status，"
     "不要把没有原文依据的推断写成 active 事实。"
-    "story_map 最多 24 个 phase、60 个 event、40 条 relationship arc、12 条 story thread；"
-    "phase、event、relationship、thread ID 在本草稿内唯一。"
+    + DIRECTOR_STORY_MAP_OUTPUT_BUDGET
 )
 
 # A Director prompt is allowed to carry a complete source only while it is
@@ -1977,6 +1986,49 @@ class ScriptProcessor:
             }
         ]
     
+    def _complete_director_story_map(self, source_context: str, is_source_digest: bool,
+                                     entities_json: Dict[str, Any], scope_guidance: str) -> Dict[str, Any]:
+        """Request only a missing map, preserving the original profile and evidence."""
+        prompt = (
+            '上次导演设定已返回，但缺少 story_map。本次只补全 story_map，不重写其他导演字段。'
+            '只返回 {"story_map": {...}} JSON 对象。依据提供的原文或来源摘要整理剧情阶段、事件、人物关系变化与剧情线，'
+            '不能把来源摘要的分块当成剧情阶段，不能发明事件、对白或动机。摘要未提及不代表原文未交代。'
+            '所有人物引用使用已确认实体名称；无法确定的引用保留为 unresolved。'
+            'phases 按剧情顺序排列，events 使用唯一 event_id；关系 states 引用实际 phase_id，'
+            'trigger_event_ids 和 milestones 只能引用本次生成的实际 event_id。'
+            '只要存在事件，至少生成一条主线，milestones 按事件顺序引用。'
+            '没有提供 Fact Ledger ID，source_fact_ids 必须为空数组；evidence_status 使用 interpretation/uncertain/conflicted。'
+            '不生成 people、来源版本或内部人物 UUID，这些由服务端绑定。\n'
+            + scope_guidance + '\n' + director_skill_guidance(entities_json.get('selected_creative_methods', []))
+            + '\n' + _director_profile_output_contract(story_map_only=True)
+            + '\n' + DIRECTOR_STORY_MAP_OUTPUT_BUDGET
+        )
+        data = {'source': source_context, 'source_is_digest': is_source_digest,
+                'entities': {k: v for k, v in entities_json.items() if k != 'selected_creative_methods'}}
+        evidence: Dict[str, Any] = {'status': 'requested', 'applied_fields': []}
+        logger.info('Completing missing Director story_map: source_chars=%s', len(source_context))
+        try:
+            content = (self.llm.chat(
+                messages=[{'role': 'system', 'content': prompt},
+                          {'role': 'user', 'content': _prompt_json(data)}],
+                response_format={'type': 'json_object'}, timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+                max_retries=DIRECTOR_PROFILE_MAX_RETRIES, stream=True,
+            ) or '').strip()
+            evidence.update(raw_response=content[:DIRECTOR_RAW_RESPONSE_MAX_CHARS], raw_response_received=bool(content),
+                            raw_response_sha256=hashlib.sha256(content.encode('utf-8')).hexdigest())
+            result = parse_model_json_object(content)
+            if not isinstance(result.get('story_map'), dict):
+                raise RuntimeError('导演返回缺少 story_map 故事结构对象，补全后仍不完整，请重试。')
+            evidence.update(status='returned', applied_fields=['story_map'])
+            return result['story_map']
+        except Exception:
+            evidence['status'] = 'failed'
+            raise
+        finally:
+            audit = dict(self._last_director_source_audit)
+            audit['story_map_completion'] = evidence
+            self._last_director_source_audit = audit
+
     def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
                                  style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
         """Create a reviewable director draft without mutating project data."""
@@ -1993,8 +2045,8 @@ class ScriptProcessor:
         scope_guidance = (
             "本次是 Series 全剧导演理解。投稿资料与全部分集是不同来源：投稿梗概描述全剧走向，"
             "分集剧本描述该集实际发生的事件。先形成全剧时代、地点、背景、人物关系与变化、主线和支线、"
-            "跨集连续性及视觉基线；不要把梗概中的结局当作第一集事实。story_map 可留空，"
-            "因为分集事件地图由 Episode Director 分别建立。"
+            "跨集连续性及视觉基线；不要把梗概中的结局当作第一集事实。story_map 仍须返回对象，"
+            "其中 phases、relationship_arcs、story_threads 可为空数组，因为分集事件地图由 Episode Director 分别建立。"
             "全剧 unresolved_questions 只收录会影响故事事实、人物关系或因果连续性的真实冲突和歧义；"
             "不得把摘要未提及的内容写成原文未明确。当前来源摘要不足以核验的结论，写成‘来源覆盖待核验’，"
             "不要要求创作者补写剧本中可能已有的事实。逐集事件映射和来源覆盖是分析任务，"
@@ -2097,7 +2149,8 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
         if not isinstance(result, dict):
             raise RuntimeError("导演设定模型返回格式不正确，请重试。")
         if not isinstance(result.get("story_map"), dict):
-            raise RuntimeError("导演返回缺少 story_map 故事结构对象，请重新分析。")
+            result['story_map'] = self._complete_director_story_map(
+                source_context, is_source_digest, entities_json, scope_guidance)
         return result
 
     def analyze_director_profile_with_audit(self, text: str, entities_json: Dict[str, Any],
@@ -2112,16 +2165,14 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
             raw = self._last_director_raw_response
             audit = dict(self._last_director_source_audit)
             audit.update(raw_response=raw, raw_response_received=bool(raw),
-                         failure_stage="parse" if raw else "provider_response")
+                         failure_stage="story_map_completion" if audit.get('story_map_completion', {}).get('status') == 'failed'
+                         else "parse" if raw else "provider_response")
             diagnostic = getattr(exc, "llm_diagnostic", None)
             if isinstance(diagnostic, dict):
                 audit["provider_response"] = diagnostic
             exc.director_audit = audit
             raise
-        # The legacy method parses internally, so capture raw JSON by issuing
-        # no second request is not possible. The profile remains auditable;
-        # callers using the adapter can attach raw content through the helper
-        # below when available.
+        source_audit.update(self._last_director_source_audit)
         source_audit["raw_response"] = getattr(self, "_last_director_raw_response", "")
         source_audit["raw_response_received"] = bool(source_audit["raw_response"])
         source_audit["parse_status"] = "parsed"
