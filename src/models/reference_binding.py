@@ -68,6 +68,43 @@ def bind_reference_names(prompt: str, labels: list[str]) -> str:
     return re.sub(pattern, replace, prompt)
 
 
+def select_referenced_media(prompt: str, references: list[str], names: dict[str, str]) -> tuple[str, list[str], dict[str, str]]:
+    """Submit only mentioned candidates, rebasing explicit ordinal references."""
+    labels = []
+    for ref in references:
+        key = urlsplit(ref).path if ref.startswith(('/playground/media/', '/playground/input-media/', '/studio/media/')) else ref
+        labels.append(names.get(key) or names.get(ref) or unquote(urlsplit(ref).path.rsplit('/', 1)[-1]))
+    positions: dict[str, set[int]] = {}
+    for index, label in enumerate(labels):
+        if not label:
+            continue
+        for alias in (label, *([label[:5] + '...', label[:5] + '…'] if len(label) > 5 else [])):
+            positions.setdefault(alias, set()).add(index)
+    alternatives = [re.escape(label) for label in sorted(positions, key=len, reverse=True)]
+    pattern = re.compile(r'@(' + '|'.join(alternatives + [r'\d+']) + r')(?![A-Za-z0-9_.-])')
+    selected = set()
+    numeric = {}
+    for match in pattern.finditer(prompt):
+        token = match[1]
+        if token in positions:
+            indices = positions[token]
+            if len(indices) != 1:
+                raise ValueError('Referenced materials have duplicate names; use explicit @1, @2 indices')
+            selected.update(indices)
+        else:
+            index = int(token) - 1
+            if not 0 <= index < len(references):
+                raise ValueError('Reference index is outside the selected material list')
+            selected.add(index)
+            numeric[match.start()] = index
+    ordered = sorted(selected)
+    remapped = {old: new for new, old in enumerate(ordered, 1)}
+    prompt = pattern.sub(lambda m: '@' + str(remapped[numeric[m.start()]]) if m.start() in numeric else m[0], prompt)
+    media = [references[index] for index in ordered]
+    keys = set(media) | {urlsplit(ref).path for ref in media if ref.startswith(('/playground/media/', '/playground/input-media/', '/studio/media/'))}
+    return prompt, media, {key: value for key, value in names.items() if key in keys}
+
+
 def bind_h3_canonical_prompt(
     prompt: str,
     originals: list[str],

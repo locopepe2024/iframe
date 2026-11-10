@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { agentRequest, knowledgeRequest, type ChatMessage, type ChatModel, type ChatSession } from '@/lib/api';
 import { usePlaygroundStore } from './usePlaygroundStore';
-import { mentionedReferencePaths, referenceName } from './referenceMedia';
+import { selectMentionedReferences, referenceName } from './referenceMedia';
 import { readCompanionSkills, COMPANION_SKILLS_STORAGE_KEY, type CompanionSkillId } from './companionSkills';
 
 export function requestsCurrentInformation(content: string): boolean {
@@ -121,7 +121,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     if (!sessionId || sending.current || remoteBusy || loading || modelsLoading || modelsError || !models.some(m => m.api_model_id === model)) return;
     const snapshot = usePlaygroundStore.getState();
     if (!snapshot.prompt.trim()) return;
-    const inputMedia = mentionedReferencePaths(snapshot.prompt, snapshot.inputMedia, snapshot.mediaNames, snapshot.history);
+    const { inputMedia, prompt: submittedPrompt } = selectMentionedReferences(snapshot.prompt, snapshot.inputMedia, snapshot.mediaNames, snapshot.history);
     const currentResearch = liveResearchAvailable && requestsCurrentInformation(snapshot.prompt) && model !== 'minimax-h3-ir';
     if (knowledgeSearch && model === 'minimax-h3-ir') {
       setError('H3 提示词优化模型不支持知识库检索，请切换普通 Chat 模型');
@@ -131,7 +131,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
     const pendingId = `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const assetNames = inputMedia.map(p => referenceName(p, snapshot.mediaNames, snapshot.history));
     setMessages(current => [...current, {
-      id: pendingId, role: 'user', content: snapshot.prompt,
+      id: pendingId, role: 'user', content: submittedPrompt,
       input_media: inputMedia, asset_names: assetNames,
       created_at: Date.now() / 1000, model, pending: true,
     }]);
@@ -141,7 +141,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
         model, playground_session_id: sessionId,
       });
       const result = await agentRequest<{ user_message: ChatMessage; assistant_message: ChatMessage }>(`/sessions/${session.id}/messages`, 'POST', {
-        content: snapshot.prompt, input_media: inputMedia,
+        content: submittedPrompt, input_media: inputMedia,
         companion_skills: companionSkills,
         knowledge_search: knowledgeSearch || currentResearch,
         live_research: (knowledgeSearch && liveResearch && liveResearchAvailable) || currentResearch,
@@ -158,7 +158,7 @@ export function useAgentConversation(enabled: boolean, sessionId: string | null)
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : '发送失败';
-      const failed: ChatMessage = { id: pendingId, role: 'user', content: snapshot.prompt,
+      const failed: ChatMessage = { id: pendingId, role: 'user', content: submittedPrompt,
         input_media: inputMedia, asset_names: assetNames, created_at: Date.now() / 1000,
         model, pending: false, delivery_error: message };
       failedMessages.current.set(sessionId, [...(failedMessages.current.get(sessionId) || []), failed]);
