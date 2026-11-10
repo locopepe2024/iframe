@@ -24,6 +24,17 @@ from ...utils.endpoints import get_provider_base_url
 logger = logging.getLogger(__name__)
 
 
+class LLMResponseTerminationError(RuntimeError):
+    """An explicit unsuccessful model finish, with no response prose exposed."""
+
+    def __init__(self, finish_reason: str):
+        self.finish_reason = finish_reason
+        message = ('所选模型拒绝处理本次内容（content_filter）；请调整输入或切换剧本模型。'
+                   if finish_reason == 'content_filter' else
+                   '模型输出达到长度上限（length），结果未完整生成；请缩小本次生成范围后重试。')
+        super().__init__(message)
+
+
 def get_script_writing_model() -> Optional[str]:
     """Resolve the shared model used by screenplay authoring operations."""
     return (
@@ -316,6 +327,9 @@ class LLMAdapter:
                 "LLM chat response body decoded: model=%s chars=%s finish_reason=%s",
                 model, len(content or ""), finish_reason,
             )
+            text_chars = len(content or '')
+            if finish_reason in ('content_filter', 'length'):
+                raise LLMResponseTerminationError(finish_reason)
             return content
         except Exception as e:
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"
@@ -345,11 +359,13 @@ class LLMAdapter:
             suffix = f" status={status}" if status is not None else ""
             if request_id:
                 suffix += f" request_id={request_id}"
-            error = RuntimeError(f"{provider_label} API error{suffix}: {detail}")
+            error = e if isinstance(e, LLMResponseTerminationError) else RuntimeError(f"{provider_label} API error{suffix}: {detail}")
             error.llm_diagnostic = {
                 "stream": stream, "elapsed_seconds": round(time.monotonic() - started_at, 3),
                 "chunks_received": chunks_received, "text_chars": text_chars,
                 "finish_reason": finish_reason, "request_id": request_id,
                 "exception_type": type(e).__name__,
             }
+            if error is e:
+                raise
             raise error from e

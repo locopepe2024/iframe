@@ -64,7 +64,11 @@ def needs_chunked_analysis(text: str) -> bool:
 
 
 def _stage_failure(stage: str, exc: Exception) -> RuntimeError:
-    return RuntimeError(f'{stage}失败：{str(exc)[:160]}；已保存成功分段，重试会继续')
+    error = RuntimeError(f'{stage}失败：{str(exc)[:160]}；重试会复用已保存结果')
+    diagnostic = getattr(exc, 'llm_diagnostic', None)
+    if isinstance(diagnostic, dict):
+        error.llm_diagnostic = diagnostic
+    return error
 
 
 def source_blocks(text: str) -> list[dict[str, str]]:
@@ -185,7 +189,8 @@ def _chat(llm: Any, system: str, data: dict, model: str | None) -> dict:
                 {'role': 'user', 'content': json.dumps(data, ensure_ascii=False)}]
     logger.info('Outline analysis stage=%s input_chars=%d', data['stage'], sum(len(m['content']) for m in messages))
     options = {'model': model} if model else {}
-    output = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True, **options).strip()
+    output = llm.chat(messages=messages, response_format={'type': 'json_object'},
+                      timeout_seconds=900, max_retries=1, stream=True, **options).strip()
     try:
         return parse_model_json_object(output)
     except ValueError as exc:

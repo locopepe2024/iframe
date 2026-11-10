@@ -321,7 +321,11 @@ class ExtractionJobs:
                     reason = '场景与节拍规划失败' if stage.get('stage') == 'structure' else '镜头生成失败'
                     if isinstance(diagnostic, dict):
                         reason = '模型请求失败'
-                        if diagnostic.get('stream') and diagnostic.get('text_chars'):
+                        if diagnostic.get('finish_reason') == 'content_filter':
+                            reason = '所选模型拒绝处理本次内容（content_filter），请调整输入或切换剧本模型'
+                        elif diagnostic.get('finish_reason') == 'length':
+                            reason = '模型输出达到长度上限（length），本步骤未完整生成'
+                        elif diagnostic.get('stream') and diagnostic.get('text_chars'):
                             reason = '模型流式响应中断'
                     message = f'导演拍摄计划生成失败：{location}{reason}。'
                 message += (f'已保存 {completed}/{total} 个步骤，重试会继续未完成部分。'

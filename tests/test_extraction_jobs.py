@@ -131,6 +131,24 @@ def test_shooting_plan_unknown_failure_does_not_expose_exception_text(tmp_path):
         assert '导演拍摄计划生成失败' in done['error']
 
 
+@pytest.mark.parametrize('finish_reason', ['content_filter', 'length'])
+def test_shooting_model_termination_is_not_labeled_stream_interruption(tmp_path, finish_reason):
+    from src.apps.comic_gen.llm_adapter import LLMResponseTerminationError
+    store = ExtractionJobs(tmp_path / 'jobs.db')
+
+    def fail():
+        exc = LLMResponseTerminationError(finish_reason)
+        exc.llm_diagnostic = {'finish_reason': finish_reason, 'stream': True, 'text_chars': 42}
+        raise exc
+
+    done = wait_done(store, store.start('owner', 'project', 'director_shooting_plan:termination', fail))
+    assert done['status'] == 'failed'
+    assert finish_reason in done['error']
+    assert '流式响应中断' not in done['error']
+    assert '尚无已完成步骤' in done['error']
+    assert done['result']['provider_response']['finish_reason'] == finish_reason
+
+
 def test_interrupted_job_is_failed_and_can_be_retried_after_restart(tmp_path):
     path = tmp_path / 'jobs.db'
     store = ExtractionJobs(path)

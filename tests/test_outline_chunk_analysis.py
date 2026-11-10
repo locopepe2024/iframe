@@ -10,6 +10,33 @@ def response(value):
     return json.dumps(value, ensure_ascii=False)
 
 
+def test_model_rejection_is_not_json_failure_and_never_commits_checkpoint(tmp_path, monkeypatch):
+    from src.apps.comic_gen.llm_adapter import LLMAdapter
+    from unittest.mock import Mock
+
+    finish = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='拒绝文本'),
+                                                     finish_reason='content_filter')])
+    wire = Mock()
+    wire.__iter__ = Mock(return_value=iter([finish]))
+    wire.close = Mock()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=Mock(return_value=wire))))
+    adapter = LLMAdapter()
+    monkeypatch.setattr(adapter, '_get_client', lambda **_: client)
+    parser = Mock(side_effect=AssertionError('Rejected output must not be parsed'))
+    monkeypatch.setattr(analysis, 'parse_model_json_object', parser)
+    with pytest.raises(RuntimeError, match='content_filter') as caught:
+        analysis.analyze_chunked_outline(adapter, '共2集。第1集 开始，第2集 结束。',
+                                         model='greena/deepseek-v4.1-flash', cache_dir=tmp_path)
+    assert 'JSON' not in str(caught.value)
+    assert '已保存成功分段' not in str(caught.value)
+    assert caught.value.llm_diagnostic['finish_reason'] == 'content_filter'
+    parser.assert_not_called()
+    assert not list(tmp_path.rglob('*.json'))
+    assert client.chat.completions.create.call_count == 1
+    assert client.chat.completions.create.call_args.kwargs['response_format'] == {'type': 'json_object'}
+    wire.close.assert_called_once()
+
+
 def test_source_blocks_keep_all_text_and_bound_each_request():
     text = '世界观：' + '梦境。' * 2400 + '\n第1集 起点\n台词：“别走。”\n第2集 破局\n她交出项链。'
     blocks = analysis.source_blocks(text)
