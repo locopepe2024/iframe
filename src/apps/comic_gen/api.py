@@ -524,7 +524,8 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         # these body-based endpoints inside the same request context even
         # though the project id is not part of the URL.
         or path in {"/video/polish_prompt", "/video/polish_r2v_prompt",
-                    "/video/polish_prompt/preview", "/video/polish_r2v_prompt/preview"}
+                    "/video/polish_prompt/preview", "/video/polish_r2v_prompt/preview",
+                    "/video/polish_prompt/optimizers"}
     )
     if not protected or request.method == "OPTIONS":
         return await call_next(request)
@@ -556,7 +557,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
     try:
         # Freeze the account's screenplay model before any background job is
         # queued. copy_context() keeps this choice for the entire operation.
-        if path.startswith(("/projects", "/series", "/script-documents")) or path == "/script-writing/generate":
+        if path.startswith(("/projects", "/series", "/script-documents", "/video/polish_")) or path == "/script-writing/generate":
             try:
                 model = await asyncio.to_thread(_script_model_for_request, user, None)
             except HTTPException as exc:
@@ -8058,7 +8059,7 @@ class PolishVideoPromptRequest(BaseModel):
     # 显式覆盖 polish 用的 LLM 模型；空 = 用 project / series PromptConfig
     # 的 polish_model（再 fallback 到 system default）。
     polish_model: str = ""
-    optimizer_provider: Literal["local_llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
+    optimizer_provider: Literal["local_llm", "llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
     optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
     target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
@@ -8718,6 +8719,7 @@ def _r2v_reference_designs(script, request) -> List[Dict[str, Any]]:
 def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any]:
     from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
     user = current_studio_user()
+    optimizer_model = _resolve_video_polish_model(request)
     frame_snapshot: Dict[str, Any] = {}
     effective_shot_fields: Dict[str, Any] = {}
     scene_lighting: Optional[Dict[str, Any]] = None
@@ -8836,7 +8838,8 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     labels = (["首帧 0.00 秒", "尾帧 结束时"] if getattr(request, "generation_mode", "") == "first_last_frame" else [f"参考图 {i + 1}" for i in range(len(request.image_urls))])
     media = [{"label": labels[i], "url": url} for i, url in enumerate(request.image_urls)]
     source = request.model_dump(exclude={"reviewed_messages", "review_token"})
-    token = hashlib.sha256(json.dumps({"source": source, "frame": frame_snapshot,
+    token = hashlib.sha256(json.dumps({"source": source, "optimizer_model": optimizer_model,
+                                      "owner": user.owner_profile_id if user else None, "frame": frame_snapshot,
                                       "effective_shot_fields": effective_shot_fields,
                                       "scene_lighting": scene_lighting,
                                       "reference_designs": reference_designs,
@@ -8940,6 +8943,56 @@ _OPTIMIZER_MODEL_IDS = {
 }
 
 
+_UNIART_OPTIMIZERS = [
+    {"id": "minimax_context_ir", "label": "MiniMax 官方 IR"},
+    {"id": "gpt", "label": "GPT"}, {"id": "qwen", "label": "Qwen"},
+    {"id": "deepseek", "label": "DeepSeek"}, {"id": "glm", "label": "GLM"},
+]
+_GREENA_OPTIMIZER_MODELS = {"llm": "llm-nf-all", "deepseek": "deepseek-v4.1-flash"}
+
+
+def _video_polish_catalog() -> str:
+    from ..user_config import get_user_config_store
+    user = current_studio_user()
+    return str(get_user_config_store().get_public(user).get("catalog_name") or "") if user else ""
+
+
+@app.get("/video/polish_prompt/optimizers")
+def get_video_polish_optimizers():
+    catalog = _video_polish_catalog()
+    if catalog == "greena":
+        return {"catalog_name": catalog, "default_provider": "local_llm", "providers": [
+            {"id": "local_llm", "label": "跟随工作区剧本模型"},
+            {"id": "llm", "label": "LLM · llm-nf-all"},
+            {"id": "deepseek", "label": "DeepSeek · deepseek-v4.1-flash"},
+        ]}
+    return {"catalog_name": catalog, "default_provider": "qwen", "providers": _UNIART_OPTIMIZERS}
+
+
+def _resolve_video_polish_model(request) -> str:
+    """Resolve the text model from its account catalog, independently of video targets."""
+    catalog = _video_polish_catalog()
+    provider = request.optimizer_provider
+    if catalog == "greena":
+        if provider not in {"local_llm", *_GREENA_OPTIMIZER_MODELS}:
+            raise HTTPException(422, "当前 GreenA 账户不支持此优化器，请重新选择 LLM 或 DeepSeek")
+        model = (_script_model_for_request(current_studio_user(), None) if provider == "local_llm"
+                 else "greena/" + _GREENA_OPTIMIZER_MODELS[provider])
+        if model not in {"greena/" + value for value in _GREENA_OPTIMIZER_MODELS.values()}:
+            raise HTTPException(422, "GreenA 剧本模型设置无效，请重新选择 LLM 或 DeepSeek")
+        if request.polish_model and request.polish_model not in {model, model.removeprefix("greena/")}:
+            raise HTTPException(422, "优化器与文字模型不一致，请重新选择并预览")
+        return model
+    if provider == "llm":
+        raise HTTPException(422, "此优化器仅适用于 GreenA")
+    if provider == "minimax_context_ir":
+        return ""
+    model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(provider) or _get_polish_model_for_project(request.script_id)
+    if catalog == "uniart" and model and "/" not in model:
+        return "uniart/" + model
+    return model
+
+
 def _effective_optimization_skills(request) -> Optional[List[str]]:
     """Choose legacy default guidance only for a matching video model."""
     if request.optimization_skills is not None:
@@ -9027,8 +9080,8 @@ def polish_video_prompt(request: PolishVideoPromptRequest):
                                                shot_structure=request.shot_structure)
             return result
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_VIDEO_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=False, generation_mode=request.generation_mode, shot_structure=request.shot_structure)
-        # Polish model: request override → project/series PromptConfig → ""
-        polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
+        # Resolve text credentials independently of the target video adapter.
+        polish_model = _resolve_video_polish_model(request)
         processor = ScriptProcessor()
         result = processor.polish_video_prompt(
             request.draft_prompt,
@@ -9080,7 +9133,7 @@ class PolishR2VPromptRequest(BaseModel):
     reference_variant_ids: Optional[Dict[str, List[str]]] = None
     reference_lighting_choice: Optional[Literal["shot", "reference"]] = None
     polish_model: str = ""
-    optimizer_provider: Literal["local_llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
+    optimizer_provider: Literal["local_llm", "llm", "minimax_context_ir", "gpt", "qwen", "deepseek", "glm"] = "local_llm"
     optimization_skills: Optional[List[str]] = Field(default=None, max_length=12)
     target_ratio: str = Field("16:9", max_length=20)
     target_video_model: str = ""
@@ -9120,7 +9173,7 @@ def polish_r2v_prompt(request: PolishR2VPromptRequest):
                                                shot_structure=request.shot_structure)
             return result
         custom_prompt = _storyboard_polish_contract(request.target_video_model, custom, DEFAULT_R2V_POLISH_PROMPT, request.generate_audio, request.target_duration, request.dialogue_speaker, request.dialogue_line, selected_skills, reference_mode=True, shot_structure=request.shot_structure)
-        polish_model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(request.optimizer_provider) or _get_polish_model_for_project(request.script_id)
+        polish_model = _resolve_video_polish_model(request)
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]
         result = processor.polish_r2v_prompt(

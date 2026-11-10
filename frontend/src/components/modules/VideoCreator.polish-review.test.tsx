@@ -10,7 +10,7 @@ vi.mock("@/store/projectStore", () => ({ useProjectStore: (selector: (state: any
     currentProject: { id: "project", characters: [], scenes: [], props: [], frames: [], video_tasks: [] },
     updateProject: vi.fn(),
 }) }));
-vi.mock("@/lib/api", () => ({ api: { polishVideoPrompt: vi.fn(), polishR2VPrompt: vi.fn() }, API_URL: "", VideoTask: {} }));
+vi.mock("@/lib/api", () => ({ api: { getPolishOptimizers: vi.fn(), polishVideoPrompt: vi.fn(), polishR2VPrompt: vi.fn() }, API_URL: "", VideoTask: {} }));
 vi.mock("./PromptBuilder", () => ({ default: React.forwardRef<HTMLTextAreaElement, any>(({ segments, onChange }, ref) => <textarea ref={ref} aria-label="镜头提示词"
     value={segments.map((item: any) => item.value).join(" ")}
     onChange={(event) => onChange([{ type: "text", value: event.target.value, id: "test" }])} />) }));
@@ -21,7 +21,13 @@ const props = {
     params: {} as any, onParamsChange: vi.fn(),
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(api.getPolishOptimizers).mockResolvedValue({ catalog_name: "uniart", default_provider: "qwen", providers: [
+        { id: "minimax_context_ir", label: "MiniMax 官方 IR" }, { id: "qwen", label: "Qwen" },
+        { id: "gpt", label: "GPT" }, { id: "deepseek", label: "DeepSeek" }, { id: "glm", label: "GLM" },
+    ] });
+});
 
 it("keeps legacy video polish behind editable preview and explicit confirmation", async () => {
     vi.mocked(api.polishVideoPrompt)
@@ -30,6 +36,7 @@ it("keeps legacy video polish behind editable preview and explicit confirmation"
         .mockResolvedValueOnce({ prompt_cn: "中文结果", prompt_en: "English result" } as any);
     render(<VideoCreator {...props} />);
     fireEvent.change(screen.getByLabelText("镜头提示词"), { target: { value: "长街" } });
+    await waitFor(() => expect(screen.getByText("查看并确认润色输入")).toBeEnabled());
     fireEvent.click(screen.getByText("查看并确认润色输入"));
     await screen.findByText("提交前检查模型输入");
     expect(api.polishVideoPrompt).toHaveBeenCalledTimes(1);
@@ -47,6 +54,7 @@ it("does not submit a preview after its prompt changes", async () => {
         review_token: "review-token", format_note: "" } as any);
     render(<VideoCreator {...props} />);
     fireEvent.change(screen.getByLabelText("镜头提示词"), { target: { value: "长街" } });
+    await waitFor(() => expect(screen.getByText("查看并确认润色输入")).toBeEnabled());
     fireEvent.click(screen.getByText("查看并确认润色输入"));
     await screen.findByText("提交前检查模型输入");
     fireEvent.change(screen.getByLabelText("镜头提示词"), { target: { value: "另一条街" } });
@@ -62,6 +70,7 @@ it("requires the same review for the independent R2V mode", async () => {
         .mockResolvedValueOnce({ prompt_cn: "中文", prompt_en: "English R2V" } as any);
     render(<VideoCreator {...props} params={{ generationMode: "r2v" } as any} />);
     fireEvent.change(screen.getByLabelText("镜头提示词"), { target: { value: "角色入场" } });
+    await waitFor(() => expect(screen.getByText("查看并确认润色输入")).toBeEnabled());
     fireEvent.click(screen.getByText("查看并确认润色输入"));
     await screen.findByText("提交前检查模型输入");
     expect(api.polishR2VPrompt).toHaveBeenCalledTimes(1);
@@ -69,4 +78,17 @@ it("requires the same review for the independent R2V mode", async () => {
     await waitFor(() => expect(api.polishR2VPrompt).toHaveBeenCalledTimes(2));
     expect(vi.mocked(api.polishR2VPrompt).mock.calls[1][16]).toMatchObject({ token: "r2v-token" });
     expect(await screen.findByText("English R2V")).toBeInTheDocument();
+});
+
+it("uses the GreenA workspace optimizer by default in the legacy entry", async () => {
+    vi.mocked(api.getPolishOptimizers).mockResolvedValue({ catalog_name: "greena", default_provider: "local_llm", providers: [
+        { id: "local_llm", label: "跟随工作区剧本模型" },
+    ] });
+    vi.mocked(api.polishVideoPrompt).mockResolvedValue({ messages: { system: "规则", user: "长街" }, media: [], review_token: "token" } as any);
+    render(<VideoCreator {...props} />);
+    fireEvent.change(screen.getByLabelText("镜头提示词"), { target: { value: "长街" } });
+    await waitFor(() => expect(screen.getByText("查看并确认润色输入")).toBeEnabled());
+    fireEvent.click(screen.getByText("查看并确认润色输入"));
+    await screen.findByText("提交前检查模型输入");
+    expect(vi.mocked(api.polishVideoPrompt).mock.calls[0][10]).toBe("local_llm");
 });

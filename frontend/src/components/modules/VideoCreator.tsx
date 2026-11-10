@@ -23,6 +23,7 @@ import { R2V_SELECTION_MODEL_ID, getR2vRouteModelId, isR2vImageBased } from "@/l
 import { getAssetUrl, getAssetUrlWithTimestamp } from "@/lib/utils";
 import { characterImageUrl, characterReferenceVariants } from "@/lib/characterImage";
 import PromptBuilder, { PromptSegment, PromptBuilderRef } from "./PromptBuilder";
+import { useOptimizerProvider } from "./storyboard-r2v/useOptimizerProvider";
 import OptimizerSelector, { type OptimizerProvider } from "./storyboard-r2v/OptimizerSelector";
 import VideoPolishReview from "./storyboard-r2v/VideoPolishReview";
 import type { VideoParams } from "@/store/projectStore";
@@ -177,7 +178,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const [optimizedMotion, setOptimizedMotion] = useState("");
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedbackText, setFeedbackText] = useState("");
-    const [optimizerProvider, setOptimizerProvider] = useState<OptimizerProvider>("qwen");
+    const { provider: optimizerProvider, setProvider: setOptimizerProvider, ready: optimizerReady, selectorProps } = useOptimizerProvider();
     const [optimizationSkills, setOptimizationSkills] = useState<string[]>(["minimax-h3-director"]);
     const [pendingPolish, setPendingPolish] = useState<PendingVideoPolish | null>(null);
     const [reviewError, setReviewError] = useState("");
@@ -199,7 +200,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         const draftPrompt = feedback
             ? [polishedPrompt?.en || prompt, optimizedMotion !== motionDesc ? `Current motion: ${motionDesc || "static camera and subject"}` : ""].filter(Boolean).join("\n")
             : [prompt, motionDesc].filter(Boolean).join(", ");
-        if (!draftPrompt) return;
+        if (!draftPrompt || !optimizerReady) return;
         const input: PendingVideoPolish = {
             messages: { system: "", user: "" }, media: [], reviewToken: "", formatNote: "",
             sourceSignature: polishSourceSignature, draft: draftPrompt, feedback,
@@ -1183,6 +1184,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     </div>
                                 )}
                                 <OptimizerSelector
+                                    {...selectorProps}
                                     provider={optimizerProvider}
                                     skills={optimizationSkills}
                                     onProviderChange={(provider) => {
@@ -1195,7 +1197,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 />
                                 <button
                                     onClick={() => handlePolish()}
-                                    disabled={isPolishing || !prompt}
+                                    disabled={isPolishing || !optimizerReady || !prompt}
                                     className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 disabled:opacity-50"
                                 >
                                     {isPolishing ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
@@ -1353,7 +1355,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                             />
                                             <button
                                                 onClick={() => handlePolish(feedbackText.trim())}
-                                                disabled={isPolishing || !feedbackText.trim()}
+                                                disabled={isPolishing || !optimizerReady || !feedbackText.trim()}
                                                 className="text-xs text-foreground bg-primary hover:bg-primary/90 px-3 py-1.5 rounded font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                                             >
                                                 {isPolishing ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
