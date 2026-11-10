@@ -19,6 +19,7 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
   const [draft, setDraft] = useState<WritingPlanDraft | null>(null);
   const [sourceHash, setSourceHash] = useState('');
   const [revision, setRevision] = useState<string | null>(null);
+  const [draftRevision, setDraftRevision] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -34,10 +35,12 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
 
   useEffect(() => {
     if (!open) return;
-    setDraft(workspace.plan ? structuredClone(workspace.plan) : null);
+    const saved = workspace.interpretation_draft;
+    setDraft(saved ? structuredClone(saved.draft) : workspace.plan ? structuredClone(workspace.plan) : null);
     setRevision(workspace.plan?.revision || null);
-    setSourceHash(workspace.plan?.source_hash || workspace.source_hash);
-    setEditing(false);
+    setDraftRevision(saved?.revision || null);
+    setSourceHash(saved?.source_hash || workspace.plan?.source_hash || workspace.source_hash);
+    setEditing(Boolean(saved));
     setDirty(false);
     setError('');
     setActiveEpisode(0);
@@ -72,8 +75,10 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
       if (run.current !== currentRun) return;
       setDraft(job.result.draft);
       setSourceHash(job.result.source_hash);
+      setDraftRevision(job.result.interpretation_draft?.revision || null);
+      if (job.result.interpretation_draft) onWorkspace({ ...workspace, interpretation_draft: job.result.interpretation_draft });
       setEditing(true);
-      setDirty(true);
+      setDirty(!job.result.interpretation_draft);
       setActiveEpisode(0);
     } catch (cause) {
       if (run.current === currentRun) setError(detail(cause));
@@ -81,15 +86,23 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
       if (run.current === currentRun) setBusy(false);
     }
   };
-  const confirm = async () => {
+  const persist = async (adopt: boolean) => {
     if (!draft) return;
     setBusy(true);
     setError('');
     try {
-      const updated = await scriptEditorApi.confirmWritingPlan(workspace.root_document_id, { draft, base_revision: revision, source_hash: sourceHash });
+      const request = { draft, base_revision: revision, source_hash: sourceHash, base_draft_revision: draftRevision };
+      const saved = await scriptEditorApi.saveWritingInterpretationDraft(workspace.root_document_id, request);
+      const savedRevision = saved.interpretation_draft?.revision || null;
+      setDraftRevision(savedRevision);
+      setDirty(false);
+      onWorkspace(saved);
+      if (!adopt) return;
+      const updated = await scriptEditorApi.confirmWritingPlan(workspace.root_document_id, { ...request, base_draft_revision: savedRevision });
       onWorkspace(updated);
       setDraft(updated.plan);
       setRevision(updated.plan?.revision || null);
+      setDraftRevision(null);
       setDirty(false);
       setEditing(false);
     } catch (cause) { setError(detail(cause)); } finally { setBusy(false); }
@@ -103,6 +116,9 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
     setDirty(true);
   };
   const episode = draft?.episodes[activeEpisode];
+  const staleSource = sourceHash !== workspace.source_hash;
+  const validDraft = Boolean(draft?.episodes.length && draft.episodes.every(item => item.title.trim() && item.outline.trim() && Number.isInteger(item.target_word_count) && item.target_word_count >= 100 && item.target_word_count <= 20000));
+  const status = busy ? 'working' : editing && dirty ? 'draftUnsaved' : draftRevision ? 'draftSaved' : workspace.plan ? 'confirmed' : 'notGenerated';
   return (
     <dialog ref={modal} onCancel={event => { event.preventDefault(); close(); }} className="m-auto w-[calc(100%-2rem)] max-w-5xl max-h-none overflow-hidden bg-transparent p-0 text-foreground backdrop:bg-black/70">
       <section role="dialog" aria-modal="true" aria-labelledby="outline-title" className="flex h-[90dvh] max-h-[calc(100dvh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-lg border border-white/10 bg-[#101116] shadow-2xl">
@@ -112,17 +128,27 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
         </header>
         <div className="playground-scrollbar min-h-0 flex-1 overflow-y-scroll overscroll-contain [scrollbar-gutter:stable]">
         <fieldset disabled={busy} className="min-w-0 p-5">
-          {workspace.source_changed && <p className="mb-4 text-sm text-amber-300">{t('sourceChanged')}</p>}
+          <p className="mb-4 text-sm text-text-secondary">{t('workflow')}</p>
+          {(editing ? staleSource : workspace.source_changed) && <p className="mb-4 text-sm text-amber-300">{t('sourceChanged')}</p>}
+          <p role="status" className="mb-4 text-xs text-text-muted">{t(status)}</p>
           {error && <p role="alert" className="mb-4 text-sm text-red-300">{error}</p>}
           {!editing ? <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => void analyze()} disabled={busy || !workspace.source_text.trim()} className="rounded bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? t('analyzing') : t(workspace.plan ? 'reanalyze' : 'analyze')}</button>
-              {workspace.plan && <button type="button" onClick={() => setEditing(true)} disabled={busy} className="rounded border border-white/15 px-4 py-2 text-sm">{t('edit')}</button>}
+              {(workspace.plan || workspace.interpretation_draft) && <button type="button" onClick={() => {
+                const saved = workspace.interpretation_draft;
+                setDraft(saved ? structuredClone(saved.draft) : workspace.plan ? structuredClone(workspace.plan) : null);
+                setSourceHash(saved?.source_hash || workspace.plan?.source_hash || workspace.source_hash);
+                setDraftRevision(saved?.revision || null);
+                setDirty(false);
+                setEditing(true);
+              }} disabled={busy} className="rounded border border-white/15 px-4 py-2 text-sm">{t(workspace.interpretation_draft ? 'resumeDraft' : 'edit')}</button>}
               {workspace.selected_episode_number && <button type="button" onClick={() => void onNavigate(workspace.root_document_id)} disabled={busy} className="rounded border border-white/15 px-4 py-2 text-sm">{t('backOutline')}</button>}
             </div>
             {!workspace.plan && <p className="text-sm text-text-secondary">{t('empty')}</p>}
             {workspace.plan && <div className="divide-y divide-white/10 border-y border-white/10">{workspace.plan.episodes.map(item => <div key={item.number} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><p className="truncate text-sm">{t('episode', { number: item.number })} · {item.title}</p><p className="mt-1 text-xs text-text-muted">{t('bodyCount', { count: item.word_count })}</p></div><button type="button" disabled={busy} onClick={() => void onNavigate(item.document_id)} className="shrink-0 rounded border border-white/15 px-3 py-1.5 text-sm hover:bg-white/10">{t('openEpisode')}</button></div>)}</div>}
           </div> : draft && <div className="space-y-5">
+            <button type="button" onClick={() => void analyze()} disabled={busy || !workspace.source_text.trim()} className="rounded border border-white/15 px-4 py-2 text-sm">{busy ? t('analyzing') : t('reanalyze')}</button>
             <p className="text-sm text-text-secondary">{t('review')}</p>
             {(['background', 'style', 'point_of_view', 'characters', 'constraints'] as const).map(key => <label key={key} className="block text-sm text-text-secondary">{t(key)}<textarea className={fieldClass} rows={2} value={draft[key]} onChange={event => editField(key, event.target.value)} /></label>)}
             {draft.missing_information.length > 0 && <div className="text-sm text-amber-200"><strong>{t('missing')}</strong><ul className="mt-1 list-inside list-disc">{draft.missing_information.map((item, index) => <li key={index}>{item}</li>)}</ul></div>}
@@ -132,7 +158,7 @@ export default function ScriptOutlineDialog({ open, workspace, onClose, onWorksp
           </div>}
         </fieldset>
         </div>
-        {editing && <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-white/10 px-5 py-4"><button type="button" disabled={busy} onClick={() => { if (!dirty || window.confirm(t('discard'))) { setDraft(workspace.plan); setEditing(false); setDirty(false); } }} className="rounded border border-white/15 px-4 py-2 text-sm">{t('cancel')}</button><button type="button" disabled={busy || !draft?.episodes.every(item => item.title.trim() && item.outline.trim() && Number.isInteger(item.target_word_count) && item.target_word_count >= 100 && item.target_word_count <= 20000)} onClick={() => void confirm()} className="flex items-center gap-2 rounded bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">{busy && <Loader2 size={16} className="animate-spin" />}{t('confirm')}</button></footer>}
+        {editing && <footer className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-white/10 px-5 py-4"><button type="button" disabled={busy} onClick={() => { if (!dirty || window.confirm(t('discard'))) { setEditing(false); setDirty(false); } }} className="rounded border border-white/15 px-4 py-2 text-sm">{t('cancel')}</button><button type="button" disabled={busy || !validDraft || staleSource} onClick={() => void persist(false)} className="rounded border border-white/15 px-4 py-2 text-sm disabled:opacity-50">{t('saveDraft')}</button><button type="button" disabled={busy || !validDraft || staleSource} onClick={() => void persist(true)} className="flex items-center gap-2 rounded bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">{busy && <Loader2 size={16} className="animate-spin" />}{t('confirm')}</button></footer>}
       </section>
     </dialog>
   );

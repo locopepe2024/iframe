@@ -4,7 +4,7 @@ import ScriptOutlineDialog from './ScriptOutlineDialog';
 import { scriptEditorApi, type WritingPlanDraft, type WritingWorkspace } from '@/lib/scriptEditorApi';
 
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string, values?: Record<string, unknown>) => key === 'episode' ? `episode ${values?.number}` : key }));
-vi.mock('@/lib/scriptEditorApi', () => ({ scriptEditorApi: { startOutlineAnalysis: vi.fn(), getOutlineAnalysisJob: vi.fn(), confirmWritingPlan: vi.fn() } }));
+vi.mock('@/lib/scriptEditorApi', () => ({ scriptEditorApi: { startOutlineAnalysis: vi.fn(), getOutlineAnalysisJob: vi.fn(), confirmWritingPlan: vi.fn(), saveWritingInterpretationDraft: vi.fn() } }));
 const draft: WritingPlanDraft = { background: '梦境', style: '', point_of_view: '第一视角', characters: '角色', constraints: '不露脸', missing_information: ['缺少身份'], suggestions: ['增加环境声'], episodes: Array.from({ length: 24 }, (_, i) => ({ number: i + 1, title: `标题${i + 1}`, outline: `事件${i + 1}`, opening_state: '', ending_state: '', characters: '', target_word_count: 2000 })) };
 const workspace: WritingWorkspace = { root_document_id: 'root', root_title: '总纲', selected_episode_number: null, source_text: '共24集', source_hash: 'hash', source_changed: false, plan: null };
 const confirmed: WritingWorkspace = { ...workspace, plan: { ...draft, revision: 'rev1', source_hash: 'hash', episodes: draft.episodes.map(e => ({ ...e, document_id: `child-${e.number}`, word_count: 0 })) } };
@@ -15,6 +15,52 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
   vi.mocked(scriptEditorApi.startOutlineAnalysis).mockResolvedValue({ id: 'analysis', status: 'completed', result: { draft: structuredClone(draft), source_hash: 'hash' } });
   vi.mocked(scriptEditorApi.confirmWritingPlan).mockResolvedValue(confirmed);
+  vi.mocked(scriptEditorApi.saveWritingInterpretationDraft).mockImplementation(async (_id, request) => ({ ...workspace, interpretation_draft: {
+    draft: request.draft, source_hash: request.source_hash, revision: 'saved-draft', base_plan_revision: request.base_revision, updated_at: '2026-11-10',
+  } }));
+});
+
+it('restores a saved draft after reopening, permits unchanged saves, and keeps adoption explicit', async () => {
+  const saved: WritingWorkspace = { ...workspace, interpretation_draft: {
+    draft: structuredClone(draft), source_hash: 'hash', revision: 'draft-1', base_plan_revision: null, updated_at: '2026-11-10',
+  } };
+  const onWorkspace = vi.fn();
+  const view = render(<ScriptOutlineDialog open workspace={saved} onClose={vi.fn()} onWorkspace={onWorkspace} onNavigate={vi.fn()} />);
+  expect(screen.getByLabelText('background')).toHaveValue('梦境');
+  expect(screen.getByText('draftSaved')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'saveDraft' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'saveDraft' }));
+  await waitFor(() => expect(onWorkspace).toHaveBeenCalled());
+  expect(scriptEditorApi.confirmWritingPlan).not.toHaveBeenCalled();
+  expect(scriptEditorApi.saveWritingInterpretationDraft).toHaveBeenCalledWith('root', expect.objectContaining({ base_draft_revision: 'draft-1' }));
+  const persisted = onWorkspace.mock.calls[0][0];
+  view.rerender(<ScriptOutlineDialog open={false} workspace={persisted} onClose={vi.fn()} onWorkspace={onWorkspace} onNavigate={vi.fn()} />);
+  view.rerender(<ScriptOutlineDialog open workspace={persisted} onClose={vi.fn()} onWorkspace={onWorkspace} onNavigate={vi.fn()} />);
+  expect(screen.getByLabelText('background')).toHaveValue('梦境');
+  fireEvent.click(screen.getByRole('button', { name: 'confirm' }));
+  await waitFor(() => expect(scriptEditorApi.confirmWritingPlan).toHaveBeenCalledWith('root', expect.objectContaining({ base_draft_revision: 'saved-draft' })));
+});
+
+it('blocks adoption of a draft for an older source while allowing regeneration', () => {
+  render(<ScriptOutlineDialog open workspace={{ ...workspace, interpretation_draft: {
+    draft, source_hash: 'old-hash', revision: 'draft-1', base_plan_revision: null, updated_at: '2026-11-10',
+  } }} onClose={vi.fn()} onWorkspace={vi.fn()} onNavigate={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'confirm' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'saveDraft' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'reanalyze' })).toBeEnabled();
+  expect(screen.getByText('sourceChanged')).toBeInTheDocument();
+});
+
+it('preserves edits when saving conflicts and never confirms a failed save', async () => {
+  vi.mocked(scriptEditorApi.saveWritingInterpretationDraft).mockRejectedValue({ response: { data: { detail: '草稿已更新' } } });
+  render(<ScriptOutlineDialog open workspace={workspace} onClose={vi.fn()} onWorkspace={vi.fn()} onNavigate={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: 'analyze' }));
+  await screen.findByLabelText('background');
+  fireEvent.change(screen.getByLabelText('background'), { target: { value: '保留手动修改' } });
+  fireEvent.click(screen.getByRole('button', { name: 'confirm' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('草稿已更新');
+  expect(screen.getByLabelText('background')).toHaveValue('保留手动修改');
+  expect(scriptEditorApi.confirmWritingPlan).not.toHaveBeenCalled();
 });
 
 it('requires review and confirmation, then an explicit episode selection without generating episode one', async () => {

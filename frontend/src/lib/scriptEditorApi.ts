@@ -104,12 +104,28 @@ export interface WritingWorkspace {
   source_hash: string;
   source_changed: boolean;
   plan: WritingPlan | null;
+  interpretation_draft?: WritingInterpretationDraft | null;
+}
+
+export interface WritingInterpretationDraft {
+  draft: WritingPlanDraft;
+  source_hash: string;
+  revision: string;
+  base_plan_revision: string | null;
+  updated_at: string;
+}
+
+export interface WritingPlanRequest {
+  draft: WritingPlanDraft;
+  base_revision: string | null;
+  source_hash: string;
+  base_draft_revision?: string | null;
 }
 
 export interface OutlineAnalysisJob {
   id: string;
   status: ScriptWritingJob['status'];
-  result?: { draft: WritingPlanDraft; source_hash: string } | null;
+  result?: { draft: WritingPlanDraft; source_hash: string; interpretation_draft?: WritingInterpretationDraft } | null;
   error?: string | null;
 }
 
@@ -123,8 +139,11 @@ export const scriptEditorApi = {
   getWritingPlan: async (documentId: string): Promise<WritingWorkspace> => {
     return (await axios.get(`${API_BASE}/script-documents/${documentId}/writing-plan`)).data;
   },
-  confirmWritingPlan: async (documentId: string, data: { draft: WritingPlanDraft; base_revision: string | null; source_hash: string }): Promise<WritingWorkspace> => {
+  confirmWritingPlan: async (documentId: string, data: WritingPlanRequest): Promise<WritingWorkspace> => {
     return (await axios.put(`${API_BASE}/script-documents/${documentId}/writing-plan`, data)).data;
+  },
+  saveWritingInterpretationDraft: async (documentId: string, data: WritingPlanRequest): Promise<WritingWorkspace> => {
+    return (await axios.put(`${API_BASE}/script-documents/${documentId}/writing-plan/draft`, data)).data;
   },
   startOutlineAnalysis: async (documentId: string, model?: ScriptWritingModel): Promise<OutlineAnalysisJob> => {
     return (await axios.post(`${API_BASE}/script-documents/${documentId}/outline-analysis`, model ? { model } : undefined)).data;
