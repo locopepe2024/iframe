@@ -10,6 +10,7 @@ vi.mock("@/store/projectStore", () => ({
 }));
 vi.mock("@/lib/api", () => ({
     api: {
+        getPolishOptimizers: vi.fn(),
         polishVideoPrompt: vi.fn(),
         polishR2VPrompt: vi.fn(),
     },
@@ -40,9 +41,11 @@ const shot: ShotNode = {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(api.getPolishOptimizers).mockResolvedValue({ catalog_name: "uniart", default_provider: "qwen",
+        providers: [{ id: "qwen", label: "Qwen" }] });
     vi.mocked(api.polishVideoPrompt).mockResolvedValue({
-        prompt_cn: "integrated_multimodal_description: 中文",
-        prompt_en: "integrated_multimodal_description: English",
+        messages: { system: "镜头优化规则", user: "当前镜头描述" },
+        media: [], review_token: "review-token", format_note: "双语 JSON",
     });
 });
 
@@ -72,6 +75,7 @@ it("sends the selected shot video model when polishing", async () => {
         />,
     );
 
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
 
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledOnce());
@@ -96,6 +100,7 @@ it("sends the selected first and last variants in order for FL2V polish", async 
             expanded={false} onToggleExpanded={vi.fn()}
         />,
     );
+    await waitFor(() => expect(screen.getByTitle("查看并确认模型输入")).toBeEnabled());
     fireEvent.click(screen.getByTitle("查看并确认模型输入"));
     await waitFor(() => expect(api.polishVideoPrompt).toHaveBeenCalledOnce());
     const args = vi.mocked(api.polishVideoPrompt).mock.calls[0];

@@ -15,7 +15,6 @@ import StoryboardContinuitySheet from "./StoryboardContinuitySheet";
 import { effectiveShotVisual, type ContinuityRow } from "./storyboard-r2v/effectiveShotVisual";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
-import type { ExtraRosterEntry, ExtraShotInstance } from "@/store/projectStore";
 import { api, crudApi, type VideoTask, type AssetReferenceIndexEntry, type EpisodeCharacterUse } from "@/lib/api";
 import { resolveMediaDelivery, resolveVideoTaskDelivery } from "@/lib/mediaDelivery";
 import { resolveStoryboardStyle, resolveStoryboardStyleForRender } from "@/lib/storyboardStyle";
@@ -88,7 +87,6 @@ export default function StoryboardR2V() {
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
     const updateProject = useProjectStore((state) => state.updateProject);
-    const extraRoster = (currentSeries?.extra_roster ?? []) as ExtraRosterEntry[];
     const t = useTranslations("storyboardR2V");
     const tStep = useTranslations("stepHeader");
     const [indexedProject, setIndexedProject] = useState<{
@@ -921,7 +919,7 @@ export default function StoryboardR2V() {
     }, [persistWorkbench]);
 
     // Structured edits update the visible body and join the ordered frame save.
-    const handleUpdateField = useCallback((index: number, field: string, value: string | number | null | Array<{ characterId: string; moveRef: string; moveVariant?: string | null }>) => {
+    const handleUpdateField = useCallback((index: number, field: string, value: string | number | null) => {
         setShots(prev => prev.map((s, i) => {
             if (i !== index) return s;
             if (field === "duration") return { ...s, duration: typeof value === "number" ? value : null };
@@ -949,14 +947,6 @@ export default function StoryboardR2V() {
                 };
             }
             if (field === "transitionHint") return { ...s, transitionHint: typeof value === "string" ? value : null };
-            if (field === "move_ref") {
-                const moveRef = typeof value === "string" && value.trim() ? value : null;
-                return { ...s, moveRef, moveVariant: moveRef ? s.moveVariant : null };
-            }
-            if (field === "move_variant") return { ...s, moveVariant: typeof value === "string" && value.trim() ? value : null };
-            if (field === "performance_moves") {
-                return { ...s, performanceMoves: Array.isArray(value) ? value : [] };
-            }
             if (field === "stylePromptOverride" || field === "lightingOverride") {
                 const visual = effectiveShotVisual(continuityRows[s.id], displayedStyle.positivePrompt);
                 const next = editShotSettings(s, field, typeof value === "string" ? value : null,
@@ -981,20 +971,8 @@ export default function StoryboardR2V() {
         if (field === "cameraMovement") backendField.camera_movement_description = typeof value === "string" ? value : undefined;
         if (field === "transitionHint") backendField.transition_hint = typeof value === "string" ? value : undefined;
         if (field === "negativePromptOverride") backendField.negative_prompt_override = typeof value === "string" ? value : undefined;
-        if (field === "move_ref") backendField.move_ref = typeof value === "string" && value.trim() ? value : "";
-        if (field === "move_variant") backendField.move_variant = typeof value === "string" && value.trim() ? value : "";
-        if (field === "performance_moves") backendField.performance_moves = Array.isArray(value)
-            ? value.map((item) => ({ character_id: item.characterId, move_ref: item.moveRef, move_variant: item.moveVariant ?? null })).filter((item) => item.character_id && item.move_ref)
-            : [];
         persistFrameEdit(shotId, backendField);
     }, [shots, persistFrameEdit, displayedStyle.positivePrompt, continuityRows]);
-
-    const handleUpdateCrowdInstances = useCallback((index: number, instances: ExtraShotInstance[]) => {
-        const shot = shots[index];
-        if (!shot) return;
-        setShots(prev => prev.map((item, i) => i === index ? { ...item, crowdInstances: instances } : item));
-        persistFrameEdit(shot.id, { crowd_instances: instances });
-    }, [shots, persistFrameEdit]);
 
     // Duration editor config — derived from active R2V model's catalog entry
     const durationEditorCfg = useMemo(() => {
@@ -2297,8 +2275,6 @@ export default function StoryboardR2V() {
                             assetIndex={assetIndex}
                             onUpdatePrompt={(prompt, optimized) => updatePrompt(index, prompt, optimized)}
                             onUpdateField={(field, value) => handleUpdateField(index, field, value)}
-                            extraRoster={extraRoster}
-                            onUpdateCrowdInstances={(instances) => handleUpdateCrowdInstances(index, instances)}
                             durationEditorConfig={durationEditorCfg}
                             onGenerateT2I={() => generateT2I(index)}
                             onGenerateVideo={() => generateVideoBatch(index, 1, paramsState)}
