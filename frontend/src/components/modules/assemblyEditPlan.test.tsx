@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDraftAssemblyPlan, formatAssemblyTime, hasAssemblyPlanChanges, moveAssemblyClip, updateAssemblyClip, refreshAssemblySelectedTakes } from "./assemblyEditPlan";
+import { buildDraftAssemblyPlan, buildDraftSeriesAssemblyPlan, formatAssemblyTime, hasAssemblyPlanChanges, moveAssemblyClip, updateAssemblyClip, refreshAssemblySelectedTakes } from "./assemblyEditPlan";
 import type { Project } from "@/store/projectStore";
 
 function project(): Project {
@@ -36,6 +36,19 @@ describe("assembly edit plan helpers", () => {
             [5_000, 10_000],
             [10_000, 15_000],
         ]);
+    });
+
+    it("includes all completed shots when a project or series exceeds sixty seconds", () => {
+        const episode = project();
+        episode.video_tasks!.forEach(task => { task.duration = 30; });
+        const draft = buildDraftAssemblyPlan(episode);
+        expect(draft.target_duration_ms).toBe(90_000);
+        expect(draft.lanes[0].clips.at(-1)?.timeline_end_ms).toBe(90_000);
+        const nextEpisode = { ...episode, id: "project-2", episode_number: 2 };
+        const series = buildDraftSeriesAssemblyPlan("series", [nextEpisode, { ...episode, episode_number: 1 }]);
+        expect(series.target_duration_ms).toBe(180_000);
+        expect(series.lanes[0].clips).toHaveLength(6);
+        expect(series.lanes[0].clips.at(-1)?.timeline_end_ms).toBe(180_000);
     });
 
     it("keeps timeline edits keyboard-addressable and ordered", () => {

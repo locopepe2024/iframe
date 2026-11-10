@@ -72,3 +72,19 @@ it("undoes and redoes a draft edit, then clears history after save", async () =>
     await waitFor(() => expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled());
     expect(screen.getByRole("button", { name: "Redo" })).toBeDisabled();
 });
+
+it("creates a plan using the source duration and saves a user-adjusted target", async () => {
+    const project = source();
+    project.video_tasks![0].duration = 90;
+    useProjectStore.setState({ currentProject: project, projects: [project] });
+    vi.mocked(api.saveAssemblyPlan).mockImplementation(async (_scope, _id, plan) => ({ ...plan, revision: plan.revision + 1 }));
+    render(<VideoAssembly />);
+    fireEvent.click(screen.getByRole("button", { name: "createPlan" }));
+    const target = screen.getByRole("spinbutton", { name: "targetSeconds" });
+    expect(target).toHaveValue(90);
+    fireEvent.change(target, { target: { value: "120" } });
+    fireEvent.click(screen.getByRole("button", { name: "savePlan" }));
+    await waitFor(() => expect(api.saveAssemblyPlan).toHaveBeenCalledWith(
+        "project", "project", expect.objectContaining({ target_duration_ms: 120_000 }),
+    ));
+});
