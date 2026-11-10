@@ -8021,13 +8021,16 @@ def _get_director_prompt_context(script_id: str, frame_id: str = "", overrides: 
     return encoded()
 
 
-def _get_polish_model_for_project(script_id: str) -> str:
+def _get_polish_model_for_project(script_id: str, script=None) -> str:
     """Read polish_model with 3-level fallback: Episode.prompt_config → Series.prompt_config → "".
     Empty = LLMAdapter uses its default (qwen3.6-plus). The frontend's polish-model dropdown
     in PromptConfig modal writes here; backend just reads."""
     if not script_id:
         return ""
-    script = pipeline.get_script(script_id)
+    user = current_studio_user()
+    if script is None:
+        script = (pipeline.get_script(script_id, user.owner_profile_id) if user
+                  else pipeline.get_script(script_id))
     if not script:
         return ""
     # Episode first
@@ -8036,7 +8039,8 @@ def _get_polish_model_for_project(script_id: str) -> str:
         return ep_pc.polish_model
     # Series fallback
     if getattr(script, "series_id", None):
-        series = pipeline.get_series(script.series_id)
+        series = (pipeline.get_series(script.series_id, user.owner_profile_id) if user
+                  else pipeline.get_series(script.series_id))
         if series:
             s_pc = getattr(series, "prompt_config", None)
             if s_pc and getattr(s_pc, "polish_model", ""):
@@ -8720,7 +8724,7 @@ def _r2v_reference_designs(script, request) -> List[Dict[str, Any]]:
 def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any]:
     from .llm import DEFAULT_R2V_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT
     user = current_studio_user()
-    optimizer_model = _resolve_video_polish_model(request)
+    script = None
     frame_snapshot: Dict[str, Any] = {}
     effective_shot_fields: Dict[str, Any] = {}
     scene_lighting: Optional[Dict[str, Any]] = None
@@ -8839,6 +8843,7 @@ def _compile_video_polish_review(request, reference_mode: bool) -> Dict[str, Any
     labels = (["首帧 0.00 秒", "尾帧 结束时"] if getattr(request, "generation_mode", "") == "first_last_frame" else [f"参考图 {i + 1}" for i in range(len(request.image_urls))])
     media = [{"label": labels[i], "url": url} for i, url in enumerate(request.image_urls)]
     source = request.model_dump(exclude={"reviewed_messages", "review_token"})
+    optimizer_model = _resolve_video_polish_model(request, script)
     token = hashlib.sha256(json.dumps({"source": source, "optimizer_model": optimizer_model,
                                       "owner": user.owner_profile_id if user else None, "frame": frame_snapshot,
                                       "effective_shot_fields": effective_shot_fields,
@@ -8970,7 +8975,7 @@ def get_video_polish_optimizers():
     return {"catalog_name": catalog, "default_provider": "qwen", "providers": _UNIART_OPTIMIZERS}
 
 
-def _resolve_video_polish_model(request) -> str:
+def _resolve_video_polish_model(request, script=None) -> str:
     """Resolve the text model from its account catalog, independently of video targets."""
     catalog = _video_polish_catalog()
     provider = request.optimizer_provider
@@ -8988,7 +8993,7 @@ def _resolve_video_polish_model(request) -> str:
         raise HTTPException(422, "此优化器仅适用于 GreenA")
     if provider == "minimax_context_ir":
         return ""
-    model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(provider) or _get_polish_model_for_project(request.script_id)
+    model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(provider) or _get_polish_model_for_project(request.script_id, script)
     if catalog == "uniart" and model and "/" not in model:
         return "uniart/" + model
     return model

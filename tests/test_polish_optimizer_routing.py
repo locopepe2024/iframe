@@ -146,3 +146,22 @@ def test_queued_optimizer_keeps_the_reviewed_workspace_model(greena, monkeypatch
     finally:
         reset_studio_script_model(token)
     assert processor.polish_video_prompt.call_args.kwargs['polish_model'] == 'greena/deepseek-v4.1-flash'
+
+
+def test_review_is_rejected_after_switching_owners(greena, monkeypatch):
+    request = api.PolishVideoPromptRequest(draft_prompt='镜头', optimizer_provider='llm')
+    preview = api._compile_video_polish_review(request, False)
+    confirmed = request.model_copy(update={'review_token': preview['review_token'], 'reviewed_messages': preview['messages']})
+    monkeypatch.setattr(api, 'current_studio_user', lambda: SimpleNamespace(user_id='ola', owner_profile_id='ola-profile'))
+    with pytest.raises(api.HTTPException) as rejected:
+        api._require_video_polish_review(confirmed, False)
+    assert rejected.value.status_code == 409
+
+
+def test_project_model_fallback_resolves_project_and_series_with_same_owner(greena, monkeypatch):
+    get_script = Mock(return_value=SimpleNamespace(prompt_config=None, series_id='series'))
+    get_series = Mock(return_value=SimpleNamespace(prompt_config=SimpleNamespace(polish_model='qwen3.6-plus')))
+    monkeypatch.setattr(api, 'pipeline', SimpleNamespace(get_script=get_script, get_series=get_series))
+    assert api._get_polish_model_for_project('project') == 'qwen3.6-plus'
+    get_script.assert_called_once_with('project', greena.owner_profile_id)
+    get_series.assert_called_once_with('series', greena.owner_profile_id)

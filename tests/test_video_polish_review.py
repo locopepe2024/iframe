@@ -33,11 +33,14 @@ def test_preview_rejects_project_owned_by_another_profile(monkeypatch):
     monkeypatch.setattr(api.pipeline, "get_script", get_script)
     custom = Mock(return_value="private director context")
     monkeypatch.setattr(api, "_get_custom_prompt", custom)
+    resolve_model = Mock(return_value="private-model")
+    monkeypatch.setattr(api, "_resolve_video_polish_model", resolve_model)
     with pytest.raises(HTTPException) as rejected:
         api.preview_video_polish_prompt(api.PolishVideoPromptRequest(script_id="private", draft_prompt="shot"))
     assert rejected.value.status_code == 404
     get_script.assert_called_once_with("private", "other")
     custom.assert_not_called()
+    resolve_model.assert_not_called()
 
 
 def test_reviewed_edit_removes_director_constraint_from_actual_model_message(monkeypatch):
@@ -182,8 +185,8 @@ def test_minimax_ir_accepts_native_prompt_without_local_h3_headings(monkeypatch)
         draft_prompt="匪首踢中掌柜，掌柜撞桌倒地", optimizer_provider="minimax_context_ir",
         target_video_model="uniart/minimax-h3-vip", target_duration=4,
     )
-    confirmed, _ = _confirmed(request)
     monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
+    confirmed, _ = _confirmed(request)
     monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
     monkeypatch.setattr(uniart, "complete_context_ir", Mock(return_value=native_prompt))
 
