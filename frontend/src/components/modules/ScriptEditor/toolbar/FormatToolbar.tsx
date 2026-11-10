@@ -26,6 +26,8 @@ export interface FormatToolbarProps {
   onSave?: () => void;
   onOpenHistory?: () => void;
   canPersist?: boolean;
+  onRewriteSelection?: () => void;
+  canRewrite?: boolean;
 }
 
 export default function FormatToolbar({
@@ -35,6 +37,8 @@ export default function FormatToolbar({
   onSave,
   onOpenHistory,
   canPersist = false,
+  onRewriteSelection,
+  canRewrite = false,
 }: FormatToolbarProps) {
   const t = useTranslations('scriptEditor');
   const { currentFormat, currentRendering, setFormat, setRendering } = useFormatEngine();
@@ -133,15 +137,18 @@ export default function FormatToolbar({
       {/* Separator */}
       <div className="mx-1 h-5 w-px bg-white/10" />
 
-      {/* AI Tool (placeholder) */}
+      {/* Rewrite only the captured text selection. Preserve selection on click. */}
       <button
         type="button"
-        disabled
-        className="flex items-center gap-1 rounded px-2 py-1.5 text-xs text-zinc-500 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
-        aria-label={t('toolbar.ai')}
+        disabled={!canRewrite}
+        onMouseDown={event => event.preventDefault()}
+        onClick={onRewriteSelection}
+        className="flex min-h-9 items-center gap-1 rounded px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-40"
+        aria-label={t('rewrite.title')}
+        title={t('rewrite.selectHint')}
       >
         <Sparkles size={14} />
-        <span>AI</span>
+        <span>{t('rewrite.title')}</span>
       </button>
 
       {/* Document persistence */}

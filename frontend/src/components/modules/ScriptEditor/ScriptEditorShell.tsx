@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { EditorContent } from '@tiptap/react';
 import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X, ListPlus, FolderPlus, Library, WandSparkles, TextCursorInput } from 'lucide-react';
@@ -24,6 +24,8 @@ import { scriptEditorApi } from '@/lib/scriptEditorApi';
 import SnapshotListDialog from './dialogs/SnapshotListDialog';
 import ScriptWritingDialog from './dialogs/ScriptWritingDialog';
 import ScriptOutlineDialog from './dialogs/ScriptOutlineDialog';
+import ScriptRewriteDialog from './dialogs/ScriptRewriteDialog';
+import { captureEditorPassage, editorPassageIsCurrent, replaceEditorPassage, type EditorPassageSelection } from './utils/passageRewrite';
 import type { WritingWorkspace, ScriptWritingMode } from '@/lib/scriptEditorApi';
 import { PasteHintBar } from './components/PasteHintBar';
 import { ShortcutHelpPanel } from './components/ShortcutHelpPanel';
@@ -54,6 +56,7 @@ export default function ScriptEditorShell({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [seriesImportOpen, setSeriesImportOpen] = useState(false);
   const [scriptWritingOpen, setScriptWritingOpen] = useState(false);
+  const [rewritePassage, setRewritePassage] = useState<EditorPassageSelection | null>(null);
   const [scriptWritingMode, setScriptWritingMode] = useState<ScriptWritingMode>('expand_outline');
   const [seriesImportSaving, setSeriesImportSaving] = useState(false);
   const [seriesSourceText, setSeriesSourceText] = useState('');
@@ -67,10 +70,12 @@ export default function ScriptEditorShell({
   const { enabled: foldingEnabled, isAllExpanded, totalScenes: foldingTotal } = useSceneFolding(editor);
   const { mode: viewMode, setMode: setViewMode, isReadOnly, showToolbar, showSidebars } = useViewMode();
   const documentKey = scriptDocumentId || projectId;
+  const currentDocumentKey = useRef(documentKey);
+  currentDocumentKey.current = documentKey;
   const { hasNewerLocal, restoreFromLocal, dismissLocalRestore, isOffline } = useOfflineCache(documentKey, editor);
   const canPersist = Boolean(documentKey) && !documentLoading && !documentLoadFailed;
   const { save } = useAutoSave(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined, projectTitle);
-  const productionDisabled = !canPersist || isOffline || navigating || outlineOpen || scriptWritingOpen || seriesImportOpen || seriesImportSaving;
+  const productionDisabled = !canPersist || isOffline || navigating || outlineOpen || scriptWritingOpen || Boolean(rewritePassage) || seriesImportOpen || seriesImportSaving;
   const { isEntering: creatingProject, isChecking: checkingProduction, targetProjectId: productionProjectId, enterProduction: handleEnterProduction } = useProductionHandoff({
     editor, projectId, scriptDocumentId, title: projectTitle, canEnter: !productionDisabled, save,
   });
@@ -158,8 +163,10 @@ export default function ScriptEditorShell({
   }, [editor, projectId, scriptDocumentId, mode, refreshDerivation, t]);
 
   useEffect(() => {
-    editor?.setEditable(canPersist && !isReadOnly && !creatingProject && !navigating && !outlineOpen && !scriptWritingOpen);
-  }, [editor, canPersist, isReadOnly, creatingProject, navigating, outlineOpen, scriptWritingOpen]);
+    editor?.setEditable(canPersist && !isReadOnly && !creatingProject && !navigating && !outlineOpen && !scriptWritingOpen && !rewritePassage);
+  }, [editor, canPersist, isReadOnly, creatingProject, navigating, outlineOpen, scriptWritingOpen, rewritePassage]);
+
+  useEffect(() => { setRewritePassage(null); }, [documentKey]);
 
   const handleRestore = useCallback((content: object) => {
     if (!editor) return;
@@ -267,6 +274,29 @@ export default function ScriptEditorShell({
     toast.success(t('writing.applied'));
   }, [editor, canPersist, projectTitle, save, refreshDerivation, t]);
 
+  const openPassageRewrite = () => {
+    if (!editor || !canPersist || isReadOnly || productionDisabled) return;
+    const passage = captureEditorPassage(editor);
+    if (!passage) { toast.warning(t('rewrite.selectHint')); return; }
+    setRewritePassage(passage);
+  };
+
+  const applyPassageRewrite = async (replacement: string) => {
+    if (!editor || !rewritePassage || !canPersist) throw new Error(t('toolbar.saveFailed'));
+    const isCurrent = () => currentDocumentKey.current === documentKey && editorPassageIsCurrent(editor, rewritePassage);
+    if (!isCurrent()) throw new Error(t('rewrite.stale'));
+    const parsed = await scriptEditorApi.importDocument(new File([replacement], 'rewrite.fountain', { type: 'text/plain' }));
+    const blocks = parsed?.content?.content;
+    if (!Array.isArray(blocks) || !blocks.length) throw new Error(t('writing.parseFailed'));
+    if (!isCurrent()) throw new Error(t('rewrite.stale'));
+    const saved = await save(true);
+    if (!saved?.snapshot_created) throw new Error(t('rewrite.snapshotFailed'));
+    if (!isCurrent()) throw new Error(t('rewrite.stale'));
+    if (!replaceEditorPassage(editor, rewritePassage, blocks)) throw new Error(t('rewrite.stale'));
+    refreshDerivation();
+    toast.success(t('rewrite.applied'));
+  };
+
   const showLeft = mode === 'full' && !leftCollapsed && showSidebars;
   const showRight = mode === 'full' && !rightCollapsed && showSidebars;
   const hideAllSidebars = mode === 'focus' || viewMode === 'focus';
@@ -301,6 +331,8 @@ export default function ScriptEditorShell({
           onSave={() => { void handleSaveSnapshot(); }}
           onOpenHistory={() => setHistoryOpen(true)}
           canPersist={canPersist}
+          onRewriteSelection={openPassageRewrite}
+          canRewrite={!productionDisabled && !isReadOnly && !creatingProject}
         />
       )}
 
@@ -571,6 +603,8 @@ export default function ScriptEditorShell({
         episode={selectedEpisode}
         sourceText={editor?.getText({ blockSeparator: '\n' }) || ''}
       />
+      {rewritePassage && <ScriptRewriteDialog passage={rewritePassage} title={projectTitle || t('document.untitled')}
+        projectId={projectId} scriptDocumentId={scriptDocumentId} onClose={() => setRewritePassage(null)} onApply={applyPassageRewrite} />}
       {scriptDocumentId && (
         <SnapshotListDialog
           open={historyOpen}

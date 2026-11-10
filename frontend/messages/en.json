@@ -3124,6 +3124,29 @@
     }
   },
   "scriptEditor": {
+    "rewrite": {
+      "title": "Rewrite selection",
+      "close": "Close passage rewrite",
+      "hint": "Only the selected passage will change. Nearby text provides continuity. Uses the screenplay model in workspace generation settings.",
+      "instruction": "Revision instructions",
+      "placeholder": "For example: make her reaction more restrained, keeping the dialogue and second-person viewpoint.",
+      "tooLong": "The selection exceeds 12,000 characters. Select a shorter passage.",
+      "original": "Selected original",
+      "candidate": "Revised passage (editable)",
+      "candidateHint": "Enter instructions and generate a revision. The original stays until you confirm.",
+      "working": "Generating a revision; this may take a few minutes. The original has not changed.",
+      "reviewHint": "Review the revision before replacing. You can regenerate or discard it.",
+      "discard": "Discard revision",
+      "generate": "Generate revision",
+      "regenerate": "Regenerate",
+      "replace": "Replace selection",
+      "failed": "Passage rewrite failed. Retry or switch the screenplay model.",
+      "selectHint": "Select text in the screenplay or preview, then click Rewrite selection.",
+      "stale": "The source changed. Nothing was replaced. Close this dialog and select the passage again.",
+      "snapshotFailed": "Could not save a snapshot. The original was not replaced. Please retry.",
+      "applied": "Selection replaced. Undo or restore the previous snapshot to recover it.",
+      "undo": "Undo passage rewrite"
+    },
     "model": {
       "label": "Screenplay model",
       "hint": "Used for outline parsing, screenplay writing and continuation, and director analysis. Storyboard text analysis uses this default unless a model is selected separately.",
