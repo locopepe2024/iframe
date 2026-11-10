@@ -20,6 +20,42 @@ const profile = {
     sample_plan: [],
 };
 
+it("requires an explicit review of uncited claims and only saves on confirmation", async () => {
+    const draft = { ...profile, story_map: {
+        schema_version: 1, source_revision: 1, source_revision_id: "source-r1:test", fact_ledger_revision: null, people: [],
+        phases: [{ phase_id: "phase-1", order: 0, label: "Arrival", time_anchor: "", events: [{
+            event_id: "event-1", order: 0, title: "Meet", description: "They meet", character_ids: [],
+            dramatic_function: "", source_fact_ids: [], evidence_status: "explicit",
+        }] }],
+        relationship_arcs: [{ relationship_id: "arc-1", person_ids: [], label: "Trust", states: [{
+            phase_id: "phase-1", state: "Ally", trigger_event_ids: ["event-1"], source_fact_ids: [], evidence_status: "explicit",
+        }] }], story_threads: [],
+    } };
+    vi.spyOn(api, "getDirectorProfileDraft").mockResolvedValue({
+        project_id: "film", draft_revision: 5, source_revision: 1, draft, updated_at: 10,
+    } as never);
+    const apply = vi.spyOn(api, "applyDirectorProfile").mockResolvedValue(useProjectStore.getState().currentProject as never);
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
+    const toastError = vi.spyOn(toast, "error");
+    const review = await screen.findByRole("button", { name: "Mark uncited claims as Director interpretation" });
+    expect(screen.getByText(/2 claims are marked explicit/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Confirm Director interpretation/ }));
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(apply).not.toHaveBeenCalled();
+    expect(api.saveDirectorProfileDraft).not.toHaveBeenCalled();
+    fireEvent.click(review);
+    expect(screen.queryByRole("button", { name: "Mark uncited claims as Director interpretation" })).not.toBeInTheDocument();
+    expect(api.saveDirectorProfileDraft).not.toHaveBeenCalled();
+    expect(apply).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Confirm Director interpretation/ }));
+    await waitFor(() => expect(apply).toHaveBeenCalled());
+    const submitted = apply.mock.calls[0][1] as typeof draft;
+    expect(submitted.story_map.phases[0].events[0].evidence_status).toBe("interpretation");
+    expect(submitted.story_map.relationship_arcs[0].states[0].evidence_status).toBe("interpretation");
+    expect(submitted.story_map.relationship_arcs[0].states[0].state).toBe("Ally");
+    expect(draft.story_map.relationship_arcs[0].states[0].evidence_status).toBe("explicit");
+});
+
 beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(window, "prompt").mockReturnValue("Named draft");

@@ -143,11 +143,10 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialTe
         setError(null);
         try {
             if (!initialText) {
-                const project = await api.createProject(seriesTitle.trim(), "", true);
-                const imported = await scriptEditorApi.importDocument(project.id, file);
-                await scriptEditorApi.saveDocument(project.id, imported.content);
+                const imported = await scriptEditorApi.importDocument(file);
+                const document = await scriptEditorApi.createScriptDocument(seriesTitle.trim(), imported.content);
                 handleClose();
-                window.location.hash = `#/project/${project.id}/editor`;
+                window.location.hash = `#/studio/editor/${document.id}`;
                 return;
             }
             const result = await api.importFilePreview(file, suggestedEpisodes);

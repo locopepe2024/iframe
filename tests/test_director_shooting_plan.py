@@ -289,6 +289,54 @@ def test_shooting_plan_reports_bounded_model_contract_failure(response, category
     assert processor.llm.chat.call_count == 2
 
 
+@pytest.mark.parametrize('lighting,reason', [
+    ('左侧暖光', '必须是 JSON 对象'),
+    (['左侧暖光'], '必须是 JSON 对象'),
+    ({'direction': '左侧', 'color_temp': 'warm'}, '存在未知字段'),
+])
+def test_lighting_retry_identifies_invalid_shape_and_provides_canonical_schema(lighting, reason):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    invalid = valid_chunk()
+    invalid['scenes'][0]['beats'][0]['shots'][0]['lighting'] = lighting
+    processor.llm.chat.side_effect = [json.dumps(invalid), json.dumps(valid_chunk())]
+
+    result = processor.plan_director_shooting_chunk('场景原文', {}, {}, {})
+    assert result == valid_chunk()
+    prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
+    assert reason in prompt
+    schema = json.loads(prompt.split('<shot_lighting_schema>')[1].split('</shot_lighting_schema>')[0])
+    assert schema['additionalProperties'] is False
+    assert set(schema['properties']) == {'key_source', 'color_tone', 'contrast', 'practical_sources'}
+    assert schema['properties']['practical_sources']['type'] == 'array'
+    assert 'lighting 必须是对象' in prompt
+
+
+def test_shooting_plan_accepts_provider_commentary_but_retries_unknown_shot_field():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    invalid = valid_chunk()
+    invalid['scenes'][0]['beats'][0]['shots'][0]['performance_change'] = '靠近'
+    prefix = '（已激活逆向学习中---）方案\n\n'
+    processor.llm.chat.side_effect = [prefix + json.dumps(invalid), prefix + json.dumps(valid_chunk())]
+    assert processor.plan_director_shooting_chunk('场景原文', {}, {}, {}) == valid_chunk()
+    prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
+    assert '存在未知字段 performance_change' in prompt
+
+
+@pytest.mark.parametrize('response', [
+    '方案\n' + json.dumps(valid_chunk())[:-1],
+    json.dumps(valid_chunk()) + json.dumps(valid_chunk()),
+], ids=['truncated', 'multiple-results'])
+def test_shooting_plan_keeps_incomplete_and_multiple_json_invalid(response):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = response
+    with pytest.raises(DirectorShootingChunkError) as exc:
+        processor.plan_director_shooting_chunk('场景原文', {}, {}, {})
+    assert exc.value.category == 'invalid_json'
+
+
 def test_shooting_plan_passes_selected_polish_model_to_llm():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
@@ -1354,7 +1402,7 @@ def test_plan_api_keeps_large_resource_separate_and_confirms_without_touching_fr
             }])
             def preview_plan(project_id, **kwargs):
                 assert project_id == "film"
-                assert kwargs["model"] == "deepseek-v4.1-flash-peak"
+                assert kwargs["model"] == "llm-nf-all"  # Account screenplay choice supersedes the polish-only override.
                 assert kwargs["load_batches"]() == {}
                 assert kwargs["save_batch"](
                     0,

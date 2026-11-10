@@ -15,6 +15,13 @@ from ..utils import get_logger
 
 logger = get_logger(__name__)
 
+
+def _validate_provider(config: Dict[str, Any]) -> None:
+    from ..utils.provider_catalog import catalog_name
+
+    if catalog_name(config) == "greena":
+        raise ValueError("UniArt adapter provider does not match GreenA credentials")
+
 # AtlasCloud/Cangyuan routes consume URL arrays. NewToken Discount edits use
 # image_url objects instead; do not generalize that provider format to all SKUs.
 _URL_ARRAY_IMAGE_MODELS = frozenset({
@@ -24,6 +31,7 @@ _URL_ARRAY_IMAGE_MODELS = frozenset({
 
 
 def _base_url(config: Dict[str, Any]) -> str:
+    _validate_provider(config)
     return str(
         config.get("base_url")
         or config.get("UNIART_BASE_URL")
@@ -34,6 +42,7 @@ def _base_url(config: Dict[str, Any]) -> str:
 
 
 def _headers(config: Dict[str, Any]) -> Dict[str, str]:
+    _validate_provider(config)
     key = (
         config.get("api_key")
         or config.get("UNIART_API_KEY")
@@ -474,6 +483,7 @@ def _download_result(config: Dict[str, Any], data: Dict[str, Any], kind: str, ou
 class UniArtImageModel(ImageGenModel):
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
+        _validate_provider(self.config)
 
     def generate(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
         started = time.time()
@@ -533,6 +543,7 @@ class UniArtImageModel(ImageGenModel):
 class UniArtVideoModel(VideoGenModel):
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
+        _validate_provider(self.config)
 
     def generate(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
         started = time.time()

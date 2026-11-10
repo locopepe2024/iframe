@@ -1,4 +1,5 @@
 import json
+import hashlib
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -69,7 +70,7 @@ def test_visual_style_summary_distinguishes_animation_and_live_action_without_ch
 def test_director_prompt_marks_series_scope_separately_from_episode_scope():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.analyze_director_profile(
         "全剧资料。", {"characters": [], "scope": "series"}, {}
@@ -235,7 +236,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
     processor.llm.chat.side_effect = lambda **kwargs: (
         json.dumps({"summary": "短片段摘要", "continuity_in": "", "continuity_out": "", "facts": [], "open_threads": []}, ensure_ascii=False)
         if "<source_chunk" in kwargs["messages"][0]["content"]
-        else json.dumps(profile_payload(), ensure_ascii=False)
+        else json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
     )
 
     result = processor.refine_director_profile(
@@ -275,7 +276,7 @@ def test_director_refinement_prompt_contains_source_entities_style_draft_and_his
 def test_director_analysis_prompt_defines_bookend_as_optional_structure():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.analyze_director_profile(
         "开头：公墓。中段：战争往事。结尾：回到公墓。",
@@ -1114,7 +1115,7 @@ def test_bookend_narrative_is_an_explicit_scoped_constraint_not_a_global_style()
 
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.refine_director_profile(
         "开头：公墓。中段：战争往事。结尾：回到公墓。",
@@ -1586,7 +1587,7 @@ def test_director_source_split_preserves_exact_ranges_and_prefers_sentence_bound
 def test_short_director_source_stays_on_single_call_path():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
     source = "短剧本：开头、冲突、结尾。"
 
     processor.analyze_director_profile(source, {"characters": []}, {})
@@ -1602,7 +1603,7 @@ def test_short_director_source_stays_on_single_call_path():
 def test_director_analysis_with_audit_preserves_raw_response_and_direct_source_metadata():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    raw = json.dumps(profile_payload(), ensure_ascii=False)
+    raw = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
     processor.llm.chat.return_value = raw
 
     result = processor.analyze_director_profile_with_audit(
@@ -1627,7 +1628,7 @@ def test_director_analysis_with_audit_records_digest_and_map_notes():
         prompt = kwargs["messages"][0]["content"]
         if "<source_chunk" in prompt:
             return json.dumps({"summary": "场景摘要", "facts": ["人物进入"], "open_threads": []}, ensure_ascii=False)
-        return json.dumps(profile_payload(), ensure_ascii=False)
+        return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.llm.chat.side_effect = chat_side_effect
     result = processor.analyze_director_profile_with_audit(source, {"characters": []}, {})
@@ -1643,7 +1644,7 @@ def test_director_analysis_with_audit_records_digest_and_map_notes():
 def test_director_source_mode_can_force_direct_for_ab_comparison():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     processor.llm = Mock(is_configured=True)
-    processor.llm.chat.return_value = json.dumps(profile_payload(), ensure_ascii=False)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
     source = "长文本。" * 2000
 
     result = processor.analyze_director_profile_with_audit(
@@ -1666,7 +1667,7 @@ def test_director_source_mode_can_force_map_reduce_for_ab_comparison():
         prompt = kwargs["messages"][0]["content"]
         if "<source_chunk" in prompt:
             return json.dumps({"summary": "强制摘要", "facts": [], "open_threads": []}, ensure_ascii=False)
-        return json.dumps(profile_payload(), ensure_ascii=False)
+        return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.llm.chat.side_effect = chat_side_effect
     result = processor.analyze_director_profile_with_audit(
@@ -1716,7 +1717,7 @@ def test_long_director_source_uses_source_digest_and_reuses_map_cache():
                 "facts": ["人物关系发生变化"],
                 "open_threads": ["选择的后果尚未揭示"],
             }, ensure_ascii=False)
-        return json.dumps(profile_payload(), ensure_ascii=False)
+        return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.llm.chat.side_effect = chat_side_effect
     processor.analyze_director_profile(source, {"characters": []}, {})
@@ -1757,7 +1758,7 @@ def test_long_director_source_maps_chunks_concurrently_but_keeps_digest_order():
         nonlocal active, peak
         prompt = kwargs["messages"][0]["content"]
         if "<source_chunk" not in prompt:
-            return json.dumps(profile_payload(), ensure_ascii=False)
+            return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
         with lock:
             active += 1
             peak = max(peak, active)
@@ -1834,7 +1835,7 @@ def test_long_director_source_propagates_request_context_to_map_workers(monkeypa
         prompt = kwargs["messages"][0]["content"]
         if "<source_chunk" in prompt:
             return json.dumps({"summary": "摘要", "continuity_in": "", "continuity_out": "", "facts": [], "open_threads": []})
-        return json.dumps(profile_payload(), ensure_ascii=False)
+        return json.dumps({**profile_payload(), "story_map": valid_story_map()}, ensure_ascii=False)
 
     processor.llm.chat.side_effect = chat_side_effect
     token = request_owner.set("owner-a")
@@ -2012,3 +2013,162 @@ def test_analysis_serializes_optional_story_defaults_before_returning_to_visual_
     assert result['phases'][0]['events'][0]['dramatic_function'] == ''
     assert result['phases'][0]['events'][0]['source_fact_ids'] == []
     assert 'note' not in draft['story_map']['story_threads'][0]['milestones'][0]
+
+
+@pytest.mark.parametrize('refine', [False, True])
+def test_director_output_contract_defines_nested_ids_and_ledger_shape(refine):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = json.dumps({**profile_payload(), "story_map": valid_story_map()})
+    if refine:
+        processor.refine_director_profile('原文', {'characters': []}, {}, profile_payload(), ['保留原意'])
+    else:
+        processor.analyze_director_profile('原文', {'characters': []}, {})
+    prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
+    contract = prompt.split('<director_output_contract>', 1)[1].split('</director_output_contract>', 1)[0]
+    schema = json.loads(contract)
+    assert ('story_map' in schema['required']) is (not refine)
+    assert schema['properties']['story_map'] == {'$ref': '#/$defs/DirectorStoryMap'}
+    definitions = schema['$defs']
+    assert set(definitions['DirectorStoryMap']['required']) == {'schema_version', 'phases', 'relationship_arcs', 'story_threads'}
+    for name in ('DirectorStoryEvent', 'DirectorRelationshipState'):
+        claim = definitions[name]
+        if refine:
+            rule = claim['allOf'][0]
+            assert rule['if']['properties']['evidence_status']['const'] == 'explicit'
+            assert rule['then']['properties']['source_fact_ids']['minItems'] == 1
+        else:
+            assert 'explicit' not in claim['properties']['evidence_status']['enum']
+            assert claim['properties']['source_fact_ids']['maxItems'] == 0
+    arc = definitions['DirectorRelationshipArc']
+    thread = definitions['DirectorStoryThread']
+    assert 'relationship_id' in arc['required']
+    assert arc['properties']['person_refs']['type'] == 'array'
+    assert 'thread_id' in thread['required']
+    assert thread['properties']['milestones']['items']['$ref'].endswith('/DirectorStorylineMilestone')
+    assert 'event_id' in definitions['DirectorStorylineMilestone']['required']
+    assert 'source_revision' not in definitions['DirectorStoryMap']['required']
+    assert schema['properties']['canon_state']['type'] == 'object'
+    assert schema['properties']['canon_state']['properties']['events']['type'] == 'array'
+    assert 'milestones 不能是字符串数组' in prompt
+    assert 'role 位于每个 milestone 对象内' in prompt
+
+
+def test_director_validation_failure_reports_fields_without_model_content():
+    pipeline, script = make_pipeline()
+    payload = profile_payload()
+    payload['story_map'] = valid_story_map()
+    payload['story_map'].pop('source_revision_id')
+    payload['story_map'].pop('source_revision')
+    payload['story_map']['relationship_arcs'] = [{'person_refs': ['沈夏', '周涵'], 'states': []}]
+    payload['story_map']['story_threads'] = [{'milestones': ['event-meet']}]
+    pipeline.script_processor.analyze_director_profile_with_audit.return_value = {
+        'profile': payload, 'source_audit': {'raw_response': 'PRIVATE_DIRECTOR_RESPONSE'},
+    }
+    with pytest.raises(ValueError) as exc:
+        pipeline.preview_director_profile_with_audit(script.id)
+    message = str(exc.value)
+    assert 'story_map.relationship_arcs.0.relationship_id：缺少必填字段' in message
+    assert 'story_map.story_threads.0.thread_id：缺少必填字段' in message
+    assert 'story_map.story_threads.0.milestones.0：应为对象' in message
+    assert 'input_value' not in message
+    assert 'pydantic.dev' not in message
+    assert 'PRIVATE_DIRECTOR_RESPONSE' not in message
+    assert exc.value.director_audit['admission_status'] == 'blocked'
+    pipeline._save_data.assert_not_called()
+
+
+@pytest.mark.parametrize('value', [None, [], 'omitted'])
+def test_new_director_generation_rejects_missing_story_map(value):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    payload = profile_payload()
+    if value != 'omitted':
+        payload['story_map'] = value
+    processor.llm.chat.return_value = json.dumps(payload)
+    with pytest.raises(RuntimeError, match='缺少 story_map 故事结构对象'):
+        processor.analyze_director_profile('原文', {'characters': []}, {})
+    assert processor.llm.chat.call_count == 1
+
+
+@pytest.mark.parametrize('kind', ['event', 'relationship'])
+def test_director_confirmation_explains_uncited_explicit_claim_and_preserves_guard(kind):
+    pipeline, script = make_pipeline()
+    story_map = valid_story_map()
+    story_map['relationship_arcs'] = [{'relationship_id': 'arc-1', 'states': [{'phase_id': 'phase-campus'}]}]
+    claim = story_map['phases'][0]['events'][0] if kind == 'event' else story_map['relationship_arcs'][0]['states'][0]
+    claim['evidence_status'] = 'explicit'
+    claim['source_fact_ids'] = []
+    with pytest.raises(ValueError, match='导演解读'):
+        pipeline._validate_director_story_map_for_confirmation(story_map)
+    claim['evidence_status'] = 'interpretation'
+    pipeline._validate_director_story_map_for_confirmation(story_map)
+    assert not script.fact_ledger_revisions
+
+
+def test_failed_director_request_does_not_reuse_previous_raw_response():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.side_effect = [json.dumps({'story_map': valid_story_map()}), RuntimeError('Upstream SSE error')]
+    processor.analyze_director_profile_with_audit('first source', {}, {})
+    with pytest.raises(RuntimeError) as raised:
+        processor.analyze_director_profile_with_audit('second source', {}, {})
+    audit = raised.value.director_audit
+    assert audit['raw_response'] == ''
+    assert audit['raw_response_received'] is False
+    assert audit['source_sha256'] == hashlib.sha256(b'second source').hexdigest()
+    assert audit['failure_stage'] == 'provider_response'
+
+
+def test_concurrent_director_failures_keep_their_own_response_and_source():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    failed_waiting = threading.Event()
+    other_completed = threading.Event()
+
+    def respond(**kwargs):
+        source = kwargs['messages'][0]['content']
+        if '<script>failing source</script>' in source:
+            failed_waiting.set()
+            assert other_completed.wait(3)
+            raise RuntimeError('SSE failure')
+        assert failed_waiting.wait(3)
+        return '{"story_map": {}}'
+
+    processor.llm.chat.side_effect = respond
+    def fail():
+        try:processor.analyze_director_profile_with_audit('failing source', {}, {})
+        except RuntimeError as exc:return exc.director_audit
+        pytest.fail('Expected failure')
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        failed = pool.submit(fail)
+        try:
+            success = processor.analyze_director_profile_with_audit('successful source', {}, {})
+        finally:
+            other_completed.set()
+        audit = failed.result(timeout=3)
+    assert audit['raw_response'] == ''
+    assert audit['source_sha256'] != success['source_audit']['source_sha256']
+    assert success['source_audit']['raw_response'] == '{"story_map": {}}'
+
+
+@pytest.mark.parametrize('scope', ['episode', 'series'])
+def test_director_pipeline_prefers_exception_local_audit_over_stale_processor_data(scope):
+    pipeline, script = make_pipeline()
+    request_audit = {'source_mode': 'direct', 'raw_response': '', 'raw_response_received': False,
+                     'failure_stage': 'provider_response', 'source_sha256': 'current-source'}
+    error = RuntimeError('Upstream SSE error')
+    error.director_audit = request_audit
+    pipeline.script_processor.analyze_director_profile_with_audit.side_effect = error
+    pipeline.script_processor._last_director_source_audit = {'source_sha256': 'previous-source'}
+    pipeline.script_processor._last_director_raw_response = 'PREVIOUS_PRIVATE_RESPONSE'
+    if scope == 'series':
+        pipeline.series_store = {'series': Series(id='series', title='Test', created_at=1, updated_at=1)}
+        pipeline.get_series_episodes = Mock(return_value=[script])
+    with pytest.raises(RuntimeError) as caught:
+        if scope == 'series':pipeline.preview_series_director_profile('series')
+        else:pipeline.preview_director_profile_with_audit(script.id)
+    assert caught.value.director_audit['raw_response'] == ''
+    assert caught.value.director_audit['source_sha256'] == 'current-source'
+    assert caught.value.director_audit['failure_stage'] == 'provider_response'
+    pipeline._save_data.assert_not_called()

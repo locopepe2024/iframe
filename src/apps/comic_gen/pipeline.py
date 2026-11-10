@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional, Tuple
+from pydantic import ValidationError
 from src.apps.director_skills import provenance as director_skill_provenance
 
 import hashlib
@@ -1355,6 +1356,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         series_id: Optional[str] = None,
         owner_user_id: Optional[str] = None,
         owner_profile_id: Optional[str] = None,
+        source_script_document_id: Optional[str] = None,
     ) -> Script:
         """Step 1: Parse novel and create project.
 
@@ -1376,6 +1378,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script.workflow_mode = workflow_mode
         script.owner_user_id = owner_user_id
         script.owner_profile_id = owner_profile_id
+        script.source_script_document_id = source_script_document_id
         self._record_source_text(script, script.original_text)
         self.stamp_owned_children(script)
         self.scripts[script.id] = script
@@ -3719,8 +3722,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 source, entities, style, "auto"
             )
         except Exception as exc:
-            audit = getattr(self.script_processor, "_last_director_source_audit", {})
-            raw = getattr(self.script_processor, "_last_director_raw_response", "")
+            audit = getattr(exc, "director_audit", None)
+            if not isinstance(audit, dict):
+                audit = getattr(self.script_processor, "_last_director_source_audit", {})
+            raw = (audit["raw_response"] if isinstance(audit, dict) and "raw_response" in audit
+                   else getattr(self.script_processor, "_last_director_raw_response", ""))
             if isinstance(audit, dict):
                 audit = dict(audit)
                 if raw:
@@ -4287,15 +4293,29 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._last_director_analysis_audit = source_audit
             return {"profile": normalized, "source_audit": source_audit}
         except Exception as exc:
-            if not source_audit:
+            request_audit = getattr(exc, "director_audit", None)
+            if isinstance(request_audit, dict):
+                source_audit = request_audit
+            elif not source_audit:
                 source_audit = getattr(self.script_processor, "_last_director_source_audit", {})
-            raw = getattr(self.script_processor, "_last_director_raw_response", "")
+            raw = (source_audit["raw_response"] if isinstance(source_audit, dict) and "raw_response" in source_audit
+                   else getattr(self.script_processor, "_last_director_raw_response", ""))
             if isinstance(source_audit, dict):
                 source_audit = dict(source_audit)
                 if raw:
                     source_audit["raw_response"] = raw
                 source_audit["normalization_status"] = "needs_review"
                 source_audit["admission_status"] = "blocked"
+            if isinstance(exc, ValidationError):
+                labels = {"missing": "缺少必填字段", "list_type": "应为数组", "model_type": "应为对象",
+                          "dict_type": "应为对象", "string_type": "应为文本"}
+                fields = [".".join(map(str, item["loc"])) + "：" + labels.get(item["type"], "字段格式或引用无效")
+                          for item in exc.errors(include_input=False, include_url=False)]
+                # Keep model prose out of public errors while retaining the
+                # original response in the owner-scoped audit for diagnosis.
+                error = ValueError("导演返回结构不完整：" + "；".join(fields[:6]))
+                error.director_audit = source_audit
+                raise error from None
             try:
                 setattr(exc, "director_audit", source_audit)
             except Exception:
@@ -4597,11 +4617,17 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if not str(event.get("description", "")).strip():
                     raise ValueError("Describe every story event before confirming the story map")
                 if event.get("evidence_status") == "explicit" and not event.get("source_fact_ids"):
-                    raise ValueError("Explicit story events must link confirmed Fact Ledger entries")
+                    raise ValueError(
+                        f"故事事件 {event.get('event_id', '')} 标为“已证实”但未关联已确认的事实账本条目；"
+                        "请关联事实，或将证据状态改为“导演解读”后再确认。"
+                    )
         for arc in story_map.get("relationship_arcs", []):
             for state in arc.get("states", []):
                 if state.get("evidence_status") == "explicit" and not state.get("source_fact_ids"):
-                    raise ValueError("Explicit relationship states must link confirmed Fact Ledger entries")
+                    raise ValueError(
+                        f"人物关系 {arc.get('relationship_id', '')} / 阶段 {state.get('phase_id', '')} "
+                        "标为“已证实”但未关联已确认的事实账本条目；请关联事实，或将证据状态改为“导演解读”后再确认。"
+                    )
         for thread in story_map.get("story_threads", []):
             if not str(thread.get("label", "")).strip():
                 raise ValueError("Name every story thread before confirming the story map")
@@ -6496,7 +6522,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script, entities_json, prompt = self.storyboard_analysis_context(
             script_id, include_plan=not (expected_lineage and expected_lineage.storyboard_mode == "script"),
         )
-        selected_model = model if model is not None else self.get_effective_polish_model(script)
+        selected_model = model if model is not None else self.get_effective_storyboard_model(script)
         source_range = self._source_range_for_text(script, text)
         confirmed_director_profile = self.effective_director_profile(script)
         director_profile = self.director_execution_context(
@@ -6584,7 +6610,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         script, entities_json, prompt = self.storyboard_analysis_context(
             script_id, include_plan=not (lineage and lineage.storyboard_mode == "script"),
         )
-        selected_model = model if model is not None else self.get_effective_polish_model(script)
+        selected_model = model if model is not None else self.get_effective_storyboard_model(script)
         if lineage and lineage.status == "pinned":
             self.validate_storyboard_lineage(script_id, text, lineage)
         if skill_snapshot is not None:
@@ -6718,7 +6744,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             director_profile=director_profile,
             visual_style=self.storyboard_visual_style(script),
             source_range=source_range,
-            model=self.get_effective_polish_model(script) or None,
+            model=self.get_effective_storyboard_model(script) or None,
         )
 
         if not raw_frames:
@@ -13090,6 +13116,12 @@ class ComicGenPipeline(StudioOwnerMixin):
             target.updated_at = time.time()
             self._save_series_data_unlocked()
             return target, imported_ids, skipped_ids
+
+    def get_effective_storyboard_model(self, episode: Script) -> str:
+        """An explicit episode/series model wins over the account screenplay default."""
+        from ..studio_access import studio_script_model
+
+        return self.get_effective_polish_model(episode) or studio_script_model() or ""
 
     def get_effective_polish_model(self, episode: Script) -> str:
         """Resolve the LLM model selected for an episode or its series."""

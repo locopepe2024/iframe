@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
     })),
     error: vi.fn(), success: vi.fn(),
 }));
-vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
+vi.mock("next-intl", () => ({ useTranslations: () => (key: string, values?: { count: number }) => key === "frameAppearances" ? `Shots: ${values?.count}` : key }));
 vi.mock("@/lib/api", () => ({ API_URL: "", authenticatedFetch: mocks.authenticatedFetch, agentRequest: mocks.agentRequest, api: mocks, crudApi: mocks }));
 vi.mock("@/store/toastStore", () => ({ toast: { error: mocks.error, success: mocks.success, warning: vi.fn() } }));
 vi.mock("./CharacterWorkbench", () => ({ default: ({ asset, onRename, onGenerate, onUpdateAttributes }: any) =>
@@ -97,6 +97,26 @@ it("shows crowd performers in the normal character asset grid", () => {
     expect(screen.queryByText("No characters found")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("玄宸阁随行探子"));
     expect(screen.getByRole("dialog", { name: "角色工作台" })).toBeInTheDocument();
+});
+
+it("shows per-frame appearances and voice status in the unified asset workbench", () => {
+    useProjectStore.setState({ currentProject: { id: "episode-1",
+        characters: [{ id: "hero", name: "Hero", voice_id: "voice-a" }],
+        scenes: [{ id: "room", name: "Room" }], props: [{ id: "book", name: "Book" }],
+        frames: [
+            { id: "frame-1", character_ids: ["hero", "hero"], scene_id: "room", prop_ids: ["book", "book"] },
+            { id: "frame-2", character_ids: ["hero"], scene_id: "room", prop_ids: [] },
+        ],
+    } as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    render(<ConsistencyVault />);
+    expect(screen.getByText("Shots: 2")).toBeInTheDocument();
+    expect(screen.getByText("voiceBound")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Scenes/ }));
+    expect(screen.getByText("Shots: 2")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Props/ }));
+    expect(screen.getByText("Shots: 1")).toBeInTheDocument();
+    expect(screen.queryByText("voiceBound")).not.toBeInTheDocument();
 });
 
 it("saves only character design and retains current assets without refetching the project", async () => {

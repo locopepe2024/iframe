@@ -29,6 +29,9 @@ _studio_user: ContextVar[Optional[UserContext]] = ContextVar(
 _studio_uniart: ContextVar[Optional[Dict[str, str]]] = ContextVar(
     "iframe_studio_uniart", default=None
 )
+_studio_script_model: ContextVar[Optional[str]] = ContextVar(
+    "iframe_studio_script_model", default=None
+)
 STUDIO_MEDIA_PREVIEW_SIZES = frozenset({160, 320, 512, 960})
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,18 @@ def set_studio_user(user: UserContext) -> Token:
 
 def reset_studio_user(token: Token) -> None:
     _studio_user.reset(token)
+
+
+def set_studio_script_model(model: Optional[str]) -> Token:
+    return _studio_script_model.set(model)
+
+
+def reset_studio_script_model(token: Token) -> None:
+    _studio_script_model.reset(token)
+
+
+def studio_script_model() -> Optional[str]:
+    return _studio_script_model.get()
 
 
 def set_studio_uniart_config(config: Dict[str, str]) -> Token:
@@ -83,6 +98,25 @@ def studio_uniart_config() -> Dict[str, str]:
 def studio_nsfw_new_one_config() -> Dict[str, str]:
     user = require_studio_user()
     return runtime_nsfw_for_owner(user.user_id, user.owner_profile_id)
+
+
+def runtime_gateway_for_owner(owner_user_id: str, owner_profile_id: str, provider: str) -> Dict[str, str]:
+    """Resolve an explicit gateway; runtime_uniart_for_owner means active gateway."""
+    from .user_config import get_user_config_store
+
+    identity = UserContext(owner_user_id, owner_profile_id, owner_user_id, "")
+    return get_user_config_store().get_runtime_gateway(identity, provider)
+
+
+def studio_gateway_config(provider: str) -> Dict[str, str]:
+    from ..utils.provider_catalog import catalog_name
+
+    provider = "greena" if provider == "nsfw" else provider
+    configured = _studio_uniart.get()
+    if configured and catalog_name(configured) == provider:
+        return dict(configured)
+    user = require_studio_user()
+    return runtime_gateway_for_owner(user.user_id, user.owner_profile_id, provider)
 
 
 def runtime_nsfw_for_owner(owner_user_id: str, owner_profile_id: str) -> Dict[str, str]:

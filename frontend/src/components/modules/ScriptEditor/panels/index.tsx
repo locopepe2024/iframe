@@ -3,7 +3,7 @@
 import { useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Camera, Workflow, MapPin, Package, StickyNote, Sparkles, Lock, Unlock } from 'lucide-react';
+import { Users, Camera, Workflow, StickyNote, Sparkles, Lock, Unlock } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 import { useEditorStore } from '@/store/editorStore';
 import CharacterPanel from './CharacterPanel';
@@ -19,15 +19,18 @@ export interface RightPanelContainerProps {
   mode?: 'full' | 'embedded' | 'focus';
   projectId?: string;
   onEnterPipeline?: () => void;
+  productionDisabled?: boolean;
+  productionProjectId?: string;
+  productionPending?: boolean;
 }
 
-type PanelTab = 'characters' | 'shots' | 'pipeline' | 'locations' | 'props' | 'notes' | 'ai';
+type PanelTab = 'entities' | 'shots' | 'pipeline' | 'notes' | 'ai';
+type EntityPanel = 'characters' | 'locations' | 'props';
 
 interface TabDef {
   id: PanelTab;
   label: string;
   icon: React.ReactNode;
-  group: 'primary' | 'secondary';
 }
 
 export default function RightPanelContainer({
@@ -35,26 +38,28 @@ export default function RightPanelContainer({
   mode = 'full',
   projectId,
   onEnterPipeline,
+  productionDisabled,
+  productionProjectId,
+  productionPending,
 }: RightPanelContainerProps) {
   const t = useTranslations('scriptEditor');
   const activePanel = useEditorStore((s) => s.activeRightPanel);
   const setActivePanel = useEditorStore((s) => s.setActiveRightPanel);
   const panelLocked = useEditorStore((s) => s.rightPanelLocked);
   const setRightPanelLocked = useEditorStore((s) => s.setRightPanelLocked);
+  const entityPanel = (['characters', 'locations', 'props'].includes(activePanel) ? activePanel : 'characters') as EntityPanel;
 
   const ALL_TABS: TabDef[] = [
-    { id: 'characters', label: t('panels.characters'), icon: <Users size={14} />, group: 'primary' },
-    { id: 'shots', label: t('panels.shots'), icon: <Camera size={14} />, group: 'primary' },
-    { id: 'pipeline', label: t('panels.pipeline'), icon: <Workflow size={14} />, group: 'primary' },
-    { id: 'locations', label: t('panels.locations'), icon: <MapPin size={14} />, group: 'secondary' },
-    { id: 'props', label: t('panels.props'), icon: <Package size={14} />, group: 'secondary' },
-    { id: 'notes', label: t('panels.notes'), icon: <StickyNote size={14} />, group: 'secondary' },
-    { id: 'ai', label: t('panels.aiCompletion'), icon: <Sparkles size={14} />, group: 'secondary' },
+    { id: 'entities', label: t('panels.entities'), icon: <Users size={14} /> },
+    { id: 'shots', label: t('panels.shots'), icon: <Camera size={14} /> },
+    { id: 'pipeline', label: t('panels.pipeline'), icon: <Workflow size={14} /> },
+    { id: 'notes', label: t('panels.notes'), icon: <StickyNote size={14} /> },
+    { id: 'ai', label: t('panels.aiCompletion'), icon: <Sparkles size={14} /> },
   ];
 
   const TABS_EMBEDDED: TabDef[] = [
-    { id: 'shots', label: t('panels.shots'), icon: <Camera size={14} />, group: 'primary' },
-    { id: 'pipeline', label: t('panels.pipeline'), icon: <Workflow size={14} />, group: 'primary' },
+    { id: 'shots', label: t('panels.shots'), icon: <Camera size={14} /> },
+    { id: 'pipeline', label: t('panels.pipeline'), icon: <Workflow size={14} /> },
   ];
 
   const togglePanelLock = useCallback(() => {
@@ -68,8 +73,9 @@ export default function RightPanelContainer({
   const currentTab: PanelTab = (() => {
     const valid = tabs.find((t) => t.id === activePanel);
     if (valid) return valid.id;
+    if (!isEmbedded && ['characters', 'locations', 'props'].includes(activePanel)) return 'entities';
     // Default fallback
-    return isEmbedded ? 'shots' : 'characters';
+    return isEmbedded ? 'shots' : 'entities';
   })();
 
   const handleTabChange = useCallback(
@@ -108,14 +114,10 @@ export default function RightPanelContainer({
     };
   }, [editor, panelLocked, isEmbedded, setActivePanel]);
 
-  const primaryTabs = tabs.filter((t) => t.group === 'primary');
-  const secondaryTabs = tabs.filter((t) => t.group === 'secondary');
-
   return (
     <div className="flex h-full flex-col">
-      {/* Tab bar - Primary group */}
       <div className="flex shrink-0 border-b border-white/10">
-        {primaryTabs.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -153,36 +155,19 @@ export default function RightPanelContainer({
         </button>
       </div>
 
-      {/* Tab bar - Secondary group */}
-      {secondaryTabs.length > 0 && (
-        <div className="flex shrink-0 border-b border-white/5 bg-zinc-900/30">
-          {secondaryTabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => handleTabChange(tab.id)}
-              className={`relative flex flex-1 items-center justify-center gap-1 px-2 py-2 text-xs font-medium transition-colors ${
-                currentTab === tab.id
-                  ? 'text-foreground'
-                  : 'text-text-muted hover:text-text-secondary'
-              }`}
-            >
-              {tab.icon}
-              {tab.label}
-              {currentTab === tab.id && (
-                <motion.div
-                  layoutId="panel-tab-indicator-secondary"
-                  className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-teal-500"
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                />
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* Panel content */}
       <div className="flex-1 overflow-y-auto">
+        {currentTab === 'entities' && !isEmbedded && (
+          <div className="flex shrink-0 border-b border-white/5 bg-zinc-900/30" role="tablist" aria-label={t('panels.entities')}>
+            {(['characters', 'locations', 'props'] as const).map((tab) => (
+              <button key={tab} type="button" role="tab" aria-selected={entityPanel === tab}
+                onClick={() => setActivePanel(tab)}
+                className={`min-h-10 flex-1 border-b-2 px-2 text-xs font-medium transition-colors ${entityPanel === tab ? 'border-teal-500 text-foreground' : 'border-transparent text-text-muted hover:text-text-secondary'}`}>
+                {t(`panels.${tab}`)}
+              </button>
+            ))}
+          </div>
+        )}
         <AnimatePresence mode="wait">
           <motion.div
             key={currentTab}
@@ -191,7 +176,7 @@ export default function RightPanelContainer({
             exit={{ opacity: 0, x: -10 }}
             transition={{ duration: 0.15 }}
           >
-            {currentTab === 'characters' && !isEmbedded && (
+            {currentTab === 'entities' && entityPanel === 'characters' && !isEmbedded && (
               <CharacterPanel editor={editor} />
             )}
             {currentTab === 'shots' && (
@@ -199,14 +184,16 @@ export default function RightPanelContainer({
             )}
             {currentTab === 'pipeline' && (
               <PipelinePanel
-                projectId={projectId}
+                projectId={productionProjectId || projectId}
                 onEnterPipeline={onEnterPipeline}
+                disabled={productionDisabled}
+                isEntering={productionPending}
               />
             )}
-            {currentTab === 'locations' && !isEmbedded && (
+            {currentTab === 'entities' && entityPanel === 'locations' && !isEmbedded && (
               <LocationPanel editor={editor} />
             )}
-            {currentTab === 'props' && !isEmbedded && (
+            {currentTab === 'entities' && entityPanel === 'props' && !isEmbedded && (
               <PropsPanel editor={editor} />
             )}
             {currentTab === 'notes' && !isEmbedded && (

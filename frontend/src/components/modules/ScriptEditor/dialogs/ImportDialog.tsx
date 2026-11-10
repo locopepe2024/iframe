@@ -80,7 +80,7 @@ export default function ImportDialog({ open, onClose, projectId, onImportSuccess
     setErrorMsg('')
 
     try {
-      const result = await scriptEditorApi.importDocument(projectId, file)
+      const result = await scriptEditorApi.importProjectDocument(projectId, file)
       // Count scenes in the result
       const content = result.content || result
       const scenes = (content.content || []).filter(

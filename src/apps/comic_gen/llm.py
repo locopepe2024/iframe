@@ -9,7 +9,7 @@ import logging
 import traceback
 import re
 from concurrent.futures import ThreadPoolExecutor
-from contextvars import copy_context
+from contextvars import ContextVar, copy_context
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -26,7 +26,10 @@ from .models import (
     DIRECTOR_EXECUTION_SUMMARY_MAX_CHARS,
     build_director_refinement_context,
     director_execution_payload,
+    DirectorPlanLighting,
+    DirectorProfile,
 )
+from ...utils.llm_json import parse_model_json_object
 
 
 class DirectorShootingChunkError(RuntimeError):
@@ -36,6 +39,59 @@ class DirectorShootingChunkError(RuntimeError):
         self.category = category
         self.public_reason = reason[:180]
         super().__init__(f"拍摄计划模型结果连续两次未通过校验：{self.public_reason}")
+
+
+class SceneBasisFormatError(ValueError):
+    """A field-specific extraction error that permits one model correction."""
+
+
+def _director_profile_output_contract(*, partial: bool = False) -> str:
+    """Keep the model's nested field contract derived from runtime validation."""
+    schema = DirectorProfile.model_json_schema()
+    for key in ("revision", "content_hash", "confirmed_at", "creative_skill_run"):
+        schema["properties"].pop(key, None)
+    # Storage accepts legacy profiles without a story map; new generation
+    # must produce it. A nullable/defaulted storage schema is insufficient.
+    schema["required"] = [] if partial else list(schema["properties"])
+    schema["properties"]["story_map"] = {"$ref": "#/$defs/DirectorStoryMap"}
+    story_map = schema["$defs"]["DirectorStoryMap"]
+    server_fields = {"people", "source_revision", "source_revision_id", "fact_ledger_revision"}
+    for key in server_fields:
+        story_map["properties"].pop(key, None)
+    story_map["required"] = ["schema_version", "phases", "relationship_arcs", "story_threads"]
+    for name in ("DirectorStoryEvent", "DirectorRelationshipState"):
+        claim = schema["$defs"][name]
+        if partial:
+            claim["allOf"] = [{
+                "if": {"properties": {"evidence_status": {"const": "explicit"}}, "required": ["evidence_status"]},
+                "then": {"properties": {"source_fact_ids": {"minItems": 1}}, "required": ["source_fact_ids"]},
+            }]
+        else:
+            claim["properties"]["evidence_status"]["enum"] = ["interpretation", "uncertain", "conflicted"]
+            claim["properties"]["source_fact_ids"]["maxItems"] = 0
+    # The ledger is stored as a bounded dictionary, so specify its category
+    # shapes here rather than leaving the schema's generic object ambiguous.
+    schema["properties"]["canon_state"] = {
+        "type": "object", "additionalProperties": False,
+        "properties": {key: {"type": "array", "items": {"type": "object"}} for key in (
+            "characters", "relationships", "world_rules", "timeline", "events", "open_threads", "conflicts", "uncertainties")},
+    }
+    requirement = ("仅返回发生变化的顶层字段；若修改 story_map，必须返回完整的 story_map 对象，不能为 null；"
+                   if partial else "story_map 为必填对象，不能省略或为 null；")
+    return (
+        "嵌套字段必须遵守以下 JSON Schema（来源版本、people 和事实账本版本由服务端绑定，不要生成）：\n"
+        "<director_output_contract>" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+        + "</director_output_contract>\n"
+        '必须输出实际 Director 数据对象，不能输出 Schema 本身。' + requirement +
+        '必须保留 phases、relationship_arcs、story_threads，不能以 timeline/relationships/key_events 代替 story_map。'
+        'relationship_arcs 每项必须含非空 relationship_id；story_threads 每项必须含非空 thread_id。'
+        'person_refs、character_refs 必须为字符串数组，不是逗号分隔的单个字符串。'
+        'milestones 不能是字符串数组；role 位于每个 milestone 对象内，不在 thread 上。'
+        '例如：{"thread_id":"thread-main","milestones":[{"event_id":"event-1","role":"setup","note":""}]}。'
+        '所有 phase_id/event_id 引用须对应本次 story_map 中的实际条目。'
+        'canon_state 必须是按分类组织的对象，例如 {"events":[{"subject":"角色","value":"原文支持的事件",'
+        '"source_refs":[],"status":"uncertain"}]}，没有事实时用 {}，不能返回平铺事实数组。'
+    )
 
 
 def _strip_markdown_json(content: str) -> str:
@@ -901,10 +957,36 @@ def assemble_storyboard_polish_message(draft_prompt: str, assets: List[Dict[str,
 
 
 class ScriptProcessor:
+    # The processor is shared by multiple background workers. Evidence must
+    # follow the request context, including failures that return no body.
+    @property
+    def _last_director_raw_response(self) -> str:
+        context = self.__dict__.get("_director_raw_context")
+        return context.get() if context is not None else ""
+
+    @_last_director_raw_response.setter
+    def _last_director_raw_response(self, value: str) -> None:
+        context = self.__dict__.setdefault(
+            "_director_raw_context", ContextVar("director_raw_response", default="")
+        )
+        context.set(value)
+
+    @property
+    def _last_director_source_audit(self) -> Dict[str, Any]:
+        context = self.__dict__.get("_director_source_context_state")
+        return (context.get() or {}) if context is not None else {}
+
+    @_last_director_source_audit.setter
+    def _last_director_source_audit(self, value: Dict[str, Any]) -> None:
+        context = self.__dict__.setdefault(
+            "_director_source_context_state", ContextVar("director_source_audit", default=None)
+        )
+        context.set(dict(value))
+
     def __init__(self, api_key: str = None):
         self._api_key = api_key
-        from .llm_adapter import LLMAdapter
-        self.llm = LLMAdapter()
+        from .llm_adapter import LLMAdapter, get_script_writing_model
+        self.llm = LLMAdapter(default_model=get_script_writing_model(), use_script_model=True)
         # Long Director sources are expensive to map. Keep only compact source
         # digests in-process; the raw script remains owned by Script storage.
         self._director_source_cache: Dict[str, str] = {}
@@ -952,7 +1034,7 @@ class ScriptProcessor:
                 data = json.loads(_strip_markdown_json(content))
                 self._require_scene_baselines(data)
             self._require_crowd_coverage(text, data)
-            return self._create_script_from_data(title, text, data)
+            return self._create_script_with_basis_correction(title, text, data, prompt)
                 
         except json.JSONDecodeError as e:
             error_msg = f"LLM 返回的数据格式错误，无法解析 JSON: {e}"
@@ -994,7 +1076,7 @@ class ScriptProcessor:
                 raise ValueError("修订结果缺少 characters、scenes 或 props")
             self._require_scene_baselines(data)
             self._require_crowd_coverage(text, data)
-            return self._create_script_from_data(title, text, data)
+            return self._create_script_with_basis_correction(title, text, data, prompt)
         except json.JSONDecodeError as exc:
             raise RuntimeError(f"LLM 返回的数据格式错误，无法解析 JSON: {exc}") from exc
         except ValueError:
@@ -1008,6 +1090,27 @@ class ScriptProcessor:
             error_msg = f"剧本解析失败: {str(e)}"
             logger.error(error_msg, exc_info=True)
             raise RuntimeError(error_msg)
+
+    def _create_script_with_basis_correction(self, title: str, text: str, data: dict, prompt: str) -> Script:
+        try:
+            return self._create_script_from_data(title, text, data)
+        except SceneBasisFormatError as exc:
+            # Retry this known contract failure once; never flatten structured
+            # evidence into tags or silently relabel inferred content as fact.
+            correction = (str(exc) + '。请仅纠正来源标签格式，保留其他已正确的角色、场景、道具和群体。'
+                          'basis 必须是字符串数组，例如 "basis": ["observed", "inferred"]；'
+                          '元素仅允许 observed、inferred、authored，不是逐字段依据对象。'
+                          '依据原文重新核对标签，不把推断或创作补充改为 observed。返回完整实体提取 JSON。')
+            logger.warning("Correcting scene basis format: %s", exc)
+            content = self.llm.chat(messages=[
+                {"role": "user", "content": prompt},
+                {"role": "assistant", "content": json.dumps(data, ensure_ascii=False)},
+                {"role": "user", "content": correction},
+            ])
+            revised = parse_model_json_object(content)
+            self._require_scene_baselines(revised)
+            self._require_crowd_coverage(text, revised)
+            return self._create_script_from_data(title, text, revised)
 
     @staticmethod
     def _require_scene_baselines(data: Dict[str, Any]) -> None:
@@ -1099,7 +1202,7 @@ class ScriptProcessor:
                 base_character.persona = base_name
             
         scenes = []
-        for scene_data in data.get("scenes", []):
+        for scene_index, scene_data in enumerate(data.get("scenes", [])):
             scene_uuid = str(uuid.uuid4())
             llm_id = scene_data.get("id")
             if llm_id:
@@ -1118,11 +1221,15 @@ class ScriptProcessor:
                 for key in ("scene_identity", "location_type", "time_baseline", "lighting_baseline", "composition_tendency"):
                     if not isinstance(baseline[key], str):
                         raise ValueError(f"Scene asset_baseline {key} must be text")
-                for key in ("fixed_geometry", "fixed_landmarks", "materials", "environment", "reusable_constraints", "basis"):
+                for key in ("fixed_geometry", "fixed_landmarks", "materials", "environment", "reusable_constraints"):
                     if not isinstance(baseline[key], list) or any(not isinstance(item, str) for item in baseline[key]):
                         raise ValueError(f"Scene asset_baseline {key} must be text items")
-                if any(item not in {"observed", "inferred", "authored"} for item in baseline["basis"]):
-                    raise ValueError("Scene asset_baseline basis is invalid")
+                basis = baseline["basis"]
+                if (not isinstance(basis, list) or any(not isinstance(item, str) or
+                        item not in {"observed", "inferred", "authored"} for item in basis)):
+                    raise SceneBasisFormatError(
+                        f"scenes[{scene_index}].asset_baseline.basis 必须是字符串数组，"
+                        "元素仅允许 observed、inferred、authored")
                 shot_only = scene_data.get("shot_only_content", reviewed_draft.get("shot_only_content", []))
                 uncertainties = scene_data.get("uncertainties", reviewed_draft.get("unresolved", []))
                 if any(not isinstance(value, list) or any(not isinstance(item, str) for item in value)
@@ -1699,7 +1806,8 @@ class ScriptProcessor:
                 "场景强制合同：每个 scenes 条目必须提供 asset_baseline、shot_only_content、uncertainties。"
                 "asset_baseline 恰含 scene_identity、location_type、fixed_geometry、fixed_landmarks、materials、"
                 "environment、time_baseline、lighting_baseline、composition_tendency、reusable_constraints、basis；"
-                "basis 仅用 observed/inferred/authored。description 和 scene_identity 只概述可复用地点，"
+                'basis 必须是字符串数组，例如 "basis": ["observed", "inferred"]，元素仅用 observed/inferred/authored，'
+                "不是逐字段依据对象，不使用对象数组或单个字符串。description 和 scene_identity 只概述可复用地点，"
                 "不得包含潜伏、围堵等当前事件。输出前逐一核对独立地点是否都有 scenes 条目；"
                 "宏观地点硬规则：当文本出现一个可复用的街道、街区、院落或建筑群名称，且同一范围内还出现粮铺、街角、阁楼等子地点时，必须同时输出宏观地点和每个独立子地点的 scenes 条目；"
                 "宏观地点不能只作为子地点名称前缀，也不能只写进子地点的 environment 或 shot_only_content。"
@@ -1872,6 +1980,7 @@ class ScriptProcessor:
     def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
                                  style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
         """Create a reviewable director draft without mutating project data."""
+        self._last_director_raw_response = ""
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
         source_context, is_source_digest = self._director_source_context(text, source_mode)
@@ -1952,6 +2061,7 @@ story_threads 用 milestones 引用 event_id，role 只用 setup/progress/turn/r
 people、source_revision、source_revision_id 由服务端补齐。当前提示未提供可引用的 Fact Ledger ID，
 所有 source_fact_ids 必须返回空数组；不得猜 range 或 fact_id。未链接事实的模型内容标为 interpretation，
 来源不清或内部矛盾标为 uncertain/conflicted。不得从旧 relationship initial/change/final 猜测阶段状态。
+{_director_profile_output_contract()}
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}
 execution_summary 是供后续分镜和资产设计读取的唯一摘要：只保留已由剧本支持的
 地点/时代、关系变化、关键事件、视觉/表演/声音方向、连续性约束、禁用项和未决问题；
@@ -1986,18 +2096,27 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
         result = json.loads(_strip_markdown_json(content))
         if not isinstance(result, dict):
             raise RuntimeError("导演设定模型返回格式不正确，请重试。")
+        if not isinstance(result.get("story_map"), dict):
+            raise RuntimeError("导演返回缺少 story_map 故事结构对象，请重新分析。")
         return result
 
     def analyze_director_profile_with_audit(self, text: str, entities_json: Dict[str, Any],
                                             style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
         """Return the profile plus bounded source and raw-response evidence."""
-        source_audit = self.director_source_audit(text, source_mode)
+        self._last_director_raw_response = ""
+        self._last_director_source_audit = {}
         try:
+            source_audit = self.director_source_audit(text, source_mode)
             profile = self.analyze_director_profile(text, entities_json, style_config, source_mode)
         except Exception as exc:
-            audit = getattr(exc, "director_audit", None)
-            if isinstance(audit, dict):
-                raise
+            raw = self._last_director_raw_response
+            audit = dict(self._last_director_source_audit)
+            audit.update(raw_response=raw, raw_response_received=bool(raw),
+                         failure_stage="parse" if raw else "provider_response")
+            diagnostic = getattr(exc, "llm_diagnostic", None)
+            if isinstance(diagnostic, dict):
+                audit["provider_response"] = diagnostic
+            exc.director_audit = audit
             raise
         # The legacy method parses internally, so capture raw JSON by issuing
         # no second request is not possible. The profile remains auditable;
@@ -2079,6 +2198,7 @@ relationship/thread 保留稳定 ID，states 仍使用 phase_id 与真实 trigge
 canon_state 只返回本次受影响的事实分类；优先复用已有
 fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id 表达冲突或替代，
 不要回显未变化的 canon_state 分类。只返回 JSON 对象，不要解释。
+{_director_profile_output_contract(partial=True)}
 {DIRECTOR_PROFILE_OUTPUT_BUDGET}"""
         content = (self.llm.chat(
             messages=[{"role": "system", "content": prompt},
@@ -2171,8 +2291,11 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                 if len(shots) > 40:
                     return f"scene {scene_index + 1} beat {beat_index + 1} 的 shots 超过 40 项"
                 for shot_index, shot in enumerate(shots):
-                    if not isinstance(shot, dict) or set(shot) - shot_keys:
+                    if not isinstance(shot, dict):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 字段不符合结构"
+                    if set(shot) - shot_keys:
+                        unknown = ", ".join(str(k)[:40] for k in sorted(set(shot) - shot_keys)[:3])
+                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 存在未知字段 {unknown}，请移除额外键"
                     if "title" in shot and not isinstance(shot["title"], str):
                         return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 标题必须是字符串"
                     if shot.get("information_design") is not None:
@@ -2191,8 +2314,12 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                         if key in shot and not isinstance(shot[key], str):
                             return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} {key} 必须是字符串"
                     lighting = shot.get("lighting")
-                    if lighting is not None and (not isinstance(lighting, dict) or set(lighting) - lighting_keys):
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 光影结构无效"
+                    lighting_path = f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} lighting"
+                    if lighting is not None and not isinstance(lighting, dict):
+                        return f"{lighting_path} 必须是 JSON 对象，实际为 {type(lighting).__name__}，不能用字符串或数组"
+                    if isinstance(lighting, dict) and set(lighting) - lighting_keys:
+                        unknown = ", ".join(str(k)[:40] for k in sorted(set(lighting) - lighting_keys)[:3])
+                        return f"{lighting_path} 存在未知字段 {unknown}；仅允许 key_source、color_tone、contrast、practical_sources"
                     lighting = lighting or {}
                     for key in ("key_source", "color_tone", "contrast"):
                         if key in lighting and not isinstance(lighting[key], str):
@@ -2236,6 +2363,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         last_error = ""
         last_category = "contract_violation"
         style_summary = build_visual_style_summary(style_config)
+        lighting_schema = _prompt_json(DirectorPlanLighting.model_json_schema())
         for attempt in range(2):
             handoff_preset = _load_director_preset("shooting-plan-handoff")
             prompt = f"""你是电影导演和场记统筹。请根据提供的剧本片段、已确认故事理解、人物/场景/道具实体和视觉风格，提出可供用户审阅的拍摄计划。
@@ -2253,9 +2381,13 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 3. 每个 beat 填 title、dramatic_purpose、emotional_change、duration_seconds、keep_with_next、story_event_ids 和 shots。keep_with_next 仅在节拍应保持同镜时为 true；story_event_ids 只能使用 Director story_map 里的真实 event_id；无明确关联时用空数组。
 4. 每个 shot 必须填 title、visual_intent、performance_action、action_physics、shot_size、camera_angle、composition、camera_movement、lighting、duration_seconds、dialogue、ambient_sound、character_ids、prop_ids，并返回 director_effect 字段。director_effect 写该镜头希望观众感受到或注意到的导演效果；没有明确效果时返回空字符串。表演写视线/表情/姿态/节奏；动作物理写身体或物体的可观察位移、接触、支撑、速度和结果，两者不要混为动作摘要。构图写人物在画面中的位置、关系和空间留白。
 5. lighting 包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。同一 place_continuity_id 与 time_continuity_id 的镜头默认继承同一光影基线；不要为每个镜头改写同一光影。lighting_override_reason 是用户决定字段，模型必须始终返回空字符串，不得替用户选择独立光影；用户在计划编辑器填写原因后，运行时才保留本镜头独立光影。
+   lighting 必须是对象，不是文字或数组。未知光影细节用空字符串、画内光源不明用 []；不得改用分镜阶段的 direction、quality、color_temp、description 字段，也不得增加额外键。每个 shot 的 lighting 严格遵循以下 JSON Schema：
+<shot_lighting_schema>{lighting_schema}</shot_lighting_schema>
+   结构示例："lighting": {{"key_source":"", "color_tone":"", "contrast":"", "practical_sources":[]}}。
 6. camera_movement 必须说明固定/推拉摇移/跟拍方向与速度；ambient_sound 可选；有明确环境声时填写此镜头能听见的环境底噪/具体声响，没有明确内容时返回空字符串。没有明确对白就 dialogue=[]；不要发明台词。shot 时长为 1–30 整数秒，依据动作和情绪节奏估计。
 如果本次选择开场吸引力、信息差与悬念或节奏与情绪方法，可在相关 shot 返回 information_design 对象：audience_question、audience_knows、character_knows、withhold、presentation（字符串）；source_event_ids、reveal_event_ids、payoff_event_ids（仅用已确认 story_map 的 event_id 数组）；evidence_status（source_linked 或 needs_review）。无依据时数组留空并标 needs_review，不猜测后续事件；无信息编排时省略或 null。source_linked 仅表示有来源引用，不代表建议已核验或采用。暂缓展示的内容不要写入当前镜头可见描述。
 7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
+   shot 除上述字段外仅允许 information_design、lighting_override_reason、unresolved_entity_refs；不要增加 performance_change 等自定义字段，情绪变化放 beat.emotional_change，表演变化放 shot.performance_action。
 
 必须返回如下根结构：{{"scenes":[...],"unresolved_questions":[]}}。不要输出 IDs、order 或 source_chunk_refs，这些由系统生成；source_chunk_refs 由系统根据输入片段回填。只有片段开头有明确连续动作/连续场次证据时才设 continues_previous_scene=true，不要仅因地点相同而续接。
 
@@ -2279,10 +2411,11 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                 **({"model": model} if model else {}),
             ) or "").strip()
             try:
-                result = json.loads(_strip_markdown_json(content))
-            except json.JSONDecodeError as exc:
+                result = parse_model_json_object(content)
+            except ValueError as exc:
                 last_category = "invalid_json"
-                last_error = f"JSON 格式错误（第 {exc.lineno} 行，第 {exc.colno} 列）"
+                last_error = (f"JSON 格式错误（第 {exc.lineno} 行，第 {exc.colno} 列）"
+                              if isinstance(exc, json.JSONDecodeError) else "JSON 格式错误：必须返回一个完整对象，不能截断或附加多个结果")
             else:
                 # Keep the plan usable when creative details are omitted. The
                 # storyboard editor exposes these empty fields for later completion.
@@ -2310,6 +2443,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                 if not last_error:
                     return result
             if attempt == 0:
+                logger.warning("Shooting plan output rejected: category=%s reason=%s", last_category, last_error)
                 retry_note = (
                     "上次结果未通过契约校验，请完整重做本段并修正以下问题：" + last_error
                 )

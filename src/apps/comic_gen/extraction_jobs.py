@@ -269,7 +269,7 @@ class ExtractionJobs:
         except Exception as exc:
             logger.error('Script extraction %s failed (%s)', job_id, type(exc).__name__)
             with closing(self.connect()) as db:
-                row = db.execute('SELECT fingerprint FROM jobs WHERE id=?', (job_id,)).fetchone()
+                row = db.execute('SELECT fingerprint, project FROM jobs WHERE id=?', (job_id,)).fetchone()
             message = (
                 '分镜分析失败；已完成的分段已保存，重试会从未完成段继续。'
                 if row and row['fingerprint'].startswith('storyboard:')
@@ -281,12 +281,22 @@ class ExtractionJobs:
             )
             if row and row['fingerprint'].startswith('director_shooting_plan:') and isinstance(exc, DirectorShootingChunkError):
                 message = f'导演拍摄计划生成失败（{exc.category}）：{exc.public_reason}；请重试或调整本段内容。'
-            if row and not row['fingerprint'].startswith(('storyboard:', 'director_shooting_plan:')):
+            if row and row['project'].startswith(('script-outline:document:', 'script-writing:')):
                 detail = str(exc).strip()
-                if 'timed out' in detail.lower() or 'timeout' in detail.lower():
-                    message = '导演分析请求超时；请稍后重试，已保留当前 Director 草稿。'
+                label = '总纲解析' if row['project'].startswith('script-outline:') else '剧本写作'
+                if 'timed out' in detail.lower() or 'timeout' in detail.lower() or 'status=524' in detail:
+                    message = f'{label}请求超时，请稍后重试；已保存的内容不会受影响。'
                 elif detail:
-                    message = f'导演分析失败：{detail[:300]}'
+                    message = f'{label}失败：{detail[:300]}'
+            elif row and not row['fingerprint'].startswith(('storyboard:', 'director_shooting_plan:')):
+                detail = str(exc).strip()
+                is_director = row['fingerprint'].startswith(('director:', 'series-director:'))
+                label = '导演分析' if is_director else '实体提取'
+                if 'timed out' in detail.lower() or 'timeout' in detail.lower():
+                    message = ('导演分析请求超时；请稍后重试，已保留当前 Director 草稿。' if is_director
+                               else '实体提取请求超时，请稍后重试；已有资产不会受影响。')
+                elif detail:
+                    message = f'{label}失败：{detail[:300]}'
             # Preserve bounded Director evidence even when admission/validation
             # rejects the structured profile. This is deliberately stored in
             # the owner-scoped job row, never emitted to ordinary logs.
@@ -295,7 +305,7 @@ class ExtractionJobs:
             if isinstance(audit, dict):
                 failure_result = {
                     "source_audit": audit,
-                    "failure_stage": "admission",
+                    "failure_stage": audit.get("failure_stage", "admission"),
                     "failure_detail": str(exc)[:1000],
                 }
             self._finish(job_id, result=failure_result, error=message)
@@ -322,6 +332,17 @@ class ExtractionJobs:
             ).fetchone()
             if not row:
                 raise HTTPException(404, 'Render task not found')
+            return self.public(row)
+
+    def latest_for_project(self, owner, project, fingerprint_prefix):
+        with closing(self.connect()) as db:
+            row = db.execute(
+                'SELECT * FROM jobs WHERE owner=? AND project=? AND fingerprint LIKE ? '
+                'ORDER BY created DESC, rowid DESC LIMIT 1',
+                (owner, project, fingerprint_prefix + '%'),
+            ).fetchone()
+            if not row:
+                raise HTTPException(404, '没有可读取的优化任务，请先提交 AI 完善。')
             return self.public(row)
 
     def forget_result(self, owner, project, key, value):

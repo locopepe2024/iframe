@@ -734,8 +734,13 @@ async function submitPolishJob(scriptId: string, mode: "video" | "r2v", payload:
 }
 
 export const api = {
-    createProject: async (title: string, text: string, skipAnalysis: boolean = false, workflowMode: string = "r2v", seriesId?: string) => {
-        const res = await axios.post(`${API_URL}/projects`, { title, text, workflow_mode: workflowMode, series_id: seriesId }, {
+    getScriptDocumentProject: async (documentId: string): Promise<{ project_id: string | null }> => {
+        const res = await axios.get(`${API_URL}/script-documents/${documentId}/production-project`);
+        return res.data;
+    },
+
+    createProject: async (title: string, text: string, skipAnalysis: boolean = false, workflowMode: string = "r2v", seriesId?: string, sourceScriptDocumentId?: string) => {
+        const res = await axios.post(`${API_URL}/projects`, { title, text, workflow_mode: workflowMode, series_id: seriesId, source_script_document_id: sourceScriptDocumentId }, {
             params: { skip_analysis: skipAnalysis }
         });
         return { ...res.data, originalText: res.data.original_text };
@@ -3304,8 +3309,10 @@ export async function agentTranscribe(file: File): Promise<{ text: string; model
   if (!response.ok) throw new Error(typeof payload.detail === 'string' ? payload.detail : '语音识别失败');
   return payload as { text: string; model: string };
 }
-export async function agentRequest<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+export async function agentRequest<T>(path: string, method = 'GET', body?: unknown,
+    options: Pick<RequestInit, 'signal' | 'cache'> = {}): Promise<T> {
   const response = await authenticatedFetch(`${API_URL}/agent${path}`, {
+    ...options,
     method, headers: { 'Content-Type': 'application/json' },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });

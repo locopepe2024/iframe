@@ -17,29 +17,54 @@ import logging
 import time
 from typing import Dict, List, Optional, Any
 
+from fastapi import HTTPException
+
 from ...utils.endpoints import get_provider_base_url
 
 logger = logging.getLogger(__name__)
 
 
+def get_script_writing_model() -> Optional[str]:
+    """Resolve the shared model used by screenplay authoring operations."""
+    return (
+        os.getenv("SCRIPT_WRITING_MODEL")
+        or os.getenv("SCRIPT_CONTINUATION_MODEL")
+        or ""
+    ).strip() or None
+
+
 class LLMAdapter:
     """Unified LLM call interface supporting DashScope and OpenAI-compatible APIs."""
 
-    def __init__(self):
+    def __init__(self, default_model: Optional[str] = None, *, use_script_model: bool = False):
         self.provider = os.getenv("LLM_PROVIDER", "dashscope").lower()
-        self._client = None
-        self._client_config_key = None
+        self.default_model = default_model
+        self.use_script_model = use_script_model
+        self._client_cache = None
         logger.info(f"LLM Adapter initialized with provider: {self.provider}")
 
-    def _runtime_credentials(self) -> tuple[str | None, str | None]:
+    def _runtime_credentials(self, gateway: Optional[str] = None) -> tuple[str | None, str | None]:
         """Resolve credentials for the current request context.
 
-        Studio requests are owner-scoped.  Their UniArt credential must win
+        Studio requests are owner-scoped. Their selected gateway must win
         over the process environment, otherwise a stale shared token can be
         used after login (and two users can accidentally share one client).
         Desktop/background calls without an authenticated Studio context keep
         the environment fallback for compatibility.
         """
+        if gateway:
+            from ..studio_access import studio_gateway_config
+
+            config = studio_gateway_config(gateway)
+            if gateway == "greena":
+                from ...models.nsfw_new_one import gateway_config
+
+                config = gateway_config(config)
+            api_key = (config.get("api_key") or "").strip()
+            base_url = (config.get("base_url") or "").strip().rstrip("/")
+            if not api_key or not base_url:
+                raise RuntimeError(f"{gateway} LLM credentials are not configured")
+            return api_key, base_url
         if self.provider == "openai":
             from ..studio_access import current_studio_user, runtime_uniart_for_owner
 
@@ -51,13 +76,13 @@ class LLMAdapter:
                     )
                 except Exception as exc:
                     raise RuntimeError(
-                        "UniArt API key is not configured for the current user"
+                        "LLM gateway API key is not configured for the current user"
                     ) from exc
                 api_key = (configured.get("api_key") or "").strip()
                 base_url = (configured.get("base_url") or "").strip().rstrip("/")
                 if not api_key:
                     raise RuntimeError(
-                        "UniArt API key is not configured for the current user"
+                        "LLM gateway API key is not configured for the current user"
                     )
                 return api_key, base_url or "https://uniart.fun/v1"
             return (
@@ -68,30 +93,49 @@ class LLMAdapter:
 
     @property
     def is_configured(self) -> bool:
+        return self.is_configured_for_model(None if self.use_script_model else self.default_model)
+
+    @staticmethod
+    def _model_gateway(model: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+        prefix, separator, raw_model = (model or "").partition("/")
+        if separator and prefix in {"nsfw", "greena", "uniart"}:
+            if not raw_model:
+                raise ValueError("LLM model ID is empty")
+            return ("greena" if prefix in {"nsfw", "greena"} else "uniart"), raw_model
+        return None, model
+
+    def is_configured_for_model(self, model: Optional[str]) -> bool:
         try:
-            return bool(self._runtime_credentials()[0])
-        except RuntimeError:
+            configured_model = model or (self._get_default_model() if self.use_script_model else self.default_model) or (
+                self._get_default_model() if self.provider == "openai" else None
+            )
+            gateway, _ = self._model_gateway(configured_model)
+            return bool(self._runtime_credentials(gateway)[0])
+        except (RuntimeError, ValueError, HTTPException):
             return False
 
-    def _get_client(self):
+    def _get_client(self, *, gateway: Optional[str] = None):
         """Get or create the OpenAI-compatible client (lazy, cached)."""
-        api_key, configured_base_url = self._runtime_credentials()
-        if self.provider == "openai":
+        api_key, configured_base_url = self._runtime_credentials(gateway)
+        if gateway or self.provider == "openai":
             base_url = configured_base_url or "https://api.openai.com/v1"
         else:
             base_url = f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1"
-        config_key = (self.provider, api_key, base_url)
-        if self._client is None or self._client_config_key != config_key:
-            try:
-                from openai import OpenAI
-            except ImportError:
-                raise RuntimeError(
-                    "openai package not installed. Run: pip install openai>=1.0.0"
-                )
-
-            self._client = OpenAI(api_key=api_key, base_url=base_url)
-            self._client_config_key = config_key
-        return self._client
+        config_key = (gateway or self.provider, api_key, base_url)
+        # Hold the matched key/client pair locally. Another worker may replace
+        # the shared cache after comparison; it must not replace our result.
+        cached = self._client_cache
+        if cached is not None and cached[0] == config_key:
+            return cached[1]
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise RuntimeError(
+                "openai package not installed. Run: pip install openai>=1.0.0"
+            )
+        client = OpenAI(api_key=api_key, base_url=base_url)
+        self._client_cache = (config_key, client)
+        return client
 
     # DashScope qwen 系列：首选 qwen3.7-plus（最新），不可用时回退到 qwen3.6-plus，
     # 最终回退到 qwen-plus alias（始终指向最新稳定通用版）。
@@ -99,6 +143,14 @@ class LLMAdapter:
     _DASHSCOPE_MODEL_FALLBACK_CHAIN = ["qwen3.7-plus", "qwen3.6-plus", "qwen-plus"]
 
     def _get_default_model(self) -> str:
+        if self.use_script_model:
+            from ..studio_access import studio_script_model
+
+            selected = studio_script_model()
+            if selected:
+                return selected
+            if self.default_model:
+                return self.default_model
         if self.provider == "openai":
             return os.getenv("OPENAI_MODEL", "gpt-4o")
         return self._DASHSCOPE_MODEL_FALLBACK_CHAIN[0]
@@ -133,7 +185,12 @@ class LLMAdapter:
         Raises:
             RuntimeError: If the API call fails.
         """
-        client = self._get_client()
+        model = model or (self._get_default_model() if self.use_script_model else self.default_model) or (
+            self._get_default_model() if self.provider == "openai" else None
+        )
+        gateway, model = self._model_gateway(model)
+        client = self._get_client(gateway=gateway)
+        logger.info("LLM route selected: gateway=%s model=%s", gateway or self.provider, model)
 
         # 显式 model override 路径：单次尝试，失败就抛。
         if model:
@@ -210,6 +267,11 @@ class LLMAdapter:
         if stream:
             kwargs["stream"] = True
 
+        started_at = time.monotonic()
+        chunks_received = 0
+        text_chars = 0
+        finish_reason = None
+        http_response = None
         try:
             request_client = client
             options: Dict[str, Any] = {}
@@ -223,19 +285,31 @@ class LLMAdapter:
             record_llm_request("comic_gen", model, messages, response_format=response_format, stream=stream)
             logger.info("LLM chat request started: model=%s", model)
             response = request_client.chat.completions.create(**kwargs)
+            http_response = getattr(response, "response", None)
             logger.info("LLM chat HTTP response received: model=%s", model)
             if stream:
                 parts = []
                 try:
                     for chunk in response:
+                        chunks_received += 1
                         if chunk.choices:
-                            parts.append(chunk.choices[0].delta.content or "")
+                            piece = chunk.choices[0].delta.content or ""
+                            parts.append(piece)
+                            text_chars += len(piece)
+                            finish_reason = getattr(chunk.choices[0], "finish_reason", None) or finish_reason
+                except Exception:
+                    # This log precedes close(): an upstream error was raised
+                    # during iteration, rather than caused by our cleanup.
+                    logger.error(
+                        "LLM stream iteration failed before close: model=%s elapsed=%.3f chunks=%s chars=%s finish_reason=%s",
+                        model, time.monotonic() - started_at, chunks_received, text_chars, finish_reason,
+                    )
+                    raise
                 finally:
                     response.close()
                 content = "".join(parts)
             else:
                 content = response.choices[0].message.content
-            finish_reason = None
             if not stream and response.choices:
                 finish_reason = getattr(response.choices[0], "finish_reason", None)
             logger.info(
@@ -252,6 +326,8 @@ class LLMAdapter:
             # payload or credentials.
             status = getattr(e, "status_code", None)
             response = getattr(e, "response", None)
+            if response is None:
+                response = http_response
             if status is None and response is not None:
                 status = getattr(response, "status_code", None)
             request_id = None
@@ -269,4 +345,11 @@ class LLMAdapter:
             suffix = f" status={status}" if status is not None else ""
             if request_id:
                 suffix += f" request_id={request_id}"
-            raise RuntimeError(f"{provider_label} API error{suffix}: {detail}") from e
+            error = RuntimeError(f"{provider_label} API error{suffix}: {detail}")
+            error.llm_diagnostic = {
+                "stream": stream, "elapsed_seconds": round(time.monotonic() - started_at, 3),
+                "chunks_received": chunks_received, "text_chars": text_chars,
+                "finish_reason": finish_reason, "request_id": request_id,
+                "exception_type": type(e).__name__,
+            }
+            raise error from e

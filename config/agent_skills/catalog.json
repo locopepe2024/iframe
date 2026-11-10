@@ -1,6 +1,20 @@
 {
   "skills": [
     {
+      "id": "em-outline-to-script",
+      "name": "集纲扩写为剧本",
+      "category": "剧本写作",
+      "targets": ["Script Editor"],
+      "version": "1.0.0",
+      "description": "按已确认的单集大纲扩写可拍剧本，保留事件、人物动机与结尾。",
+      "source": "https://github.com/adoria111/emma-screenwriting-skills/tree/b8a438dd1f1730b1317b0f38b69342a7ac67c80e/skills/em-outline-to-script",
+      "source_revision": "b8a438dd1f1730b1317b0f38b69342a7ac67c80e",
+      "license": "MIT (Emma Screenwriting Skills)",
+      "license_file": "em-outline-to-script/LICENSE",
+      "adaptation": "Imported under MIT with attribution. Applied only to single-episode outline expansion; GreenA's episode target character count, first-person camera rules, series bible, and user-confirmed constraints take precedence. Screen duration belongs to director analysis and storyboarding.",
+      "instructions_file": "em-outline-to-script/SKILL.md"
+    },
+    {
       "id": "character-identity-design",
       "name": "角色身份与外观设计",
       "category": "角色资产",

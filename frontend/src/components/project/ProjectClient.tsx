@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { Palette, Layout, Film, BookOpen, Users, Video, Settings, Key, MessageSquareCode, Clapperboard, ImagePlus, Menu, X } from "lucide-react";
+import { Palette, Layout, Film, BookOpen, Users, Video, Settings, Key, MessageSquareCode, ImagePlus, Menu, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
 import { useProjectStore } from "@/store/projectStore";
@@ -12,7 +12,6 @@ import type { BreadcrumbSegment } from "@/components/layout/BreadcrumbBar";
 // ScriptProcessor right rail will become "Previously on..."; other steps
 // have their own SidePanelHeader-driven side columns.
 import ScriptProcessor from "@/components/modules/ScriptProcessor";
-import Cast from "@/components/modules/Cast";
 import VideoAssembly from "@/components/modules/VideoAssembly";
 import ConsistencyVault from "@/components/modules/ConsistencyVault";
 import ArtDirection from "@/components/modules/ArtDirection";
@@ -26,32 +25,14 @@ import dynamic from "next/dynamic";
 
 const CreativeCanvas = dynamic(() => import("@/components/canvas/CreativeCanvas"), { ssr: false });
 
-// PR-3m · Old steps (Voice / Final Mix / Export) deprecated. Their
-// functionality moved into:
-//   - Voice  → Cast voice binding + Storyboard DialogueAudioRow (PR-3g-3j)
-//   - Mix    → Assembly Mix phase tab (PR-3k)
-//   - Export → Assembly Export phase tab (PR-3k)
-// Both context modes keep the same Director, Assets, Storyboard, Shot Design,
-// and Assembly components. Current series projects additionally expose Cast.
-const LEGACY_STEPS = [
+// Character, scene, prop and voice editing share one Assets workbench.
+const PROJECT_STEPS = [
     { id: "script", label: "1. Script", icon: BookOpen },
     { id: "art_direction", label: "2. Director", icon: Palette },
     { id: "assets", label: "3. Assets", icon: Users },
     { id: "storyboard", label: "4. Storyboard", icon: Layout },
     { id: "shot_design", label: "5. Shot Design", icon: Video },
     { id: "assembly", label: "6. Assembly", icon: Film },
-];
-
-// Current series workflow: Cast is an additional context capability. The
-// production stages after Cast remain the same as the standalone workflow.
-const UNIFIED_STEPS = [
-    { id: "script", label: "1. Script", icon: BookOpen },
-    { id: "art_direction", label: "2. Director", icon: Palette },
-    { id: "cast", label: "3. Cast", icon: Users },
-    { id: "assets", label: "4. Assets", icon: ImagePlus },
-    { id: "storyboard", label: "5. Storyboard", icon: Clapperboard },
-    { id: "shot_design", label: "6. Shot Design", icon: Video },
-    { id: "assembly", label: "7. Assembly", icon: Film },
 ];
 
 export default function ProjectClient({ id, breadcrumbSegments, standaloneDirectorMindMap = false }: { id: string; breadcrumbSegments?: BreadcrumbSegment[]; standaloneDirectorMindMap?: boolean }) {
@@ -83,25 +64,11 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
     }, [currentProject?.series_id]);
 
     const steps = useMemo(() => {
-        // PR-3f routing: backend enum "r2v" → unified workbench (5 steps).
-        // Anything else (i2v_legacy, missing) → legacy 9-step path. Old
-        // projects without workflow_mode default to legacy for backward
-        // compat (spec §3.2).
-        let base;
-        if (currentProject?.workflow_mode !== "r2v") {
-            base = LEGACY_STEPS;
-        } else if (seriesContentMode === "freeform") {
-            // Phase 6 — freeform mode: skip Script step, episodes start at
-            // Style. Re-number labels accordingly.
-            base = UNIFIED_STEPS
-                .filter(s => s.id !== "script")
-                .map((s, i) => ({ ...s, label: s.label.replace(/^\d+\./, `${i + 1}.`) }));
-        } else {
-            // Scripted unified flow: Cast is always present (per-episode view
-            // of frame-referenced assets). Series-level shared assets are
-            // managed in SeriesDetailPage.
-            base = UNIFIED_STEPS;
-        }
+        const base = currentProject?.workflow_mode === "r2v" && seriesContentMode === "freeform"
+            ? PROJECT_STEPS.filter(step => step.id !== "script").map((step, i) => ({
+                ...step, label: step.label.replace(/^\d+\./, `${i + 1}.`),
+            }))
+            : PROJECT_STEPS;
 
         // Per-step stage status (conservative signals from project state —
         // NOT wizard done-checks; see storyboard-r2v-unified mock). Script
@@ -119,7 +86,7 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
             switch (id) {
                 case "art_direction":
                     return hasArt ? { status: "ready", statusLabel: tp("railArtReady") } : { status: "idle" };
-                case "cast":
+                case "assets":
                     return chars.length > 0
                         ? (bound > 0
                             ? { status: "ready", statusLabel: tp("railCastBound", { n: chars.length, m: bound }) }
@@ -312,7 +279,6 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
                     <div className="relative z-10 h-full flex flex-col overflow-hidden">
                         {activeStep === "script" && <ScriptProcessor />}
                         {activeStep === "art_direction" && <ArtDirection />}
-                        {activeStep === "cast" && <Cast />}
                         {activeStep === "assets" && <ConsistencyVault />}
                         {activeStep === "storyboard" && <StoryboardComposer />}
                         {activeStep === "shot_design" && <StoryboardR2V />}

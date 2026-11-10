@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, TreePine, Film } from 'lucide-react';
+import { ChevronRight, TreePine, Film, Plus } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
 
 export interface OutlineViewProps {
@@ -27,6 +27,14 @@ interface OutlineScene {
 export default function OutlineView({ editor }: OutlineViewProps) {
   const t = useTranslations('scriptEditor');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [docRevision, setDocRevision] = useState(0);
+
+  useEffect(() => {
+    if (!editor) return;
+    const refresh = () => setDocRevision((revision) => revision + 1);
+    editor.on('update', refresh);
+    return () => { editor.off('update', refresh); };
+  }, [editor]);
 
   const outline = useMemo(() => {
     if (!editor) return { sections: [] as OutlineSection[], flatScenes: [] as OutlineScene[] };
@@ -41,16 +49,12 @@ export default function OutlineView({ editor }: OutlineViewProps) {
       if (node.type.name === 'section') {
         currentSection = {
           id: `section-${pos}`,
-          title: '',
+          title: node.attrs.title || t('sidebar.actLabel', { number: sections.length + 1 }),
           pos,
           scenes: [],
         };
         sections.push(currentSection);
         return true; // traverse children
-      }
-      if (node.type.name === 'sectionHeading' && currentSection) {
-        currentSection.title = node.textContent || t('sidebar.actLabel', { number: sections.length });
-        return false;
       }
       if (node.type.name === 'sceneHeading') {
         sceneIndex++;
@@ -71,7 +75,19 @@ export default function OutlineView({ editor }: OutlineViewProps) {
     });
 
     return { sections, flatScenes };
-  }, [editor, editor?.state.doc]);
+  }, [editor, editor?.state.doc, docRevision]);
+
+  const handleAddScene = useCallback(() => {
+    if (!editor) return;
+    const position = editor.state.doc.content.size;
+    editor.chain().focus().insertContentAt(position, {
+      type: 'sceneHeading',
+      attrs: { id: crypto.randomUUID() },
+      content: [],
+    }).run();
+    editor.commands.setTextSelection(position + 1);
+    editor.commands.focus();
+  }, [editor]);
 
   const handleJump = useCallback(
     (pos: number) => {
@@ -91,17 +107,21 @@ export default function OutlineView({ editor }: OutlineViewProps) {
 
   if (!hasAny) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 mb-2">
-          <TreePine size={16} className="text-zinc-500" />
-        </div>
-        <p className="text-xs text-text-muted">{t('sidebar.noOutline')}</p>
+      <div className="p-2">
+        <button type="button" disabled={!editor} onClick={handleAddScene}
+          className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-xs text-text-secondary transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-50">
+          <Plus size={14} aria-hidden="true" />{t('sidebar.addScene')}
+        </button>
       </div>
     );
   }
 
   return (
     <div className="p-2">
+      <button type="button" disabled={!editor} onClick={handleAddScene}
+        className="mb-1 flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-xs text-text-secondary transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-50">
+        <Plus size={14} aria-hidden="true" />{t('sidebar.addScene')}
+      </button>
       {/* Flat scenes (no section) */}
       {outline.flatScenes.map((scene) => (
         <button

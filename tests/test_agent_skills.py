@@ -81,6 +81,40 @@ def test_character_design_job_rejects_stale_preview_before_start(ctx, tmp_path, 
     assert rejected.value.status_code == 409
 
 
+def test_character_design_latest_result_is_owner_and_character_scoped(ctx, tmp_path, monkeypatch):
+    store = ExtractionJobs(tmp_path / 'jobs.sqlite3')
+    monkeypatch.setattr(agent, 'character_design_jobs', store)
+    complete = Mock(side_effect=AssertionError('Reading results must not call the model'))
+    monkeypatch.setattr(agent, 'complete', complete)
+    payload = {'identity': {'visual_notes': '已完成的外观'}, 'look': {'visual_notes': '原稿造型'}}
+    db = store.connect()
+    with db:
+        for job_id, owner, project, created in (
+            ('old', ctx.owner_profile_id, 'character-design:project:纲手', 1),
+            ('latest', ctx.owner_profile_id, 'character-design:project:纲手', 2),
+            ('other-character', ctx.owner_profile_id, 'character-design:project:小樱', 3),
+            ('other-project', ctx.owner_profile_id, 'character-design:another:纲手', 4),
+            ('other-owner', 'other', 'character-design:project:纲手', 5),
+        ):
+            db.execute('INSERT INTO jobs (id,owner,project,fingerprint,status,created,result) VALUES (?,?,?,?,?,?,?)',
+                       (job_id, owner, project, 'character-design:' + job_id, 'completed', created, json.dumps(payload)))
+    db.close()
+    app = FastAPI()
+    app.include_router(agent.router)
+    app.dependency_overrides[require_user_context] = lambda: ctx
+    with TestClient(app) as client:
+        response = client.get('/agent/character-design/draft/latest-job', params={'project_id': 'project', 'character_name': '纲手'})
+        assert response.status_code == 200
+        assert response.json()['id'] == 'latest'
+        assert response.json()['result'] == payload
+        assert response.headers['cache-control'] == 'private, no-store'
+        assert client.get('/agent/character-design/draft/jobs/latest').headers['cache-control'] == 'private, no-store'
+        assert client.get('/agent/character-design/draft/latest-job', params={'project_id': 'missing', 'character_name': '纲手'}).status_code == 404
+        app.dependency_overrides[require_user_context] = lambda: UserContext('unknown', 'unknown', '', '')
+        assert client.get('/agent/character-design/draft/latest-job', params={'project_id': 'project', 'character_name': '纲手'}).status_code == 404
+    complete.assert_not_called()
+
+
 def test_asset_image_prompt_refine_returns_reviewable_suggestion(ctx, monkeypatch):
     calls = []
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
@@ -176,7 +210,7 @@ def test_asset_refine_rejects_changed_saved_asset_and_foreign_project(ctx, monke
 
 def test_catalog_is_self_contained_and_attributed():
     packages = skills.catalog()
-    assert len(packages) == len({p['id'] for p in packages}) == 19
+    assert len(packages) == len({p['id'] for p in packages}) == 20
     for p in packages:
         assert len(p['revision']) == 64
         assert len(p['source_revision']) == 40
@@ -184,6 +218,14 @@ def test_catalog_is_self_contained_and_attributed():
         assert p['source'].startswith('https://github.com/')
         assert p['license_text'] and p['adaptation'] and p['instructions']
         assert '[ref:' not in p['instructions']
+
+
+def test_episode_outline_expansion_skill_is_attributed_and_scoped():
+    package = next(p for p in skills.catalog() if p['id'] == 'em-outline-to-script')
+    assert package['targets'] == ['Script Editor']
+    assert package['source_revision'] in package['source']
+    assert '不靠新增身份、伤害或阴谋' in package['instructions']
+    assert 'MIT License' in package['license_text']
 
 
 def test_open_ai_canvas_cards_are_curated_as_scoped_skills():
@@ -382,21 +424,108 @@ def test_character_design_draft_does_not_silently_retry_missing_detail_checklist
     with pytest.raises(HTTPException) as exc:
         run_reviewed_character_draft(body, ctx)
     assert exc.value.status_code == 502
+    assert 'unresolved' in exc.value.detail
     assert complete.call_count == 1
 
 
-def test_character_design_draft_rejects_repeated_empty_review(ctx, monkeypatch):
+@pytest.mark.parametrize('question', [
+    '原稿为黑发，当前指定白发，需确定发色',
+    'Script specifies black hair; the user specifies white hair',
+    '服装细节尚未指定',
+])
+def test_character_design_accepts_actionable_review_without_magic_words(ctx, monkeypatch, question):
     monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
-    answer = '{"identity":{"visual_notes":"少年剑客"},"look":{"visual_notes":"素黑劲装"},"review_items":[{"question":"服装细节尚未指定","suggestion":"窄袖黑衣"}]}'
+    answer = json.dumps({'identity': {'visual_notes': '少年剑客'}, 'look': {'visual_notes': '素黑劲装'},
+        'review_items': [{'question': question, 'suggestion': '白色长发'}]}, ensure_ascii=False)
     complete = Mock(return_value=answer)
     monkeypatch.setattr(agent, 'complete', complete)
-    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客', route='historical-costume')
+    body = agent.CharacterDesignRequest(model='qwen', character_name='苏砚', profile='少年剑客')
+    result = run_reviewed_character_draft(body, ctx)
+    assert result['identity']['visual_notes'] == '少年剑客'
+    assert result['field_suggestions'] == {question: '白色长发'}
+    assert result['unresolved'] == [question]
+    assert complete.call_count == 1
+    assert '包含“冲突”或“矛盾”' not in complete.call_args.args[2][0]['content']
 
+
+def test_character_review_preview_declares_exact_optional_choice_contract(ctx, monkeypatch):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='角色档案')
+    system = agent.preview_character_design_draft(body, ctx)['messages']['system']
+    schema = json.loads(system.split('<character_review_items_schema>', 1)[1].split('</character_review_items_schema>', 1)[0])
+    properties = schema['items']['properties']
+    assert set(properties['suggested_route']['enum']) == {
+        'realistic-modern', 'historical-costume', 'xianxia-fantasy', 'anime-stylized', None,
+    }
+    assert set(properties['suggested_age_stage']['enum']) == {
+        'child', 'teen', 'young-adult', 'adult', 'older-adult', None,
+    }
+    assert schema['items']['required'] == ['question', 'suggestion']
+    assert '不改变对应选项时省略该字段或返回 null' in system
+    assert '不能使用空字符串、中文标签、组合值或自行创造的 ID' in system
+    # The documented enum must be accepted by the actual response validator.
+    for key in ('suggested_route', 'suggested_age_stage'):
+        for value in properties[key]['enum']:
+            item = {'question': '需要核对的要求', 'suggestion': '可采纳的视觉值', key: value}
+            assert agent._character_design_reviews({'review_items': [item]},
+                set(properties['suggested_age_stage']['enum']) - {None},
+                set(properties['suggested_route']['enum']) - {None}) == [item]
+
+
+@pytest.mark.parametrize('options,expected', [
+    *[({'suggested_route': route}, {'route': route}) for route in (
+        'realistic-modern', 'historical-costume', 'xianxia-fantasy', 'anime-stylized')],
+    *[({'suggested_age_stage': age}, {'age_stage': age}) for age in (
+        'child', 'teen', 'young-adult', 'adult', 'older-adult')],
+    ({}, {}),
+    ({'suggested_route': None, 'suggested_age_stage': None}, {}),
+])
+def test_character_review_choices_preserve_exact_ids(ctx, monkeypatch, options, expected):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    answer = {'identity': {'visual_notes': '角色外观'}, 'look': {},
+              'review_items': [{'question': '设定需要核对', 'suggestion': '具体视觉建议', **options}]}
+    monkeypatch.setattr(agent, 'complete', Mock(return_value=json.dumps(answer, ensure_ascii=False)))
+    result = run_reviewed_character_draft(agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='角色档案'), ctx)
+    assert result['field_suggestion_choices'] == ({'设定需要核对': expected} if expected else {})
+
+
+@pytest.mark.parametrize('reviews,field,issue', [
+    ({}, 'review_items', 'invalid_review_items'),
+    (None, 'review_items', 'invalid_review_items'),
+    (['PRIVATE_QUESTION'], 'review_items[0]', 'invalid_review_item'),
+    ([None], 'review_items[0]', 'invalid_review_item'),
+    ([{'suggestion': 'PRIVATE_SUGGESTION'}], 'review_items[0].question', 'missing_question'),
+    ([{'question': '   ', 'suggestion': 'PRIVATE_SUGGESTION'}], 'review_items[0].question', 'missing_question'),
+    ([{'question': 'PRIVATE_QUESTION'}], 'review_items[0].suggestion', 'missing_suggestion'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': '   '}], 'review_items[0].suggestion', 'missing_suggestion'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': {}}], 'review_items[0].suggestion', 'missing_suggestion'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_age_stage': []}],
+        'review_items[0].suggested_age_stage', 'invalid_age_stage'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_route': 'PRIVATE_ROUTE'}],
+        'review_items[0].suggested_route', 'invalid_route'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_route': ''}],
+        'review_items[0].suggested_route', 'invalid_route'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_route': '古装'}],
+        'review_items[0].suggested_route', 'invalid_route'),
+    ([{'question': 'PRIVATE_QUESTION', 'suggestion': 'PRIVATE_SUGGESTION', 'suggested_route': 'historical-costume/anime-stylized'}],
+        'review_items[0].suggested_route', 'invalid_route'),
+])
+def test_character_review_rejection_identifies_safe_field(ctx, monkeypatch, caplog, reviews, field, issue):
+    monkeypatch.setattr(agent, 'validate_model', lambda *_: None)
+    answer = json.dumps({'identity': {'visual_notes': '黑发'}, 'look': {}, 'review_items': reviews})
+    complete = Mock(return_value=answer)
+    monkeypatch.setattr(agent, 'complete', complete)
+    body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='PRIVATE_PROFILE')
     with pytest.raises(HTTPException) as exc:
         run_reviewed_character_draft(body, ctx)
-
     assert exc.value.status_code == 502
+    assert field in exc.value.detail
+    assert '诊断编号' in exc.value.detail
+    assert f'field={field}' in caplog.text
+    assert f'issue={issue}' in caplog.text
+    assert 'PRIVATE_' not in caplog.text + exc.value.detail
     assert complete.call_count == 1
+
 
 
 def test_character_design_draft_keeps_previous_ai_draft_separate_from_profile(ctx, monkeypatch):
@@ -785,7 +914,7 @@ def test_character_design_distinguishes_missing_object_from_review_failure(ctx, 
     body = agent.CharacterDesignRequest(model='qwen', character_name='角色', profile='少年')
     for answer, reason in [
         ('设计：黑发少年。', '未返回包含 identity 和 look 的 JSON 对象'),
-        ('{"identity":{"visual_notes":"黑发"},"look":{},"review_items":[{"question":"发型未指定","suggestion":"长发"}]}', '返回了待办问题或不完整的冲突建议'),
+        ('{"identity":{"visual_notes":"黑发"},"look":{},"review_items":[{"question":"发型未指定"}]}', 'review_items[0].suggestion 必须是非空文本'),
     ]:
         complete = Mock(return_value=answer)
         monkeypatch.setattr(agent, 'complete', complete)

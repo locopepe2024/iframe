@@ -39,6 +39,7 @@ import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, characterStructured
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
 import CharacterDesignPanel from "./CharacterDesignPanel";
+import { requestCharacterDesignJob, waitForCharacterDesignPoll } from "@/lib/characterDesignJobs";
 import WhiteFaceModel from "./character/WhiteFaceModel";
 import FaceGeometryGuide from "./character/FaceGeometryGuide";
 import { sideFaceGuidePrompt } from "@/lib/sideFaceGeometryGuide";
@@ -920,16 +921,13 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     const characterDesignSourceRef = useRef(characterDesignSource);
     characterDesignSourceRef.current = characterDesignSource;
 
-    const generateDesignDraft = async () => {
-        if (!designModel || designing || !asset.description.trim() || designInput.length > 8000) return;
+    const generateDesignDraft = async (recover = false) => {
+        if (designing || (!recover && (!designModel || !asset.description.trim() || designInput.length > 8000))) return;
         setDesigning(true);
         setDesignError("");
         const source = characterDesignSource;
         const request = characterDesignRequest;
         try {
-            const preview = await agentRequest<{ messages: VideoPolishMessages; review_token: string }>(
-                "/character-design/draft/preview", "POST", request);
-            if (characterDesignSourceRef.current !== source) return;
             type CharacterDraft = {
                 identity: { visual_notes: string; features?: IdentityFeatures; basis?: string | string[] };
                 look: { visual_notes: string; features?: LookFeatures; basis?: string | string[] };
@@ -939,17 +937,27 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 skill_revision: string;
             };
             type CharacterDraftJob = { id: string; status: string; result?: CharacterDraft | { detail: string } | null; error?: string | null };
-            const started = await agentRequest<CharacterDraftJob>("/character-design/draft/jobs", "POST", {
-                ...request, reviewed_messages: preview.messages, review_token: preview.review_token,
-            });
+            let started: CharacterDraftJob;
+            if (recover) {
+                const query = new URLSearchParams({ project_id: request.project_id || "", character_name: asset.name });
+                started = await requestCharacterDesignJob<CharacterDraftJob>(`/character-design/draft/latest-job?${query}`);
+            } else {
+                const preview = await requestCharacterDesignJob<{ messages: VideoPolishMessages; review_token: string }>(
+                    "/character-design/draft/preview", "POST", request);
+                if (characterDesignSourceRef.current !== source) return;
+                started = await requestCharacterDesignJob<CharacterDraftJob>("/character-design/draft/jobs", "POST", {
+                    ...request, reviewed_messages: preview.messages, review_token: preview.review_token,
+                });
+            }
             if (!started.id) throw new Error("角色设计任务未返回编号，请重试。");
             let job = started;
             const deadline = Date.now() + 12 * 60_000;
             while (job.status === "running" || job.status === "queued") {
                 if (source !== characterDesignSourceRef.current) return;
                 if (Date.now() >= deadline) throw new Error("角色设计处理时间过长，请稍后重试。");
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                job = await agentRequest<CharacterDraftJob>(`/character-design/draft/jobs/${encodeURIComponent(started.id)}`);
+                await waitForCharacterDesignPoll();
+                if (source !== characterDesignSourceRef.current) return;
+                job = await requestCharacterDesignJob<CharacterDraftJob>(`/character-design/draft/jobs/${encodeURIComponent(started.id)}`);
             }
             if (job.status !== "completed") throw new Error(job.error || "角色设计任务失败，请重试。");
             if (!job.result || "detail" in job.result) throw new Error(job.result?.detail || "角色设计未返回有效结果，请重试。");
@@ -1591,7 +1599,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             ? `已保存 · 当前设计已生效 · 保存的来源：${savedDesignSource === "ai" ? "AI 优化" : "角色设计"}`
             : hasSavedDesign ? `已保存的设计有修改 · 保存的来源：${savedDesignSource === "ai" ? "AI 优化" : "角色设计"}` : "尚未保存"}
         tab={designTab} onTabChange={setDesignTab}
-        onSubmit={() => void generateDesignDraft()} onSave={(source) => void saveDesign(source)}
+        onSubmit={() => void generateDesignDraft()} onRecover={() => void generateDesignDraft(true)} onSave={(source) => void saveDesign(source)}
         onReedit={() => {
             const snapshot = savedDesignSnapshot.current;
             const input = snapshot.design_input;

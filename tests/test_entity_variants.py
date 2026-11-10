@@ -75,6 +75,51 @@ def test_live_scene_extraction_rejects_missing_baseline():
         processor.parse_novel("测试", "匪寇劫掠粮铺")
 
 
+@pytest.mark.parametrize('basis', ['observed', {'scene_identity': 'observed'}, [{'type': 'observed'}], ['unknown']])
+@pytest.mark.parametrize('refine', [False, True])
+def test_invalid_scene_basis_gets_one_explicit_correction(basis, refine):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    baseline = dict(scene_identity='车站', location_type='候车室', fixed_geometry=['大门'],
+        fixed_landmarks=[], materials=[], environment=[], time_baseline='夜', lighting_baseline='',
+        composition_tendency='', reusable_constraints=[], basis=['observed'])
+    valid = {'characters': [], 'scenes': [{'name': '车站', 'asset_baseline': baseline}], 'props': []}
+    invalid = json.loads(json.dumps(valid))
+    invalid['scenes'][0]['asset_baseline']['basis'] = basis
+    processor.llm.chat.side_effect = [json.dumps(invalid), json.dumps(valid)]
+    if refine:
+        script = processor.refine_entity_extraction('测试', '车站', {}, ['保留车站'])
+    else:
+        script = processor.parse_novel('测试', '车站')
+    assert script.scenes[0].asset_design['design_draft']['asset_baseline'] == baseline
+    assert processor.llm.chat.call_count == 2
+    correction = processor.llm.chat.call_args.kwargs['messages'][-1]['content']
+    assert 'scenes[0].asset_baseline.basis' in correction
+    assert '字符串数组' in correction
+    assert '["observed", "inferred"]' in correction
+    assert '保留其他' in correction
+
+
+def test_basis_correction_remains_bounded_and_rejects_invalid_result():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    baseline = dict(scene_identity='车站', location_type='', fixed_geometry=[], fixed_landmarks=[],
+        materials=[], environment=[], time_baseline='', lighting_baseline='', composition_tendency='',
+        reusable_constraints=[], basis='observed')
+    processor.llm.chat.return_value = json.dumps({'characters': [], 'scenes': [{'asset_baseline': baseline}], 'props': []})
+    with pytest.raises(ValueError, match=r'scenes\[0\].asset_baseline.basis.*字符串数组'):
+        processor.parse_novel('测试', '车站')
+    assert processor.llm.chat.call_count == 2
+
+
+def test_scene_basis_prompt_and_skill_specify_same_array_contract():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    prompt = processor._construct_prompt('车站', '自定义提取：{text}')
+    assert 'basis 必须是字符串数组' in prompt
+    assert '不是逐字段依据对象' in prompt
+    assert '每项依据标为' not in prompt
+
+
 def test_scene_extraction_guidance_keeps_distinct_street_corners():
     processor = ScriptProcessor.__new__(ScriptProcessor)
     prompt = processor._construct_prompt(

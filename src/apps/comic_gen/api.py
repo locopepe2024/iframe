@@ -154,8 +154,10 @@ from ..studio_access import (
     require_studio_user,
     resolve_studio_reference,
     reset_studio_user,
+    reset_studio_script_model,
     sign_studio_media_paths,
     set_studio_user,
+    set_studio_script_model,
     studio_owner_dir,
     studio_media_dir,
     studio_owner_key,
@@ -493,6 +495,9 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
     protected = (
         path == "/projects"
         or path.startswith("/projects/")
+        or path == "/script-documents"
+        or path.startswith("/script-documents/")
+        or path.startswith("/script-writing/")
         or path == "/series"
         or path.startswith("/series/")
         or path.startswith("/recreation/")
@@ -547,7 +552,16 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     context_token = set_studio_user(user)
+    script_model_token = None
     try:
+        # Freeze the account's screenplay model before any background job is
+        # queued. copy_context() keeps this choice for the entire operation.
+        if path.startswith(("/projects", "/series", "/script-documents")) or path == "/script-writing/generate":
+            try:
+                model = await asyncio.to_thread(_script_model_for_request, user, None)
+            except HTTPException as exc:
+                return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+            script_model_token = set_studio_script_model(model)
         handler_started = time.perf_counter()
         response = await call_next(request)
         if path.startswith("/projects/") and path.endswith("/assets/update_attributes"):
@@ -563,6 +577,8 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
             _set_browser_profile_cookie(response, request, user)
         return response
     finally:
+        if script_model_token is not None:
+            reset_studio_script_model(script_model_token)
         reset_studio_user(context_token)
 
 # Allow-list map for uploaded file extensions: keys come from the (untrusted)
@@ -1183,6 +1199,39 @@ class CreateProjectRequest(BaseModel):
     # the next episode of this series (episode_number = current max + 1).
     # Omit for a standalone project — behavior unchanged.
     series_id: Optional[str] = None
+    source_script_document_id: Optional[str] = None
+
+
+def _find_script_document_project(document_id: str, user: UserContext):
+    return next((project for project in pipeline.list_scripts(user.owner_profile_id)
+                 if project.source_script_document_id == document_id), None)
+
+
+def _create_script_document_project(request: CreateProjectRequest, user: UserContext):
+    # Use the persistence lock for lookup + creation, including simultaneous
+    # requests from separate tabs. Reentry never overwrites production edits.
+    with pipeline._save_lock:
+        source = load_script_document(request.source_script_document_id, user)
+        existing = _find_script_document_project(request.source_script_document_id, user)
+        if existing is not None:
+            return existing
+
+        def node_text(node):
+            if node.get("type") == "hardBreak":
+                return "\n"
+            separator = "\n" if node.get("type") in {"doc", "shotBlock"} else ""
+            return node.get("text", "") + separator.join(node_text(child) for child in node.get("content", []))
+
+        text = "\n".join(node_text(block) for block in source["content"].get("content", []))
+        if not text.strip():
+            raise HTTPException(status_code=422, detail="Script document is empty")
+        project = pipeline.create_project(
+            request.title, text, True, request.workflow_mode, request.series_id,
+            user.user_id, user.owner_profile_id,
+            source_script_document_id=request.source_script_document_id,
+        )
+        save_document(project.id, SaveDocumentRequest(content=source["content"], create_snapshot=True))
+        return project
 
 
 @app.post("/projects", response_model=Script)
@@ -1199,6 +1248,13 @@ async def create_project(
     """
     # Run in thread pool to avoid blocking event loop during LLM analysis (Python 3.8 compatible)
     loop = asyncio.get_event_loop()
+    if request.source_script_document_id:
+        try:
+            return signed_response(await loop.run_in_executor(
+                None, partial(_create_script_document_project, request, user)
+            ))
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
     try:
         result = await loop.run_in_executor(
             None,  # Use default executor
@@ -1211,6 +1267,8 @@ async def create_project(
                 request.series_id,
                 user.user_id,
                 user.owner_profile_id,
+                **({"source_script_document_id": request.source_script_document_id}
+                   if request.source_script_document_id else {}),
             )
         )
     except ValueError as e:
@@ -3816,7 +3874,7 @@ def _storyboard_analysis_fingerprint(script_id: str, text: str,
     director_profile = resolve_director(script) if resolve_director else None
     visual_style = pipeline.storyboard_visual_style(script)
     llm = pipeline.script_processor.llm
-    resolver = getattr(pipeline, "get_effective_polish_model", None)
+    resolver = getattr(pipeline, "get_effective_storyboard_model", None) or getattr(pipeline, "get_effective_polish_model", None)
     selected_model = resolver(script) if callable(resolver) else ""
     return hashlib.sha256(json.dumps([
         text,
@@ -3849,7 +3907,8 @@ def start_storyboard_analysis(
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, lineage=lineage,
     )
-    selected_model = pipeline.get_effective_polish_model(pipeline.get_script(script_id))
+    resolver = getattr(pipeline, "get_effective_storyboard_model", None) or pipeline.get_effective_polish_model
+    selected_model = resolver(pipeline.get_script(script_id))
     job_fingerprint = "storyboard:" + fingerprint
     from .llm import split_director_source
     total_batches = len(split_director_source(
@@ -3908,7 +3967,8 @@ def start_storyboard_analysis_refinement(
     fingerprint = _storyboard_analysis_fingerprint(
         script_id, request.text, request.draft, instructions, lineage,
     )
-    selected_model = pipeline.get_effective_polish_model(pipeline.get_script(script_id))
+    resolver = getattr(pipeline, "get_effective_storyboard_model", None) or pipeline.get_effective_polish_model
+    selected_model = resolver(pipeline.get_script(script_id))
     return extraction_jobs.start(
         user.owner_profile_id,
         script_id,
@@ -7649,8 +7709,9 @@ def start_director_shooting_plan(
     chunks = split_director_source(
         script.original_text, direct_max_chars=4500, target_chars=4000, max_chars=4500,
     )
-    model = _get_polish_model_for_project(script_id).strip() or None
-    if model:
+    from ..studio_access import studio_script_model
+    model = studio_script_model() or _get_polish_model_for_project(script_id).strip() or None
+    if model and not studio_script_model():
         try:
             published = fetch_uniart_catalog(studio_uniart_config())
         except Exception as exc:
@@ -9358,7 +9419,8 @@ def delete_prop(script_id: str, prop_id: str):
 
 from datetime import datetime, timezone
 
-_TRON_PROJECTS_DIR = Path.home() / ".tron" / "comic" / "projects"
+_TRON_PROJECTS_DIR = Path(os.environ.get("SCRIPT_EDITOR_PROJECTS_DIR", str(Path.home() / ".tron" / "comic" / "projects")))
+_TRON_SCRIPT_DOCUMENTS_DIR = Path(os.environ.get("SCRIPT_DOCUMENTS_DIR", str(Path.home() / ".tron" / "comic" / "script-documents")))
 
 
 class SaveDocumentRequest(BaseModel):
@@ -9371,6 +9433,387 @@ class DocumentSnapshotInfo(BaseModel):
     timestamp: str  # ISO format
     created_at: str
     size_bytes: int
+
+
+class CreateScriptDocumentRequest(BaseModel):
+    title: str = "未命名剧本"
+    content: dict = Field(default_factory=lambda: {"type": "doc", "content": [{"type": "action", "content": []}]})
+
+
+class UpdateScriptDocumentRequest(BaseModel):
+    title: Optional[str] = None
+    content: Optional[dict] = None
+    create_snapshot: bool = False
+
+
+from .script_authoring import ScriptAuthoringStore, ScriptWritingModel, analyze_outline, document_text
+from .models import ScriptWritingPlanDraft
+
+
+def _authoring_store(user: UserContext) -> ScriptAuthoringStore:
+    return ScriptAuthoringStore(_script_documents_owner_dir(user.owner_profile_id))
+
+
+class ScriptWritingModelSettings(BaseModel):
+    model: ScriptWritingModel
+
+
+@app.get("/script-writing/settings")
+def get_script_writing_settings(user: UserContext = Depends(require_studio_user)):
+    return {"model": _authoring_store(user).writing_model() or "llm-nf-all"}
+
+
+@app.put("/script-writing/settings")
+def update_script_writing_settings(request: ScriptWritingModelSettings,
+                                   user: UserContext = Depends(require_studio_user)):
+    _authoring_store(user).set_writing_model(request.model)
+    return {"model": request.model}
+
+
+def _script_model_for_request(user: UserContext, requested: ScriptWritingModel | None) -> str | None:
+    from ..studio_access import studio_script_model
+
+    if not requested and studio_script_model():
+        return studio_script_model()
+    model = requested or _authoring_store(user).writing_model() or "llm-nf-all"
+    from ..user_config import get_user_config_store
+
+    provider = get_user_config_store().get_public(user).get("catalog_name")
+    return f"{provider}/{model}" if provider in {"greena", "uniart"} else model
+
+
+class ConfirmWritingPlanRequest(BaseModel):
+    draft: ScriptWritingPlanDraft
+    base_revision: Optional[str] = None
+    source_hash: str = Field(min_length=64, max_length=64)
+
+
+@app.get("/script-documents/{document_id}/writing-plan")
+def get_writing_plan(document_id: str, user: UserContext = Depends(require_studio_user)):
+    return _authoring_store(user).workspace(document_id)
+
+
+@app.put("/script-documents/{document_id}/writing-plan")
+def confirm_writing_plan(document_id: str, request: ConfirmWritingPlanRequest,
+                         user: UserContext = Depends(require_studio_user)):
+    return _authoring_store(user).confirm(document_id, request.draft, request.base_revision, request.source_hash)
+
+
+@app.post("/script-documents/{document_id}/outline-analysis", status_code=202)
+def start_outline_analysis(document_id: str, request: ScriptWritingModelSettings | None = None,
+                           user: UserContext = Depends(require_studio_user)):
+    workspace = _authoring_store(user).workspace(document_id)
+    if workspace["root_document_id"] != document_id:
+        raise HTTPException(422, "请在总纲文档解析全剧大纲")
+    if not workspace["source_text"].strip():
+        raise HTTPException(422, "请先输入总纲")
+    if len(workspace["source_text"]) > 80000:
+        raise HTTPException(422, "总纲最多支持80000字，请先整理原文")
+    llm = pipeline.script_processor.llm
+    model = _script_model_for_request(user, request.model if request else None)
+    return extraction_jobs.start(user.owner_profile_id, "script-outline:document:" + document_id,
+        workspace["source_hash"] + ":" + str(model or llm.default_model) + ":" + uuid.uuid4().hex,
+        lambda: analyze_outline(llm, workspace["source_text"], model=model))
+
+
+@app.get("/script-documents/{document_id}/outline-analysis/jobs/{job_id}")
+def get_outline_analysis_job(document_id: str, job_id: str,
+                             user: UserContext = Depends(require_studio_user)):
+    _authoring_store(user).directory(document_id)
+    return extraction_jobs.get(user.owner_profile_id, "script-outline:document:" + document_id, job_id)
+
+
+class ScriptWritingRequest(BaseModel):
+    mode: Literal["expand_outline", "continue"]
+    project_id: Optional[str] = None
+    script_document_id: Optional[str] = None
+    title: str = Field("未命名剧本", max_length=160)
+    source_text: str = Field(min_length=1, max_length=80000)
+    target_word_count: int = Field(2000, ge=100, le=20000)
+    instruction: str = Field("", max_length=4000)
+    model: ScriptWritingModel | None = None
+
+
+def _series_writing_context(script: Script, owner_profile_id: str) -> tuple[str, str]:
+    if not script.series_id:
+        return "", ""
+    series = pipeline.get_series(script.series_id, owner_profile_id)
+    if not series:
+        return "", ""
+    source_context = series.source_context if isinstance(series.source_context, dict) else {}
+    series_parts = [str(source_context.get(key) or "").strip()
+                    for key in ("preamble", "synopsis")]
+    series_context = "\n\n".join(dict.fromkeys(part for part in series_parts if part))
+    previous_context = ""
+    if script.episode_number:
+        previous = next((episode for episode in pipeline.get_series_episodes(series.id)
+                         if episode.episode_number == script.episode_number - 1), None)
+        if previous:
+            previous_context = (
+                f"第 {previous.episode_number} 集《{previous.title}》结尾：\n"
+                + (previous.original_text or "")[-1800:]
+            )
+    return series_context[:18000], previous_context
+
+
+def _run_script_writing(request: ScriptWritingRequest, series_context: str,
+                        previous_episode_context: str, model: str | None = None) -> dict[str, str]:
+    from ..agent_skills import catalog as skill_catalog
+    from .script_writing import generate_episode_text
+
+    skill = next((package for package in skill_catalog()
+                  if package["id"] == "em-outline-to-script"), None)
+    return generate_episode_text(
+        pipeline.script_processor.llm,
+        model=model,
+        mode=request.mode,
+        title=request.title,
+        source_text=request.source_text,
+        target_word_count=request.target_word_count,
+        series_context=series_context,
+        previous_episode_context=previous_episode_context,
+        instruction=request.instruction,
+        skill_instructions=skill["instructions"] if skill else "",
+    )
+
+
+@app.post("/script-writing/generate", status_code=202)
+def start_script_writing(
+    request: ScriptWritingRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    if bool(request.project_id) == bool(request.script_document_id):
+        raise HTTPException(422, "必须且只能指定一个剧本或制作项目")
+    series_context = previous_context = ""
+    title = request.title.strip()
+    if request.project_id:
+        script = pipeline.get_script(request.project_id, user.owner_profile_id)
+        if not script:
+            raise HTTPException(404, "剧本项目不存在")
+        title = title if title and title != "未命名剧本" else script.title
+        series_context, previous_context = _series_writing_context(script, user.owner_profile_id)
+        resource_key = "project:" + request.project_id
+    else:
+        document_dir = _script_document_dir(user.owner_profile_id, request.script_document_id or "")
+        metadata = _script_document_metadata(document_dir)
+        title = title if title and title != "未命名剧本" else metadata.get("title", title)
+        context = _authoring_store(user).writing_context(request.script_document_id or "", request.mode)
+        if context:
+            title = context["title"]
+            series_context = context["series_context"]
+            previous_context = context["previous_episode_context"]
+            request = request.model_copy(update={"source_text": context["source_text"], "mode": context["mode"]})
+        resource_key = "document:" + (request.script_document_id or "")
+
+    if not request.source_text.strip():
+        raise HTTPException(422, "请先输入本集大纲或剧本正文")
+    normalized = request.model_copy(update={"title": title})
+    llm = pipeline.script_processor.llm
+    model = _script_model_for_request(user, request.model)
+    fingerprint = hashlib.sha256(json.dumps([
+        normalized.mode, resource_key, normalized.title, normalized.source_text,
+        normalized.target_word_count, normalized.instruction,
+        llm.provider, model or llm.default_model or llm._get_default_model(), series_context, previous_context, uuid.uuid4().hex,
+    ], ensure_ascii=False).encode()).hexdigest()
+    return extraction_jobs.start(
+        user.owner_profile_id,
+        "script-writing:" + resource_key,
+        fingerprint,
+        lambda: _run_script_writing(normalized, series_context, previous_context, model),
+    )
+
+
+@app.get("/script-writing/jobs/{job_id}")
+def get_script_writing_job(
+    job_id: str,
+    project_id: Optional[str] = None,
+    script_document_id: Optional[str] = None,
+    user: UserContext = Depends(require_studio_user),
+):
+    if bool(project_id) == bool(script_document_id):
+        raise HTTPException(422, "必须且只能指定一个剧本或制作项目")
+    resource_key = "project:" + project_id if project_id else "document:" + (script_document_id or "")
+    return extraction_jobs.get(
+        user.owner_profile_id,
+        "script-writing:" + resource_key,
+        job_id,
+    )
+
+
+def _script_documents_owner_dir(owner_profile_id: str) -> Path:
+    return _TRON_SCRIPT_DOCUMENTS_DIR / studio_owner_key(owner_profile_id)
+
+
+def _write_script_document_json(path: Path, data: dict) -> None:
+    """Replace a complete JSON file so a failed write preserves the last save."""
+    temporary_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary_path.replace(path)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail="Failed to save script document") from exc
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _script_document_dir(owner_profile_id: str, document_id: str) -> Path:
+    try:
+        canonical_id = str(uuid.UUID(document_id))
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=404, detail="Script document not found")
+    document_dir = _script_documents_owner_dir(owner_profile_id) / canonical_id
+    if not document_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Script document not found")
+    return document_dir
+
+
+def _script_document_metadata(document_dir: Path) -> dict:
+    try:
+        return json.loads((document_dir / "metadata.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to load script document metadata: {exc}")
+
+
+def _script_document_response(document_dir: Path) -> dict:
+    metadata = _script_document_metadata(document_dir)
+    document_path = document_dir / "document.json"
+    try:
+        content = json.loads(document_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to load script document: {exc}")
+    if metadata.get("authoring_parent_id"):
+        workspace = ScriptAuthoringStore(document_dir.parent).workspace(metadata["id"])
+        episode = next((e for e in (workspace["plan"] or {}).get("episodes", [])
+                        if e["document_id"] == metadata["id"]), None)
+        if episode:
+            metadata["title"] = episode["title"]
+    metadata["content"] = content
+    metadata["updated_at"] = datetime.fromtimestamp(document_path.stat().st_mtime, timezone.utc).isoformat()
+    return metadata
+
+
+@app.post("/script-documents")
+def create_script_document(
+    request: CreateScriptDocumentRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    document_id = str(uuid.uuid4())
+    document_dir = _script_documents_owner_dir(user.owner_profile_id) / document_id
+    document_dir.mkdir(parents=True, exist_ok=False)
+    metadata = {
+        "id": document_id,
+        "title": request.title.strip() or "未命名剧本",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        _write_script_document_json(document_dir / "metadata.json", metadata)
+        _write_script_document_json(document_dir / "document.json", request.content)
+    except (OSError, HTTPException) as exc:
+        shutil.rmtree(document_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create script document: {exc}")
+    return _script_document_response(document_dir)
+
+
+@app.get("/script-documents")
+def list_script_documents(user: UserContext = Depends(require_studio_user)):
+    owner_dir = _script_documents_owner_dir(user.owner_profile_id)
+    if not owner_dir.exists():
+        return []
+    documents = []
+    for document_dir in owner_dir.iterdir():
+        if document_dir.is_dir() and (document_dir / "document.json").is_file():
+            metadata = _script_document_metadata(document_dir)
+            if metadata.get("authoring_parent_id"):
+                continue
+            document_path = document_dir / "document.json"
+            metadata["updated_at"] = datetime.fromtimestamp(document_path.stat().st_mtime, timezone.utc).isoformat()
+            documents.append(metadata)
+    documents.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    return documents
+
+
+@app.get("/script-documents/{document_id}")
+def load_script_document(document_id: str, user: UserContext = Depends(require_studio_user)):
+    return _script_document_response(_script_document_dir(user.owner_profile_id, document_id))
+
+
+@app.get("/script-documents/{document_id}/production-project")
+def get_script_document_project(document_id: str, user: UserContext = Depends(require_studio_user)):
+    _script_document_dir(user.owner_profile_id, document_id)
+    with pipeline._save_lock:
+        project = _find_script_document_project(document_id, user)
+        return {"project_id": project.id if project is not None else None}
+
+
+@app.delete("/script-documents/{document_id}")
+def delete_script_document(document_id: str, user: UserContext = Depends(require_studio_user)):
+    return _authoring_store(user).delete(document_id)
+
+
+@app.put("/script-documents/{document_id}")
+def save_script_document(
+    document_id: str,
+    request: UpdateScriptDocumentRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    document_dir = _script_document_dir(user.owner_profile_id, document_id)
+    metadata = _script_document_metadata(document_dir)
+    if request.title is not None and not metadata.get("authoring_parent_id"):
+        metadata["title"] = request.title.strip() or "未命名剧本"
+        _write_script_document_json(document_dir / "metadata.json", metadata)
+    if request.content is not None:
+        _write_script_document_json(document_dir / "document.json", request.content)
+    snapshot = _create_snapshot(document_dir, document_id) if request.create_snapshot else None
+    response = _script_document_response(document_dir)
+    response.update({
+        "status": "ok",
+        "size_bytes": (document_dir / "document.json").stat().st_size,
+        "snapshot_created": snapshot is not None,
+    })
+    if snapshot is not None:
+        response["snapshot"] = {"document_id": document_id, **snapshot.model_dump(exclude={"project_id"})}
+    return response
+
+
+@app.get("/script-documents/{document_id}/snapshots")
+def list_script_document_snapshots(document_id: str, user: UserContext = Depends(require_studio_user)):
+    document_dir = _script_document_dir(user.owner_profile_id, document_id)
+    history_dir = document_dir / "history"
+    if not history_dir.exists():
+        return []
+    snapshots = [
+        {"document_id": document_id, **_snapshot_info(document_id, path).model_dump(exclude={"project_id"})}
+        for path in history_dir.glob("*.json") if path.is_file()
+    ]
+    return sorted(snapshots, key=lambda item: item["timestamp"], reverse=True)
+
+
+@app.post("/script-documents/{document_id}/snapshots")
+def create_script_document_snapshot(document_id: str, user: UserContext = Depends(require_studio_user)):
+    document_dir = _script_document_dir(user.owner_profile_id, document_id)
+    snapshot = _create_snapshot(document_dir, document_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="No document to snapshot")
+    return {"status": "ok", "document_id": document_id, **snapshot.model_dump(exclude={"project_id"})}
+
+
+@app.post("/script-documents/{document_id}/snapshots/{timestamp}/restore")
+def restore_script_document_snapshot(
+    document_id: str,
+    timestamp: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    document_dir = _script_document_dir(user.owner_profile_id, document_id)
+    snapshot_path = document_dir / "history" / f"{timestamp}.json"
+    if not snapshot_path.is_file() or snapshot_path.parent != document_dir / "history":
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    document_path = document_dir / "document.json"
+    try:
+        _create_snapshot(document_dir, document_id)
+        _write_script_document_json(document_path, json.loads(snapshot_path.read_text(encoding="utf-8")))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to restore snapshot: {exc}")
+    return _script_document_response(document_dir)
 
 
 def _get_project_dir(project_id: str) -> Path:
@@ -9458,15 +9901,14 @@ def save_document(project_id: str, request: SaveDocumentRequest):
     project_dir.mkdir(parents=True, exist_ok=True)
 
     doc_path = project_dir / "document.json"
-
     snapshot = None
-    # Optionally create a snapshot before overwriting
-    if request.create_snapshot and doc_path.exists():
-        snapshot = _create_snapshot(project_dir, project_id)
 
     try:
         with open(doc_path, "w", encoding="utf-8") as f:
             json.dump(request.content, f, ensure_ascii=False, indent=2)
+        # A manual snapshot represents the content the user just saved.
+        if request.create_snapshot:
+            snapshot = _create_snapshot(project_dir, project_id)
     except OSError as e:
         raise HTTPException(status_code=500, detail=f"Failed to save document: {e}")
 
@@ -9787,6 +10229,10 @@ def _parse_txt(text: str) -> dict:
 
 @app.post("/projects/{project_id}/document/import")
 def import_document(project_id: str, req: ImportDocRequest):
+    return _parse_imported_document(req)
+
+
+def _parse_imported_document(req: ImportDocRequest):
     """Import a script file and convert to Tiptap JSON."""
     import base64
     import tempfile
@@ -9824,6 +10270,12 @@ def import_document(project_id: str, req: ImportDocRequest):
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_type}")
 
     return {"content": doc, "filename": req.filename, "file_type": file_type}
+
+
+@app.post("/script-documents/import")
+def import_script_document(req: ImportDocRequest, user: UserContext = Depends(require_studio_user)):
+    """Parse an uploaded screenplay into an independent authoring document."""
+    return _parse_imported_document(req)
 
 
 @app.post("/projects/{project_id}/document/export")
@@ -10222,8 +10674,24 @@ def derive_gaps(project_id: str, req: DeriveGapsRequest):
         if not text_blocks:
             return DeriveGapsResponse(entities=[], cached=False)
 
-    # 2. Check cache
-    cache_key = _derive_cache_key(text_blocks, req.gaps)
+    return _derive_text_gaps(text_blocks, req)
+
+
+@app.post("/script-documents/{document_id}/derive_gaps")
+def derive_script_document_gaps(
+    document_id: str,
+    req: DeriveGapsRequest,
+    user: UserContext = Depends(require_studio_user),
+):
+    _script_document_dir(user.owner_profile_id, document_id)
+    return _derive_text_gaps(req.raw_text_blocks or [], req, user.owner_profile_id)
+
+
+def _derive_text_gaps(text_blocks: List[str], req: DeriveGapsRequest, owner_scope: str = ""):
+    if not text_blocks:
+        return DeriveGapsResponse(entities=[], cached=False)
+    # Scope authoring cache entries to the authenticated profile.
+    cache_key = owner_scope + _derive_cache_key(text_blocks, req.gaps)
     cached_result = _derive_cache_get(cache_key)
     if cached_result is not None:
         entities = [DeriveGapEntity(**e) for e in cached_result]

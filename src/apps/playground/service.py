@@ -343,7 +343,8 @@ class PlaygroundService:
     def _nsfw_wan_ids():
         from ...models.nsfw_new_one import WAN_IDS
 
-        return frozenset(model_id for model_id in WAN_IDS if model_id.startswith("nsfw/"))
+        # Keep the same legacy aliases as Studio's production pipeline.
+        return WAN_IDS
 
     def _generate_video_nsfw(self, gen: PlaygroundGeneration, out_path: str, *, batch_index: int = 0) -> None:
         from ...models.nsfw_new_one import NSFWNewOneVideoModel

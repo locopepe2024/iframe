@@ -11,6 +11,7 @@ import {
 } from '@/lib/modelCatalog';
 import { api } from '@/lib/api';
 import { useTranslations } from "next-intl";
+import ScreenplayModelSettings from '@/components/settings/ScreenplayModelSettings';
 import GroupedModelGrid from '@/components/common/GroupedModelGrid';
 
 interface SeriesModelSettingsModalProps {
@@ -127,6 +128,7 @@ export default function SeriesModelSettingsModal({ isOpen, onClose, seriesId, on
                             </div>
                         ) : (
                             <>
+                                <ScreenplayModelSettings />
                                 {/* Assets Section */}
                                 <div className="space-y-5">
                                     <div className="flex items-center gap-2 text-sm font-bold text-foreground">

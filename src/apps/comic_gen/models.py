@@ -3169,6 +3169,7 @@ class Script(BaseModel):
     owner_profile_id: Optional[str] = Field(None, description="Authenticated UniArt profile owner")
     title: str = Field(..., description="Title of the comic/video")
     original_text: str = Field(..., description="The original novel text")
+    source_script_document_id: Optional[str] = Field(None, description="Independent authoring document copied when creating this project")
     source_revision: int = Field(1, ge=1)
     source_revisions: List[ScriptSourceRevision] = Field(default_factory=list)
     fact_ledger_revision: int = Field(0, ge=0)
@@ -3410,3 +3411,33 @@ class GlobalAssetLibrary(BaseModel):
 # VideoTask is declared before the frame-owned manifest for legacy model
 # ordering; resolve its forward reference after all models are defined.
 VideoTask.model_rebuild()
+
+
+class ScriptEpisodeOutline(BaseModel):
+    number: int = Field(ge=1, le=200)
+    title: str = Field(min_length=1, max_length=160)
+    outline: str = Field(min_length=1, max_length=12000)
+    opening_state: str = Field(default="", max_length=4000)
+    ending_state: str = Field(default="", max_length=4000)
+    characters: str = Field(default="", max_length=4000)
+    source_excerpt: str = Field(default="", max_length=16000, description="本集原文素材，保留既有对白、情感节点、动作及信物")
+    target_word_count: int = Field(default=2000, ge=100, le=20000)
+
+
+class ScriptWritingPlanDraft(BaseModel):
+    background: str = Field(default="", max_length=8000)
+    style: str = Field(default="", max_length=4000)
+    point_of_view: str = Field(default="", max_length=4000)
+    characters: str = Field(default="", max_length=10000)
+    constraints: str = Field(default="", max_length=8000)
+    missing_information: List[str] = Field(default_factory=list, max_length=100)
+    suggestions: List[str] = Field(default_factory=list, max_length=100)
+    episodes: List[ScriptEpisodeOutline] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_episode_sequence(self):
+        if [episode.number for episode in self.episodes] != list(range(1, len(self.episodes) + 1)):
+            raise ValueError("分集必须从第 1 集起连续排列，不能重复或缺集")
+        if any(not e.title.strip() or not e.outline.strip() for e in self.episodes):
+            raise ValueError("每集必须填写标题与大纲")
+        return self

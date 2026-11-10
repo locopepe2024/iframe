@@ -75,6 +75,31 @@ def test_failure_is_explicit_and_retryable(tmp_path):
     assert wait_done(store, retry)['status'] == 'completed'
 
 
+@pytest.mark.parametrize('fingerprint,label', [
+    ('entity-source-hash', '实体提取'),
+    ('director:source', '导演分析'),
+    ('series-director:source', '导演分析'),
+])
+def test_entity_and_director_failures_use_their_own_stage_label(tmp_path, fingerprint, label):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+        def fail():
+            raise ValueError('scenes[0].asset_baseline.basis 必须是字符串数组')
+        job = store.start('owner', 'project', fingerprint, fail)
+        done = wait_done(store, job)
+        assert done['error'].startswith(label + '失败：')
+        assert 'basis' in done['error']
+
+
+def test_entity_timeout_keeps_entity_stage_label(tmp_path):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+        def fail():
+            raise TimeoutError('request timed out')
+        job = store.start('owner', 'project', 'entity-source-hash', fail)
+        assert wait_done(store, job)['error'].startswith('实体提取请求超时')
+
+
 def test_shooting_plan_contract_failure_is_owner_scoped_and_specific(tmp_path):
     with ThreadPoolExecutor(max_workers=1) as executor:
         store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
@@ -386,3 +411,39 @@ def test_refinement_prompt_contains_source_draft_and_all_user_constraints():
     assert '1. 删除路人' in prompt and '2. 增加产品别名穿心莲' in prompt
     assert '用户明确确认的地点身份与空间关系' in prompt
     assert result.characters == []
+
+
+@pytest.mark.parametrize('resource,label', [('script-outline:document:root', '总纲解析'), ('script-writing:document:episode', '剧本写作')])
+@pytest.mark.parametrize('reason', ['Request timed out', 'OpenAI API error status=524: upstream timeout', '总纲约定24集，解析只返回1集'])
+def test_authoring_errors_are_not_reported_as_director_failures(tmp_path, resource, label, reason):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+        def fail(): raise RuntimeError(reason)
+        job = store.start('owner', resource, 'random-source-hash', fail)
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            done = store.get('owner', resource, job['id'])
+            if done['status'] != 'running': break
+            time.sleep(.01)
+        assert done['status'] == 'failed'
+        assert label in done['error']
+        assert '导演' not in done['error'] and 'Director' not in done['error']
+        if 'timeout' in reason.lower() or 'timed out' in reason.lower():
+            assert '超时' in done['error']
+        else:
+            assert reason in done['error']
+
+
+
+def test_director_provider_failure_is_not_labeled_admission(tmp_path):
+    store = ExtractionJobs(tmp_path / 'jobs.db')
+    def work():
+        error = RuntimeError('Upstream SSE error')
+        error.director_audit = {'failure_stage': 'provider_response', 'raw_response': '',
+                                'provider_response': {'text_chars': 120, 'chunks_received': 12}}
+        raise error
+    job = store.start('owner', 'project', 'director:failure-stage', work)
+    result = wait_done(store, job)
+    assert result['status'] == 'failed'
+    assert result['result']['failure_stage'] == 'provider_response'
+    assert result['result']['source_audit']['provider_response']['text_chars'] == 120

@@ -6,16 +6,17 @@ import { beforeEach, expect, it, vi } from "vitest";
 import messages from "../../messages/zh.json";
 import ImportFileDialog from "@/components/series/ImportFileDialog";
 
-const { createProject, importFilePreview, importFileConfirm, importDocument, saveDocument } = vi.hoisted(() => ({
+const { createProject, importFilePreview, importFileConfirm, importDocument, createScriptDocument, saveDocument } = vi.hoisted(() => ({
   createProject: vi.fn(),
   importFilePreview: vi.fn(),
   importFileConfirm: vi.fn(),
   importDocument: vi.fn(),
+  createScriptDocument: vi.fn(),
   saveDocument: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({ api: { createProject, importFilePreview, importFileConfirm } }));
-vi.mock("@/lib/scriptEditorApi", () => ({ scriptEditorApi: { importDocument, saveDocument } }));
+vi.mock("@/lib/scriptEditorApi", () => ({ scriptEditorApi: { importDocument, createScriptDocument, saveDocument } }));
 vi.mock("framer-motion", () => ({
   motion: { div: ({ children, initial, animate, exit, ...props }: any) => <div {...props}>{children}</div> },
   AnimatePresence: ({ children }: any) => <>{children}</>,
@@ -39,6 +40,7 @@ it("routes an uploaded DOCX through a saved editor draft before series analysis"
   const content = { type: "doc", content: [{ type: "action", content: [{ type: "text", text: "第1集 开场" }] }] };
   importDocument.mockResolvedValue({ content });
   saveDocument.mockResolvedValue({ status: "ok" });
+  createScriptDocument.mockResolvedValue({ id: "script-1" });
   show();
 
   fireEvent.change(document.querySelector('input[type="file"]')!, {
@@ -46,10 +48,10 @@ it("routes an uploaded DOCX through a saved editor draft before series analysis"
   });
   fireEvent.click(screen.getByRole("button", { name: "导入剧本编辑器" }));
 
-  await waitFor(() => expect(window.location.hash).toBe("#/project/draft-1/editor"));
-  expect(createProject).toHaveBeenCalledWith("sample", "", true);
-  expect(importDocument).toHaveBeenCalledWith("draft-1", expect.objectContaining({ name: "sample.docx" }));
-  expect(saveDocument).toHaveBeenCalledWith("draft-1", content);
+  await waitFor(() => expect(window.location.hash).toBe("#/studio/editor/script-1"));
+  expect(createProject).not.toHaveBeenCalled();
+  expect(importDocument).toHaveBeenCalledWith(expect.objectContaining({ name: "sample.docx" }));
+  expect(createScriptDocument).toHaveBeenCalledWith("sample", content);
   expect(importFilePreview).not.toHaveBeenCalled();
 });
 

@@ -23,6 +23,7 @@ import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 import IFrameBranding from "@/components/layout/IFrameBranding";
 import UpdateChecker from "./UpdateChecker";
 import SkillsSettings from "./SkillsSettings";
+import ScreenplayModelSettings from './ScreenplayModelSettings';
 import AgentSettings from "./AgentSettings";
 import { APP_VERSION, APP_VERSION_LABEL } from "@/generated/appVersion";
 type SettingsCategory = "general" | "models" | "prompts" | "skills" | "agent" | "apikeys" | "storage" | "about";
@@ -620,6 +621,7 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+      <div className="mb-6 rounded-xl border border-glass-border bg-surface-inset p-4"><ScreenplayModelSettings /></div>
       {/* Image model (T2I + I2I unified) */}
       <FormRow label={t("imageModelLabel")} hint={t("imageModelHint")}>
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">

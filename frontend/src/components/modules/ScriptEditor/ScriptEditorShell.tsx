@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { EditorContent } from '@tiptap/react';
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X, ListPlus } from 'lucide-react';
+import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X, ListPlus, FolderPlus, Library, WandSparkles, TextCursorInput } from 'lucide-react';
 import { api } from '@/lib/api';
 import ImportFileDialog from '@/components/series/ImportFileDialog';
 import { useEditorStore } from '@/store/editorStore';
+import { toast } from '@/store/toastStore';
 import { useEditorSetup } from './hooks/useEditorSetup';
 import FormatToolbar from './toolbar/FormatToolbar';
 import { usePasteHandler } from './hooks/usePasteHandler';
@@ -16,10 +17,14 @@ import { useSceneFolding } from './hooks/useSceneFolding';
 import { useViewMode } from './hooks/useViewMode';
 import { useOfflineCache } from './hooks/useOfflineCache';
 import { useAutoSave } from './hooks/useAutoSave';
+import { useProductionHandoff } from './hooks/useProductionHandoff';
 import { useDerivation } from './hooks/useDerivation';
 import { useL3Completion } from './hooks/useL3Completion';
 import { scriptEditorApi } from '@/lib/scriptEditorApi';
 import SnapshotListDialog from './dialogs/SnapshotListDialog';
+import ScriptWritingDialog from './dialogs/ScriptWritingDialog';
+import ScriptOutlineDialog from './dialogs/ScriptOutlineDialog';
+import type { WritingWorkspace, ScriptWritingMode } from '@/lib/scriptEditorApi';
 import { PasteHintBar } from './components/PasteHintBar';
 import { ShortcutHelpPanel } from './components/ShortcutHelpPanel';
 import { ContinuityIndicator } from './components/ContinuityIndicator';
@@ -30,32 +35,62 @@ import StoryboardView from './views/StoryboardView';
 export interface ScriptEditorShellProps {
   mode?: 'full' | 'embedded' | 'focus';
   projectId?: string;
+  scriptDocumentId?: string;
   initialContent?: string | Record<string, unknown> | null;
 }
 
 export default function ScriptEditorShell({
   mode = 'full',
   projectId,
+  scriptDocumentId,
   initialContent,
 }: ScriptEditorShellProps) {
   const t = useTranslations('scriptEditor');
   const { editor, isReady } = useEditorSetup({ content: initialContent });
+  const [writingWorkspace, setWritingWorkspace] = useState<WritingWorkspace | null>(null);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [navigating, setNavigating] = useState(false);
+  const selectedEpisode = writingWorkspace?.plan?.episodes.find(item => item.document_id === scriptDocumentId);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [seriesImportOpen, setSeriesImportOpen] = useState(false);
+  const [scriptWritingOpen, setScriptWritingOpen] = useState(false);
+  const [scriptWritingMode, setScriptWritingMode] = useState<ScriptWritingMode>('expand_outline');
   const [seriesImportSaving, setSeriesImportSaving] = useState(false);
   const [seriesSourceText, setSeriesSourceText] = useState('');
   const [projectTitle, setProjectTitle] = useState('');
   const [seriesImportError, setSeriesImportError] = useState('');
-  const [documentLoading, setDocumentLoading] = useState(Boolean(projectId));
+  const [documentLoading, setDocumentLoading] = useState(Boolean(projectId || scriptDocumentId));
+  const [documentLoadFailed, setDocumentLoadFailed] = useState(false);
   const { showHint, analysis, applyFormatting, dismissHint } = usePasteHandler(editor);
   const { showShortcutHelp, closeShortcutHelp } = useKeyboardShortcuts(editor);
   const continuityReport = useContinuityCheck(editor);
   const { enabled: foldingEnabled, isAllExpanded, totalScenes: foldingTotal } = useSceneFolding(editor);
   const { mode: viewMode, setMode: setViewMode, isReadOnly, showToolbar, showSidebars } = useViewMode();
-  const { hasNewerLocal, restoreFromLocal, dismissLocalRestore, isOffline } = useOfflineCache(projectId, editor);
-  const { save } = useAutoSave(editor, projectId ?? null);
+  const documentKey = scriptDocumentId || projectId;
+  const { hasNewerLocal, restoreFromLocal, dismissLocalRestore, isOffline } = useOfflineCache(documentKey, editor);
+  const canPersist = Boolean(documentKey) && !documentLoading && !documentLoadFailed;
+  const { save } = useAutoSave(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined, projectTitle);
+  const productionDisabled = !canPersist || isOffline || navigating || outlineOpen || scriptWritingOpen || seriesImportOpen || seriesImportSaving;
+  const { isEntering: creatingProject, isChecking: checkingProduction, targetProjectId: productionProjectId, enterProduction: handleEnterProduction } = useProductionHandoff({
+    editor, projectId, scriptDocumentId, title: projectTitle, canEnter: !productionDisabled, save,
+  });
   const refreshDerivation = useDerivation(editor);
-  useL3Completion(editor, projectId ?? null);
+  useL3Completion(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined);
+
+  const handleSaveSnapshot = useCallback(async () => {
+    const result = await save(true);
+    if (!result) {
+      toast.error(t('toolbar.saveFailed'), { body: t('toolbar.saveFailedHint') });
+      return;
+    }
+    if (result.snapshot_created) {
+      toast.success(t('toolbar.saveSuccess'));
+    } else {
+      toast.warning(t('toolbar.saveWithoutSnapshot'), {
+        body: t('toolbar.saveWithoutSnapshotHint'),
+      });
+    }
+  }, [save, t]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -81,25 +116,36 @@ export default function ScriptEditorShell({
     if (!editor) return;
     const store = useEditorStore.getState();
     store.setProjectId(projectId ?? null);
+    store.setEditorMode(mode);
+    store.setViewMode('edit');
+    store.setL3Results(null);
+    store.setL3Status('idle');
+    store.setL3LastFetchTime(null);
     let cancelled = false;
 
-    if (!projectId) {
+    if (!projectId && !scriptDocumentId) {
       setDocumentLoading(false);
       return () => { cancelled = true; };
     }
 
     setDocumentLoading(true);
+    setDocumentLoadFailed(false);
     store.setLoading(true);
-    scriptEditorApi.loadDocument(projectId)
+    (scriptDocumentId ? scriptEditorApi.loadScriptDocument(scriptDocumentId) : scriptEditorApi.loadDocument(projectId!))
       .then((response) => {
         if (cancelled) return;
+        if (response.title) setProjectTitle(response.title);
         editor.commands.setContent(response.content, { emitUpdate: false });
         refreshDerivation();
         store.setDirty(false);
         store.setLastSavedAt(response.updated_at ? new Date(response.updated_at) : null);
       })
       .catch((error) => {
-        if (!cancelled) console.error('[ScriptEditorShell] Failed to load document:', error);
+        if (!cancelled) {
+          setDocumentLoadFailed(true);
+          toast.error(t('document.loadFailed'));
+          console.error('[ScriptEditorShell] Failed to load document:', error);
+        }
       })
       .finally(() => {
         if (!cancelled) {
@@ -109,7 +155,11 @@ export default function ScriptEditorShell({
       });
 
     return () => { cancelled = true; };
-  }, [editor, projectId, refreshDerivation]);
+  }, [editor, projectId, scriptDocumentId, mode, refreshDerivation, t]);
+
+  useEffect(() => {
+    editor?.setEditable(canPersist && !isReadOnly && !creatingProject && !navigating && !outlineOpen && !scriptWritingOpen);
+  }, [editor, canPersist, isReadOnly, creatingProject, navigating, outlineOpen, scriptWritingOpen]);
 
   const handleRestore = useCallback((content: object) => {
     if (!editor) return;
@@ -120,13 +170,13 @@ export default function ScriptEditorShell({
   }, [editor, refreshDerivation]);
 
   const beginSeriesImport = useCallback(async () => {
-    if (!editor || !projectId || seriesImportSaving) return;
+    if (!editor || !canPersist || seriesImportSaving) return;
     setSeriesImportError('');
     setSeriesImportSaving(true);
     try {
       const source = editor.getText({ blockSeparator: '\n' });
       if (!source.trim()) throw new Error('请先整理剧本内容');
-      await scriptEditorApi.saveDocument(projectId, editor.getJSON(), true);
+      if (!await save(true)) throw new Error(t('toolbar.saveFailed'));
       useEditorStore.getState().setDirty(false);
       useEditorStore.getState().setLastSavedAt(new Date());
       setSeriesSourceText(source);
@@ -136,7 +186,86 @@ export default function ScriptEditorShell({
     } finally {
       setSeriesImportSaving(false);
     }
-  }, [editor, projectId, seriesImportSaving]);
+  }, [editor, canPersist, seriesImportSaving, save, t]);
+
+  const backToLibrary = useCallback(async () => {
+    if (useEditorStore.getState().isDirty && !await save(false)) {
+      toast.error(t('toolbar.saveFailed'));
+      return;
+    }
+    window.location.hash = '#/studio/editor';
+  }, [save, t]);
+
+  const navigateDocument = useCallback(async (id: string) => {
+    if (navigating) return;
+    setNavigating(true);
+    try {
+      if (useEditorStore.getState().isDirty && !await save(false)) throw new Error(t('toolbar.saveFailed'));
+      setOutlineOpen(false);
+      window.location.hash = `#/studio/editor/${id}`;
+    } catch (cause) {
+      toast.error(t('toolbar.saveFailed'), { body: cause instanceof Error ? cause.message : '' });
+    } finally { setNavigating(false); }
+  }, [navigating, save, t]);
+
+  const openOutline = useCallback(async () => {
+    if (!scriptDocumentId) return;
+    try {
+      if (useEditorStore.getState().isDirty && !await save(false)) throw new Error(t('toolbar.saveFailed'));
+      setWritingWorkspace(await scriptEditorApi.getWritingPlan(scriptDocumentId));
+      setOutlineOpen(true);
+    } catch (cause) {
+      toast.error(t('outlinePlan.failed'), { body: cause instanceof Error ? cause.message : '' });
+    }
+  }, [scriptDocumentId, save, t]);
+
+  const handleOpenScriptWriting = useCallback(async (nextMode: ScriptWritingMode) => {
+    if (isDirty && !await save(false)) {
+      toast.error(t('toolbar.saveFailed'));
+      return;
+    }
+    if (scriptDocumentId) {
+      try {
+        const workspace = await scriptEditorApi.getWritingPlan(scriptDocumentId);
+        setWritingWorkspace(workspace);
+        if ((!workspace.selected_episode_number && (nextMode === 'expand_outline' || workspace.plan)) || workspace.source_changed) {
+          setOutlineOpen(true);
+          return;
+        }
+      } catch (cause) {
+        toast.error(t('outlinePlan.failed'));
+        return;
+      }
+    }
+    setScriptWritingMode(selectedEpisode && !editor?.getText().trim() ? 'expand_outline' : nextMode);
+    setScriptWritingOpen(true);
+  }, [isDirty, scriptDocumentId, save, t, selectedEpisode, editor]);
+
+  useEffect(() => {
+    if (!scriptDocumentId || documentLoading || documentLoadFailed) return;
+    let cancelled = false;
+    scriptEditorApi.getWritingPlan(scriptDocumentId).then(workspace => {
+      if (!cancelled) setWritingWorkspace(workspace);
+    }).catch(() => { if (!cancelled) setWritingWorkspace(null); });
+    return () => { cancelled = true; };
+  }, [scriptDocumentId, documentLoading, documentLoadFailed]);
+
+  const handleApplyScriptDraft = useCallback(async (draftMode: ScriptWritingMode, draft: string) => {
+    if (!editor || !canPersist) throw new Error(t('toolbar.saveFailed'));
+    const file = new File([draft], `${projectTitle || '剧本'}.fountain`, { type: 'text/plain' });
+    const parsed = await scriptEditorApi.importDocument(file);
+    const blocks = parsed?.content?.content;
+    if (!Array.isArray(blocks) || blocks.length === 0) throw new Error(t('writing.parseFailed'));
+    if (!await save(true)) throw new Error(t('toolbar.saveFailed'));
+    if (draftMode === 'expand_outline') {
+      editor.commands.setContent(parsed.content);
+    } else {
+      const end = editor.state.doc.content.size;
+      editor.chain().focus().insertContentAt(end, blocks).run();
+    }
+    refreshDerivation();
+    toast.success(t('writing.applied'));
+  }, [editor, canPersist, projectTitle, save, refreshDerivation, t]);
 
   const showLeft = mode === 'full' && !leftCollapsed && showSidebars;
   const showRight = mode === 'full' && !rightCollapsed && showSidebars;
@@ -169,15 +298,15 @@ export default function ScriptEditorShell({
           editor={editor}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
-          onSave={() => { void save(true); }}
+          onSave={() => { void handleSaveSnapshot(); }}
           onOpenHistory={() => setHistoryOpen(true)}
-          canPersist={Boolean(projectId) && !documentLoading}
+          canPersist={canPersist}
         />
       )}
 
       {/* Top Toolbar */}
       {!hideAllSidebars && showToolbar && (
-        <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-4">
+        <div className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2">
           <div className="flex items-center gap-3">
             {mode === 'full' && (
               <button
@@ -192,18 +321,56 @@ export default function ScriptEditorShell({
             <span className="text-sm font-medium text-foreground">
               {t('shell.title')}
             </span>
-            {projectId && (
-              <span className="text-xs text-text-muted">{projectId}</span>
+            {projectId && <span className="text-xs text-text-muted">{t('document.production')} · {projectTitle}</span>}
+            {scriptDocumentId && (
+              <label className="flex items-center gap-2 text-xs text-text-muted">
+                <span>{t('document.authoring')}</span>
+                <input aria-label={t('document.title')} value={projectTitle} readOnly={Boolean(selectedEpisode)} disabled={!canPersist || creatingProject}
+                  onChange={(event) => {
+                    setProjectTitle(event.target.value);
+                    useEditorStore.getState().setDirty(true);
+                  }}
+                  className="h-7 w-48 rounded border border-white/10 bg-transparent px-2 text-sm text-foreground outline-none focus:border-primary/60"
+                  maxLength={160} />
+              </label>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {projectId && editor && !documentLoading && (
-              <button type="button" onClick={() => { void beginSeriesImport(); }}
-                disabled={seriesImportSaving}
-                className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10"
-                title="按当前编辑内容预览并创建系列">
-                <ListPlus size={14} /> 创建系列
-              </button>
+          <div className="flex flex-wrap items-center gap-3">
+            {scriptDocumentId && editor && !documentLoading && (
+              <>
+                <button type="button" onClick={() => { void backToLibrary(); }} disabled={creatingProject}
+                  className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50">
+                  <Library size={14} /> {t('document.library')}
+                </button>
+                <button type="button" onClick={() => { void handleEnterProduction(); }}
+                  disabled={productionDisabled || creatingProject || checkingProduction || (!productionProjectId && wordCount === 0)}
+                  aria-busy={creatingProject || checkingProduction}
+                  className="flex items-center gap-1 rounded border border-primary/50 bg-primary/15 px-2 py-1 text-xs text-foreground hover:bg-primary/25 disabled:opacity-50">
+                  <FolderPlus size={14} /> {t(creatingProject || checkingProduction ? 'panels.productionEntering' : productionProjectId ? 'panels.enterPipeline' : 'panels.productionCreate')}
+                </button>
+              </>
+            )}
+            {documentKey && editor && canPersist && (
+              <>
+                <button type="button" onClick={() => { void handleOpenScriptWriting('expand_outline'); }}
+                  disabled={isOffline || documentLoading}
+                  className="flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-1 text-xs text-foreground hover:bg-primary/20 disabled:opacity-50"
+                  title={t('writing.expandTitle')}>
+                  <WandSparkles size={14} /> {t('writing.expand')}
+                </button>
+                <button type="button" onClick={() => { void handleOpenScriptWriting('continue'); }}
+                  disabled={isOffline || documentLoading}
+                  className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50"
+                  title={t('writing.continueTitle')}>
+                  <TextCursorInput size={14} /> {t('writing.continue')}
+                </button>
+                <button type="button" onClick={() => { void beginSeriesImport(); }}
+                  disabled={seriesImportSaving}
+                  className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50"
+                  title="按当前编辑内容预览并创建系列">
+                  <ListPlus size={14} /> 创建系列
+                </button>
+              </>
             )}
             <span className="text-xs text-text-muted">
               {isDirty ? t('status.unsaved') : lastSavedAt ? t('status.savedAt', { time: lastSavedAt.toLocaleTimeString() }) : ''}
@@ -221,6 +388,19 @@ export default function ScriptEditorShell({
             )}
           </div>
         </div>
+      )}
+
+      {scriptDocumentId && writingWorkspace && !hideAllSidebars && (
+        <nav aria-label={t('outlinePlan.title')} className="flex shrink-0 flex-wrap items-center gap-3 border-b border-white/10 px-4 py-2 text-xs">
+          <button type="button" onClick={() => void openOutline()} disabled={navigating || !canPersist} className="rounded border border-white/15 px-3 py-1.5 hover:bg-white/10 disabled:opacity-50">{t('outlinePlan.title')}</button>
+          <select aria-label={t('outlinePlan.selectEpisode')} value={scriptDocumentId} disabled={navigating || !canPersist}
+            onChange={event => void navigateDocument(event.target.value)} className="max-w-md rounded border border-white/15 bg-[#101116] px-2 py-1.5">
+            <option value={writingWorkspace.root_document_id}>{t('outlinePlan.root')} · {writingWorkspace.root_title}</option>
+            {writingWorkspace.plan?.episodes.map(item => <option key={item.document_id} value={item.document_id}>{t('outlinePlan.episode', { number: item.number })} · {item.title}</option>)}
+          </select>
+          {selectedEpisode && <span className="text-text-muted">{t('outlinePlan.bodyCount', { count: wordCount })}</span>}
+          {writingWorkspace.source_changed && <span className="text-amber-300">{t('outlinePlan.sourceChanged')}</span>}
+        </nav>
       )}
 
       {/* Main content area: Three-column layout */}
@@ -272,6 +452,21 @@ export default function ScriptEditorShell({
                 </div>
               </div>
             )}
+            {selectedEpisode && (
+              <div className="mx-auto mt-6 max-w-[720px] px-4">
+                <details key={scriptDocumentId} open={wordCount === 0 ? true : undefined} className="rounded-lg border border-primary/25 bg-primary/[0.04] p-4">
+                  <summary className="cursor-pointer text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{t('outlinePlan.episodeBasis')} · {t('outlinePlan.episode', { number: selectedEpisode.number })} · {selectedEpisode.title}</summary>
+                  <p className="mt-2 text-xs text-text-muted">{t('outlinePlan.basisHint')}</p>
+                  <dl className="mt-4 space-y-3 text-sm">
+                    {(['outline', 'opening_state', 'ending_state', 'characters', 'source_excerpt'] as const).map(key => selectedEpisode[key] ? <div key={key}><dt className="text-xs text-text-muted">{t(`outlinePlan.${key === 'characters' ? 'episodeCharacters' : key}`)}</dt><dd className="mt-1 whitespace-pre-wrap break-words leading-6 text-text-secondary">{selectedEpisode[key]}</dd></div> : null)}
+                  </dl>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={() => void openOutline()} className="rounded border border-white/15 px-3 py-2 text-xs hover:bg-white/10">{t('outlinePlan.edit')}</button>
+                    <button type="button" onClick={() => void handleOpenScriptWriting(wordCount ? 'continue' : 'expand_outline')} disabled={!canPersist || isOffline} className="rounded bg-primary px-3 py-2 text-xs text-white disabled:opacity-50">{t(wordCount ? 'writing.continue' : 'writing.expand')}</button>
+                  </div>
+                </details>
+              </div>
+            )}
             {/* Paste Hint Bar */}
             <PasteHintBar
               visible={showHint}
@@ -309,6 +504,10 @@ export default function ScriptEditorShell({
               editor={editor}
               mode={mode}
               projectId={projectId}
+              onEnterPipeline={() => { void handleEnterProduction(); }}
+              productionProjectId={productionProjectId ?? undefined}
+              productionDisabled={productionDisabled || checkingProduction}
+              productionPending={creatingProject || checkingProduction}
             />
           </aside>
         )}
@@ -353,6 +552,30 @@ export default function ScriptEditorShell({
           open={historyOpen}
           onClose={() => setHistoryOpen(false)}
           projectId={projectId}
+          onRestore={handleRestore}
+        />
+      )}
+      {writingWorkspace && <ScriptOutlineDialog open={outlineOpen} workspace={writingWorkspace} onClose={() => setOutlineOpen(false)} onWorkspace={workspace => {
+        setWritingWorkspace(workspace);
+        const current = workspace.plan?.episodes.find(item => item.document_id === scriptDocumentId);
+        if (current) setProjectTitle(current.title);
+      }} onNavigate={navigateDocument} />}
+      <ScriptWritingDialog
+        open={scriptWritingOpen}
+        onClose={() => setScriptWritingOpen(false)}
+        onApply={handleApplyScriptDraft}
+        mode={scriptWritingMode}
+        projectId={projectId}
+        scriptDocumentId={scriptDocumentId}
+        title={projectTitle || t('document.untitled')}
+        episode={selectedEpisode}
+        sourceText={editor?.getText({ blockSeparator: '\n' }) || ''}
+      />
+      {scriptDocumentId && (
+        <SnapshotListDialog
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+          documentId={scriptDocumentId}
           onRestore={handleRestore}
         />
       )}
