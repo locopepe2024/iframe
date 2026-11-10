@@ -2397,6 +2397,15 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         return None
 
     def plan_director_shooting_chunk(
+        self, script_chunk, entities_json, director_profile, style_config,
+        previous_scene=None, source_ref='', model=None, *, checkpoint=None, save_checkpoint=None,
+    ):
+        from .shooting_plan_stages import plan_in_stages
+        return plan_in_stages(
+            self, script_chunk, entities_json, director_profile, style_config, previous_scene,
+            source_ref=source_ref, model=model, checkpoint=checkpoint, save_checkpoint=save_checkpoint)
+
+    def _plan_director_shooting_beat(
         self,
         script_chunk: str,
         entities_json: Dict[str, Any],
@@ -2405,6 +2414,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         previous_scene: Optional[Dict[str, Any]] = None,
         source_ref: str = "",
         model: Optional[str] = None,
+        *, beat_plan: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Propose complete scene/beat/shot plans for one bounded source chunk."""
         if not self.is_configured:
@@ -2415,12 +2425,24 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         last_category = "contract_violation"
         style_summary = build_visual_style_summary(style_config)
         lighting_schema = _prompt_json(DirectorPlanLighting.model_json_schema())
+        beat_scope = ("本次只为以下已规划节拍补齐 1–3 个 shots。"
+                      "不得扩展其他节拍或重写已规划的场景/节拍。每个文字字段用简短可执行描述，避免重复原文。"
+                      "光影基线保持一致，不逐镜复述整段设定；需要更多镜头的完整剧本由其他请求处理。"
+                      "本次完整 JSON 不超过6000字符，每个描述字段尽量不超过100字，保留原文对白。"
+                      "下方通用 scene/beat 规则仅用于读取上下文，不要重复输出场景或节拍元数据。"
+                      f"<current_beat_plan>{_prompt_json(beat_plan)}</current_beat_plan>" if beat_plan else "")
+        output_contract = (
+            '本次根结构严格为 {"shots":[...],"continuity_out":"本节拍结束时的实际状态，未知留空",'
+            '"unresolved_questions":[]}。只返回 1–3 个镜头；不要返回 scenes、beats 或重复已规划字段。'
+            if beat_plan else '必须返回如下根结构：{"scenes":[...],"unresolved_questions":[]}。'
+        )
         for attempt in range(2):
             handoff_preset = _load_director_preset("shooting-plan-handoff")
             prompt = f"""你是电影导演和场记统筹。请根据提供的剧本片段、已确认故事理解、人物/场景/道具实体和视觉风格，提出可供用户审阅的拍摄计划。
 
 <stage_preset name="shooting-plan-handoff">{handoff_preset}</stage_preset>
 {director_skill_guidance(entities_json.get("selected_creative_methods", []))}
+{beat_scope}
 
 事实边界：剧本片段是剧情事实来源；Director story_map 只提供已确认的事件 ID 和叙事组织；实体只提供可引用 ID；视觉风格只决定拍摄表达。不得添加剧本没有的对白、动作或剧情事实。来源片段边界由系统切分，不能把片段边界直接当作场景边界。
 
@@ -2440,7 +2462,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
    shot 除上述字段外仅允许 information_design、lighting_override_reason、unresolved_entity_refs；不要增加 performance_change 等自定义字段，情绪变化放 beat.emotional_change，表演变化放 shot.performance_action。
 
-必须返回如下根结构：{{"scenes":[...],"unresolved_questions":[]}}。不要输出 IDs、order 或 source_chunk_refs，这些由系统生成；source_chunk_refs 由系统根据输入片段回填。只有片段开头有明确连续动作/连续场次证据时才设 continues_previous_scene=true，不要仅因地点相同而续接。
+{output_contract} 不要输出 IDs、order 或 source_chunk_refs，这些由系统生成；source_chunk_refs 由系统根据输入片段回填。只有片段开头有明确连续动作/连续场次证据时才设 continues_previous_scene=true，不要仅因地点相同而续接。
 
 <source_chunk ref="{source_ref}">
 {script_chunk}
@@ -2468,6 +2490,23 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                 last_error = (f"JSON 格式错误（第 {exc.lineno} 行，第 {exc.colno} 列）"
                               if isinstance(exc, json.JSONDecodeError) else "JSON 格式错误：必须返回一个完整对象，不能截断或附加多个结果")
             else:
+                envelope_error = ''
+                if beat_plan:
+                    if (not isinstance(result, dict) or 'shots' not in result
+                            or set(result) - {'shots', 'continuity_out', 'unresolved_questions'}
+                            or not isinstance(result.get('continuity_out', ''), str)
+                            or len(result.get('continuity_out', '')) > 600):
+                        envelope_error = '当前节拍仅返回 shots、continuity_out、unresolved_questions，不返回 scenes 或 beats'
+                    elif len(json.dumps(result, ensure_ascii=False, separators=(',', ':'))) > 6000:
+                        envelope_error = '当前节拍的 JSON 超过6000字符，请保留原文对白并精简重复的镜头描述'
+                    else:
+                        scoped_scene = {key: value for key, value in beat_plan.items() if key != 'beats'}
+                        scoped_scene['continuity_out'] = result.get('continuity_out', '')
+                        scoped_scene['beats'] = [{
+                            **{key: value for key, value in beat_plan['beats'][0].items() if key != 'source_unit_ids'},
+                            'shots': result['shots'],
+                        }]
+                        result = {'scenes': [scoped_scene], 'unresolved_questions': result.get('unresolved_questions', [])}
                 # Keep the plan usable when creative details are omitted. The
                 # storyboard editor exposes these empty fields for later completion.
                 for scene in result.get("scenes", []) if isinstance(result, dict) else []:
@@ -2489,7 +2528,12 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                                     ]
                                 shot.setdefault("character_ids", [])
                                 shot.setdefault("prop_ids", [])
-                last_error = self._validate_director_shooting_chunk(result) or ""
+                last_error = envelope_error or self._validate_director_shooting_chunk(result) or ""
+                if not last_error and beat_plan and (
+                    len(result['scenes']) != 1 or len(result['scenes'][0]['beats']) != 1
+                    or len(result['scenes'][0]['beats'][0]['shots']) > 3
+                ):
+                    last_error = '当前节拍必须只返回一个 scene、一个 beat、1–3 个 shots'
                 last_category = "contract_violation"
                 if not last_error:
                     return result

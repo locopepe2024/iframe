@@ -4910,6 +4910,15 @@ class ComicGenPipeline(StudioOwnerMixin):
                     }
                 if skill_snapshot:
                     entities["selected_creative_methods"] = skill_snapshot
+                checkpoint = cached_payload.get('checkpoint') if isinstance(cached_payload, dict) else None
+
+                def save_checkpoint(value):
+                    nonlocal checkpoint
+                    if self.director_shooting_plan_lineage(script_id) != lineage:
+                        raise ValueError('Shooting plan inputs changed during generation')
+                    checkpoint = value
+                    return not save_batch or save_batch(index, chunk['source_ref'], {'checkpoint': value})
+
                 try:
                     chunk_result = self.script_processor.plan_director_shooting_chunk(
                         chunk["text"],
@@ -4919,17 +4928,29 @@ class ComicGenPipeline(StudioOwnerMixin):
                         previous_scene,
                         source_ref=chunk["source_ref"],
                         **({"model": model} if model else {}),
+                        checkpoint=checkpoint,
+                        save_checkpoint=save_checkpoint,
                     )
                 except DirectorShootingChunkError as exc:
-                    raise DirectorShootingChunkError(
+                    error = DirectorShootingChunkError(
                         exc.category, f"第 {index + 1}/{len(chunks)} 段：{exc.public_reason}"
-                    ) from exc
+                    )
+                    error.shooting_plan_failure = {**getattr(exc, 'shooting_plan_failure', {}),
+                                                   'chunk': index + 1, 'chunks': len(chunks)}
+                    raise error from exc
+                except Exception as exc:
+                    exc.shooting_plan_failure = {**getattr(exc, 'shooting_plan_failure', {}),
+                                                 'chunk': index + 1, 'chunks': len(chunks)}
+                    raise
                 chunk_error = ScriptProcessor._validate_director_shooting_chunk(chunk_result)
                 if chunk_error:
                     raise RuntimeError(
                         f"拍摄计划分析第 {index + 1}/{len(chunks)} 段未通过镜头契约校验：{chunk_error}"
                     )
-                if save_batch and not save_batch(index, chunk["source_ref"], {"result": chunk_result}):
+                batch_result = {'result': chunk_result}
+                if checkpoint:
+                    batch_result['checkpoint'] = checkpoint
+                if save_batch and not save_batch(index, chunk["source_ref"], batch_result):
                     raise RuntimeError("拍摄计划任务已过期，请重试。")
             if ScriptProcessor._validate_director_shooting_chunk(chunk_result):
                 raise RuntimeError(f"拍摄计划缓存段 {index + 1}/{len(chunks)} 已不符合当前镜头契约，请重新生成。")

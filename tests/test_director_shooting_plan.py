@@ -255,7 +255,7 @@ def test_llm_accepts_missing_visual_atoms_for_downstream_editing():
         json.dumps(valid_chunk(), ensure_ascii=False),
     ]
 
-    result = processor.plan_director_shooting_chunk(
+    result = processor._plan_director_shooting_beat(
         "场景 6 电影院 日 内\n两人牵手走向入口。",
         {"characters": [{"id": "shen-xia-young", "name": "沈夏（大学）"}], "props": []},
         {"story_map": {"phases": []}},
@@ -281,7 +281,7 @@ def test_shooting_plan_reports_bounded_model_contract_failure(response, category
     processor.llm.chat.return_value = response
 
     with pytest.raises(DirectorShootingChunkError) as failure:
-        processor.plan_director_shooting_chunk("场景原文", {}, {}, {})
+        processor._plan_director_shooting_beat("场景原文", {}, {}, {})
 
     assert failure.value.category == category
     assert reason in failure.value.public_reason
@@ -301,7 +301,7 @@ def test_lighting_retry_identifies_invalid_shape_and_provides_canonical_schema(l
     invalid['scenes'][0]['beats'][0]['shots'][0]['lighting'] = lighting
     processor.llm.chat.side_effect = [json.dumps(invalid), json.dumps(valid_chunk())]
 
-    result = processor.plan_director_shooting_chunk('场景原文', {}, {}, {})
+    result = processor._plan_director_shooting_beat('场景原文', {}, {}, {})
     assert result == valid_chunk()
     prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
     assert reason in prompt
@@ -319,7 +319,7 @@ def test_shooting_plan_accepts_provider_commentary_but_retries_unknown_shot_fiel
     invalid['scenes'][0]['beats'][0]['shots'][0]['performance_change'] = '靠近'
     prefix = '（已激活逆向学习中---）方案\n\n'
     processor.llm.chat.side_effect = [prefix + json.dumps(invalid), prefix + json.dumps(valid_chunk())]
-    assert processor.plan_director_shooting_chunk('场景原文', {}, {}, {}) == valid_chunk()
+    assert processor._plan_director_shooting_beat('场景原文', {}, {}, {}) == valid_chunk()
     prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
     assert '存在未知字段 performance_change' in prompt
 
@@ -333,7 +333,7 @@ def test_shooting_plan_keeps_incomplete_and_multiple_json_invalid(response):
     processor.llm = Mock(is_configured=True)
     processor.llm.chat.return_value = response
     with pytest.raises(DirectorShootingChunkError) as exc:
-        processor.plan_director_shooting_chunk('场景原文', {}, {}, {})
+        processor._plan_director_shooting_beat('场景原文', {}, {}, {})
     assert exc.value.category == 'invalid_json'
 
 
@@ -342,7 +342,7 @@ def test_shooting_plan_passes_selected_polish_model_to_llm():
     processor.llm = Mock(is_configured=True)
     processor.llm.chat.return_value = json.dumps(valid_chunk(), ensure_ascii=False)
 
-    processor.plan_director_shooting_chunk(
+    processor._plan_director_shooting_beat(
         "场景 6 电影院 日 内\n两人牵手走向入口。",
         {"characters": [], "props": []},
         {"story_map": {"phases": []}},
@@ -358,7 +358,7 @@ def test_shooting_plan_prompt_turns_confirmed_region_into_optional_visual_anchor
     processor.llm = Mock(is_configured=True)
     processor.llm.chat.return_value = json.dumps(valid_chunk(), ensure_ascii=False)
 
-    processor.plan_director_shooting_chunk(
+    processor._plan_director_shooting_beat(
         "大学宿舍里，两人讨论毕业去向。",
         {"characters": [], "props": []},
         {
@@ -390,7 +390,7 @@ def test_shooting_plan_prompt_receives_director_daylight_and_lighting_cues():
         "lighting_cues": "夕阳从街西侧照入",
     }])
 
-    processor.plan_director_shooting_chunk(
+    processor._plan_director_shooting_beat(
         "黄昏的青溪镇街道，苏砚走向粮铺。",
         {"characters": [], "props": []},
         profile.model_dump(),

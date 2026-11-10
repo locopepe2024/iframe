@@ -128,7 +128,7 @@ def test_shooting_plan_unknown_failure_does_not_expose_exception_text(tmp_path):
         done = wait_done(store, job)
         assert done['status'] == 'failed'
         assert 'private screenplay' not in done['error']
-        assert '导演拍摄计划分析失败' in done['error']
+        assert '导演拍摄计划生成失败' in done['error']
 
 
 def test_interrupted_job_is_failed_and_can_be_retried_after_restart(tmp_path):

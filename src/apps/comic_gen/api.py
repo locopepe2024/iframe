@@ -7671,6 +7671,7 @@ def restore_director_shooting_plan_revision(
 
 
 def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any], model: Optional[str] = None) -> str:
+    from .shooting_plan_stages import VERSION as shooting_plan_version
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(404, "Project not found")
@@ -7680,6 +7681,7 @@ def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any],
         return [{name: getattr(item, name, None) for name in names} for item in items]
 
     payload = [
+        shooting_plan_version,
         lineage,
         selected_fields(entities["characters"], ("id", "name", "persona", "base_character_id", "description")),
         selected_fields(entities["scenes"], ("id", "name", "description")),
