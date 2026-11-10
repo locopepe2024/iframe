@@ -94,6 +94,51 @@ def test_checkpoint_rejection_stops_before_next_model_call():
     p._plan_director_shooting_beat.assert_not_called()
 
 
+@pytest.mark.parametrize('labels,expected', [
+    ({'scene_ref': '场景二·门外', 'location': '门外'}, '场景二·门外'),
+    ({'location': '门外'}, '门外'),
+    ({}, ''),
+])
+def test_missing_second_scene_heading_uses_existing_label_without_model_retry(labels, expected):
+    p = processor()
+    value = structure()
+    second_scene = {'beats': [value['scenes'][0]['beats'].pop()], **labels}
+    value['scenes'].append(second_scene)
+    p.llm.chat.return_value = json.dumps(value)
+    snapshots = []
+    result = generate(p, save_checkpoint=lambda state: snapshots.append(copy.deepcopy(state)) or True)
+    assert p.llm.chat.call_count == 1
+    assert p._plan_director_shooting_beat.call_count == 2
+    assert result['scenes'][1]['heading'] == expected
+    assert result['scenes'][1]['beats'][0]['title'] == '离开'
+    assert snapshots[0]['structure']['scenes'][1]['heading'] == expected
+    assert snapshots[-1]['completed_steps'] == snapshots[-1]['total_steps'] == 3
+
+
+def test_missing_label_does_not_admit_missing_beats_or_source_coverage():
+    p = processor()
+    value = structure()
+    value['scenes'].append({'location': '门外'})
+    p.llm.chat.return_value = json.dumps(value)
+    with pytest.raises(RuntimeError):
+        generate(p)
+    assert p.llm.chat.call_count == 2
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_structure_correction_reports_all_missing_fields_in_one_attempt():
+    p = processor()
+    value = structure()
+    for beat in value['scenes'][0]['beats']:
+        del beat['source_unit_ids']
+    p.llm.chat.side_effect = [json.dumps(value), json.dumps(structure())]
+    generate(p)
+    repair_prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    assert 'scenes.0.beats.0.source_unit_ids' in repair_prompt
+    assert 'scenes.0.beats.1.source_unit_ids' in repair_prompt
+    assert '缺少必填字段' in repair_prompt
+
+
 def test_each_detail_call_repairs_only_the_current_beat_and_enforces_shot_budget():
     p = ScriptProcessor.__new__(ScriptProcessor)
     p.llm = Mock(is_configured=True)

@@ -32,7 +32,7 @@ class StructureBeat(BaseModel):
 class StructureScene(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     scene_ref: Text = ''
-    heading: Text
+    heading: Text = ''
     location: Text = ''
     time_anchor: Text = ''
     place_continuity_id: Text = ''
@@ -58,6 +58,11 @@ def _json(value):
 
 def _structure(value, units, profile):
     structure = Structure.model_validate(value)
+    # A display label is not screenplay evidence. Reuse only an existing
+    # source label/location; do not reject valid beats or invent a scene name.
+    for scene in structure.scenes:
+        if not scene.heading.strip():
+            scene.heading = scene.scene_ref.strip() or scene.location.strip()
     covered = [i for scene in structure.scenes for beat in scene.beats for i in beat.source_unit_ids]
     if covered != list(range(len(units))):
         raise ValueError('source_unit_ids 必须按原文顺序完整覆盖每个输入单元且不重复')
@@ -130,6 +135,7 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
 必须覆盖所有输入单元，不能重复、跳过、重排或扩写剧情；若一场较长，拆成多个节拍，不要新增场景。
 边界落在同一连续动作时 keep_with_next=true。只有原文明确承接上一段时首场可设 continues_previous_scene=true。
 标题简短，目的、情绪、氛围、进出状态各用一句话，尽量不超过60字，不复述原文；story_event_ids 仅用已确认事件，无关联用 []。地点、时段连续性不按同名推断。
+场景标题 heading 是显示标签：有依据时填写；无法确定可省略，不要为补标题发明场景。
 只返回符合下方 JSON Schema 的完整 JSON，不要解释，不要返回 shots。
 <structure_schema>{_json(Structure.model_json_schema())}</structure_schema>
 <source_units>{_json([{'id': i, 'text': unit['text']} for i, unit in enumerate(units)])}</source_units>
@@ -149,16 +155,23 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
                     value = _structure(parse_model_json_object(content or ''), units, profile)
                 except (ValueError, ValidationError) as exc:
                     if isinstance(exc, ValidationError):
-                        issue = exc.errors()[0]
-                        reason = '.'.join(str(p) for p in issue['loc']) + ': ' + issue['type']
-                        if issue['loc'] == ('scenes',) and issue['type'] == 'too_short':
-                            reason = '必须返回至少一个 scene'
+                        reasons = []
+                        for issue in exc.errors()[:6]:
+                            path = '.'.join(str(p) for p in issue['loc'])
+                            kind = '缺少必填字段' if issue['type'] == 'missing' else issue['type']
+                            detail = path + ': ' + kind
+                            if issue['loc'] == ('scenes',) and issue['type'] == 'too_short':
+                                detail = '必须返回至少一个 scene'
+                            reasons.append(detail)
+                        reason = '；'.join(reasons)
                     elif isinstance(exc, json.JSONDecodeError):
                         reason = '场景与节拍规划不是完整 JSON'
                     else:
                         reason = '场景与节拍规划无效' if not str(exc).startswith(('source_unit_ids', 'story_event_ids')) else str(exc)
                     if attempt:
                         raise DirectorShootingChunkError('structure_contract', reason) from exc
+                    logger.warning('Shooting plan structure rejected: run=%s response_chars=%s error_type=%s',
+                                   identity[:12], len(content or ''), type(exc).__name__)
                     retry_note = '仅修正当前场景与节拍规划：' + reason
                 else:
                     state = {'version': VERSION, 'input_hash': identity, 'structure': value, 'details': {}}

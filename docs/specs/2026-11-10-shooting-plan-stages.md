@@ -13,6 +13,10 @@ response size rather than assuming a particular provider error cause.
    most 240 characters. Beats reference one or two units. Validate that unit
    references cover the source exactly once and in order, and that event IDs
    belong to the confirmed Director story map.
+   A missing scene heading reuses its existing source label or location, or
+   remains empty. This display metadata does not invalidate a covered structure.
+   A correction request reports up to six field errors together, without
+   including response text or validation input values in ordinary logs.
 2. Expand one beat per request, with at most three shots and a 6,000-character
    JSON envelope. Use only that beat's original text, relevant confirmed events
    and scene summaries, global execution/canon constraints, entities, visual
