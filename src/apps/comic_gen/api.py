@@ -7731,7 +7731,7 @@ def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any],
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(404, "Project not found")
-    entities = pipeline.resolve_episode_assets(script)
+    entities = pipeline.resolve_project_assets(script)
     llm = pipeline.script_processor.llm
     def selected_fields(items, names):
         return [{name: getattr(item, name, None) for name in names} for item in items]
