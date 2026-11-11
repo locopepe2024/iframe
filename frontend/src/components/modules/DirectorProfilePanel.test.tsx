@@ -453,3 +453,21 @@ it("opens a returned story map with missing relation evidence fields and milesto
     fireEvent.click(screen.getByRole("button", { name: "Editor view" }));
     expect(await screen.findByDisplayValue("主线")).toBeInTheDocument();
 });
+
+it("shows the current generation step and saved progress before a complete draft", async () => {
+    vi.spyOn(api, "applyDirectorProfile");
+    vi.spyOn(api, "saveDirectorProfileDraft");
+    let resolveAnalysis: (value: typeof profile) => void = () => undefined;
+    vi.spyOn(api, "analyzeDirectorProfile").mockImplementation((_id, onStatus) => {
+        onStatus?.("running", { completed: 2, total: 4, stage: "story" });
+        return new Promise<typeof profile>(resolve => { resolveAnalysis = resolve; });
+    });
+    render(<NextIntlClientProvider locale="en" messages={messages}><DirectorProfilePanel /></NextIntlClientProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Generate Director Interpretation" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Story structure");
+    expect(screen.getByRole("status")).toHaveTextContent("2/4 steps saved");
+    expect(api.applyDirectorProfile).not.toHaveBeenCalled();
+    expect(api.saveDirectorProfileDraft).not.toHaveBeenCalled();
+    resolveAnalysis(profile);
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Director analysis complete"));
+});

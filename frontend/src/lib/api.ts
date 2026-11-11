@@ -1682,7 +1682,7 @@ export const api = {
     ) => refineDirectorProfile(API_URL, scriptId, draft, instructions, onStatus),
 
     getSeriesDirectorProfile: async (seriesId: string) => getSeriesDirectorProfile(API_URL, seriesId),
-    analyzeSeriesDirectorProfile: (seriesId: string, onStatus?: (status: string) => void, skills: import("./directorSkills").CreativeSkillSelection[] = []) => analyzeSeriesDirectorProfile(API_URL, seriesId, onStatus, skills),
+    analyzeSeriesDirectorProfile: (seriesId: string, onStatus?: DirectorProfileJobStatusListener, skills: import("./directorSkills").CreativeSkillSelection[] = []) => analyzeSeriesDirectorProfile(API_URL, seriesId, onStatus, skills),
     saveSeriesDirectorDraft: (seriesId: string, draft: Record<string, unknown>, draftName?: string) => saveSeriesDirectorDraft(API_URL, seriesId, draft, draftName),
     saveSeriesSourceContext: (seriesId: string, text: string) => saveSeriesSourceContext(API_URL, seriesId, text),
     confirmSeriesDirectorProfile: (seriesId: string) => confirmSeriesDirectorProfile(API_URL, seriesId),

@@ -2019,6 +2019,13 @@
     "factLedgerDraftSaved": "Fact ledger draft saved",
     "factLedgerConfirmed": "Fact ledger confirmed",
     "directorStatus": {
+      "stepProgress": "{completed}/{total} steps saved; retry resumes unfinished work.",
+      "stages": {
+        "source": "Source preparation",
+        "foundation": "Foundation",
+        "story": "Story structure",
+        "continuity": "Scene continuity and execution summary"
+      },
       "analyzing": "Analyzing the script and building the director profile…",
       "refining": "Updating the director profile from your revision request…",
       "applying": "Saving the director profile…",

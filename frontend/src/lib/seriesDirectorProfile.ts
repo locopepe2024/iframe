@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { DirectorProfileJobStatusListener } from "./directorProfile";
 
 export type SeriesDirectorDraft = Record<string, unknown>;
 export interface SeriesDirectorState {
@@ -37,17 +38,17 @@ export async function saveSeriesSourceContext(baseUrl: string, seriesId: string,
 export async function confirmSeriesDirectorProfile(baseUrl: string, seriesId: string) {
   return (await axios.post(`${baseUrl}/series/${seriesId}/director-profile/confirm`)).data;
 }
-export async function analyzeSeriesDirectorProfile(baseUrl: string, seriesId: string, onStatus?: (status: string) => void, skills: import("./directorSkills").CreativeSkillSelection[] = []) {
+export async function analyzeSeriesDirectorProfile(baseUrl: string, seriesId: string, onStatus?: DirectorProfileJobStatusListener, skills: import("./directorSkills").CreativeSkillSelection[] = []) {
   const job = (await axios.post(`${baseUrl}/series/${seriesId}/director-profile-jobs`, { skills }, { timeout: 60000 })).data;
   if (!job?.id) throw new Error("Invalid Series Director task response");
-  onStatus?.(job.status);
+  onStatus?.(job.status, job.progress);
   let current = job;
   let pollFailures = 0;
   while (!current.result?.profile && !["completed", "failed", "error"].includes(String(current.status).toLowerCase())) {
     await pause(2000);
     try {
       current = (await axios.get(`${baseUrl}/series/${seriesId}/director-profile-jobs/${job.id}`, { timeout: 15000 })).data;
-      onStatus?.(current.status);
+      onStatus?.(current.status, current.progress);
       pollFailures = 0;
     } catch (error) {
       const status = axios.isAxiosError(error) ? error.response?.status : undefined;

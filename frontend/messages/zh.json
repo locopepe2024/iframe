@@ -2020,6 +2020,13 @@
     "factLedgerDraftSaved": "事实账本草稿已保存",
     "factLedgerConfirmed": "事实账本已确认",
     "directorStatus": {
+      "stepProgress": "已保存 {completed}/{total} 个步骤；失败后可继续。",
+      "stages": {
+        "source": "来源整理",
+        "foundation": "基础设定",
+        "story": "故事结构",
+        "continuity": "场景连续性与执行摘要"
+      },
       "analyzing": "正在分析剧本并生成导演设定…",
       "refining": "正在根据修改要求更新导演设定…",
       "applying": "正在保存导演设定…",
