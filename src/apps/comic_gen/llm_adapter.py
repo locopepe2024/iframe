@@ -23,14 +23,16 @@ from ...utils.endpoints import get_provider_base_url
 
 logger = logging.getLogger(__name__)
 
+LLM_CONTENT_REFUSAL_FINISH_REASONS = frozenset(("content_filter", "sensitive"))
+
 
 class LLMResponseTerminationError(RuntimeError):
     """An explicit unsuccessful model finish, with no response prose exposed."""
 
     def __init__(self, finish_reason: str):
         self.finish_reason = finish_reason
-        message = ('所选模型拒绝处理本次内容（content_filter）；请调整输入或切换剧本模型。'
-                   if finish_reason == 'content_filter' else
+        message = (f'所选模型拒绝处理本次内容（{finish_reason}）；请调整输入或切换剧本模型。'
+                   if finish_reason in LLM_CONTENT_REFUSAL_FINISH_REASONS else
                    '模型输出达到长度上限（length），结果未完整生成；请缩小本次生成范围后重试。')
         super().__init__(message)
 
@@ -328,7 +330,7 @@ class LLMAdapter:
                 model, len(content or ""), finish_reason,
             )
             text_chars = len(content or '')
-            if finish_reason in ('content_filter', 'length'):
+            if finish_reason in LLM_CONTENT_REFUSAL_FINISH_REASONS or finish_reason == 'length':
                 raise LLMResponseTerminationError(finish_reason)
             return content
         except Exception as e:

@@ -194,6 +194,37 @@ def test_provider_error_retries_only_unfinished_step_with_saved_source_context()
     assert result["source_audit"]["steps"][0]["reused"] is True
 
 
+@pytest.mark.parametrize("finish_reason", ["content_filter", "sensitive"])
+def test_continuity_refusal_preserves_three_steps_and_reports_model_rejection(tmp_path, finish_reason):
+    from src.apps.comic_gen.llm_adapter import LLMResponseTerminationError
+    pipeline, script, processor = setup_pipeline()
+    original = script.model_dump()
+    rejection = LLMResponseTerminationError(finish_reason)
+    rejection.llm_diagnostic = {"stream": True, "finish_reason": finish_reason, "text_chars": 276}
+    processor.llm.chat.side_effect = [json.dumps(step) for step in responses()[:2]] + [rejection]
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / "jobs.db", executor=executor)
+        def work(job_id):
+            return generate(pipeline, cached=store.load_batches("owner", "project", "director:refusal"),
+                save_step=lambda i, key, value: store.save_batch("owner", "project", "director:refusal", job_id, i, key, value))
+        first = store.start("owner", "project", "director:refusal", work, pass_job_id=True, total_batches=4)
+        failed = wait_done(store, first)
+        assert failed["status"] == "failed"
+        assert failed["progress"] == {"completed": 3, "total": 4, "stage": "continuity"}
+        assert "所选模型拒绝处理" in failed["error"] and finish_reason in failed["error"]
+        assert "JSON" not in failed["error"] and "流式响应中断" not in failed["error"]
+        assert failed["result"]["source_audit"]["provider_response"]["finish_reason"] == finish_reason
+        assert processor.llm.chat.call_count == 3
+        saved = store.load_batches("owner", "project", "director:refusal")
+        processor.llm.chat.reset_mock(side_effect=True)
+        processor.llm.chat.side_effect = [json.dumps(responses()[2])]
+        done = wait_done(store, store.start("owner", "project", "director:refusal", work, pass_job_id=True, total_batches=4))
+        assert done["status"] == "completed" and processor.llm.chat.call_count == 1
+        resumed = store.load_batches("owner", "project", "director:refusal")
+        assert all(resumed[index] == saved[index] for index in (0, 1, 2))
+        assert script.model_dump() == original
+
+
 @pytest.mark.parametrize("bad", ["{", "{}", '{"story_map":null}',
     json.dumps({**responses()[1], "story_map": {"phases": [], "relationship_arcs": [{"relationship_id": "bad", "states": [{"phase_id": "missing", "state": "unknown"}]}], "story_threads": []}})])
 def test_invalid_structure_never_becomes_checkpoint(bad):

@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 from .llm import DirectorShootingChunkError
+from .llm_adapter import LLM_CONTENT_REFUSAL_FINISH_REASONS
 
 logger = logging.getLogger(__name__)
 _POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix='script-extraction')
@@ -329,8 +330,8 @@ class ExtractionJobs:
                         reason = '拍摄计划汇总校验失败'
                     if isinstance(diagnostic, dict):
                         reason = '模型请求失败'
-                        if diagnostic.get('finish_reason') == 'content_filter':
-                            reason = '所选模型拒绝处理本次内容（content_filter），请调整输入或切换剧本模型'
+                        if diagnostic.get('finish_reason') in LLM_CONTENT_REFUSAL_FINISH_REASONS:
+                            reason = f"所选模型拒绝处理本次内容（{diagnostic['finish_reason']}），请调整输入或切换剧本模型"
                         elif diagnostic.get('finish_reason') == 'length':
                             reason = '模型输出达到长度上限（length），本步骤未完整生成'
                         elif diagnostic.get('stream') and diagnostic.get('text_chars'):
@@ -369,8 +370,8 @@ class ExtractionJobs:
                     reason = '模型流式响应中断' if diagnostic.get('stream') else '模型请求失败'
                     if diagnostic.get('finish_reason') == 'length':
                         reason = '模型输出达到长度上限，本步骤未完整生成'
-                    elif diagnostic.get('finish_reason') == 'content_filter':
-                        reason = '所选模型拒绝处理本次内容，请调整输入或切换剧本模型'
+                    elif diagnostic.get('finish_reason') in LLM_CONTENT_REFUSAL_FINISH_REASONS:
+                        reason = f"所选模型拒绝处理本次内容（{diagnostic['finish_reason']}），请调整输入或切换剧本模型"
                 else:
                     reason = '返回格式或引用校验未通过，请重试或切换剧本模型'
                 message = f'导演分析失败：{label}步骤，{reason}。'

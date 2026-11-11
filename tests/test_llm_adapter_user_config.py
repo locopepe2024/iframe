@@ -338,7 +338,7 @@ def test_real_sdk_stream_error_stays_failed_and_records_boundary(text, caplog):
 
 
 @pytest.mark.parametrize('stream', [True, False])
-@pytest.mark.parametrize('finish_reason,label', [('content_filter', '拒绝处理'), ('length', '长度上限')])
+@pytest.mark.parametrize('finish_reason,label', [('content_filter', '拒绝处理'), ('sensitive', '拒绝处理'), ('length', '长度上限')])
 def test_model_termination_rejects_even_parseable_json_without_retry(stream, finish_reason, label, caplog, monkeypatch):
     import httpx
     import json

@@ -166,7 +166,7 @@ def test_shooting_finalization_failure_reports_saved_generation_without_inventin
         assert done['result']['failure_stage'] == {'stage': 'finalize'}
 
 
-@pytest.mark.parametrize('finish_reason', ['content_filter', 'length'])
+@pytest.mark.parametrize('finish_reason', ['content_filter', 'sensitive', 'length'])
 def test_shooting_model_termination_is_not_labeled_stream_interruption(tmp_path, finish_reason):
     from src.apps.comic_gen.llm_adapter import LLMResponseTerminationError
     store = ExtractionJobs(tmp_path / 'jobs.db')
