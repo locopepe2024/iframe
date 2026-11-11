@@ -25,6 +25,7 @@ function setup(overrides: Partial<Parameters<typeof useProductionHandoff>[0]> = 
 }
 
 it('waits for save before creating and opening the selected episode project', async () => {
+  createProject.mockResolvedValue({ id: 'production-1', series_id: 'series-1' });
   let finish!: (value: object) => void;
   const save = vi.fn(() => new Promise<object>(resolve => { finish = resolve; }));
   const { result } = setup({ save });
@@ -34,17 +35,18 @@ it('waits for save before creating and opening the selected episode project', as
   expect(createProject).not.toHaveBeenCalled();
   await act(async () => { finish({ status: 'ok' }); await pending; });
   expect(createProject).toHaveBeenCalledExactlyOnceWith('第一集', '第一集正文', true, 'r2v', undefined, 'episode-1');
-  expect(window.location.hash).toBe('#/project/production-1');
+  expect(window.location.hash).toBe('#/series/series-1/episode/production-1');
 });
 
 it('finds and opens the existing episode after a refresh, even with an empty authoring body', async () => {
   getScriptDocumentProject.mockResolvedValue({ project_id: 'existing' });
+  createProject.mockResolvedValue({ id: 'existing', series_id: 'repaired-series' });
   const { result, save } = setup({ editor: { getText: () => '' } as unknown as Editor });
   await waitFor(() => expect(result.current.targetProjectId).toBe('existing'));
   await act(async () => { await result.current.enterProduction(); });
   expect(save).toHaveBeenCalledOnce();
-  expect(createProject).not.toHaveBeenCalled();
-  expect(window.location.hash).toBe('#/project/existing');
+  expect(createProject).toHaveBeenCalledExactlyOnceWith('第一集', '', true, 'r2v', undefined, 'episode-1');
+  expect(window.location.hash).toBe('#/series/repaired-series/episode/existing');
 });
 
 it('returns from a production editor to the same project without creating another', async () => {
@@ -94,6 +96,7 @@ it('does not create for blank or unavailable documents', async () => {
 });
 
 it('ignores late association responses when switching episodes', async () => {
+  createProject.mockResolvedValue({ id: 'production-2' });
   let finishFirst!: (value: { project_id: string }) => void;
   getScriptDocumentProject.mockImplementation((id: string) => id === 'episode-1'
     ? new Promise(resolve => { finishFirst = resolve; })
@@ -109,5 +112,16 @@ it('ignores late association responses when switching episodes', async () => {
   expect(result.current.targetProjectId).toBe('production-2');
   await act(async () => { await result.current.enterProduction(); });
   expect(window.location.hash).toBe('#/project/production-2');
-  expect(createProject).not.toHaveBeenCalled();
+  expect(createProject).toHaveBeenCalledExactlyOnceWith('episode-2', '正文', true, 'r2v', undefined, 'episode-2');
+});
+
+it('keeps the editor open when repairing an existing project association fails', async () => {
+  getScriptDocumentProject.mockResolvedValue({ project_id: 'existing' });
+  createProject.mockRejectedValue(new Error('Series association conflict'));
+  const { result, save } = setup();
+  await act(async () => { await result.current.enterProduction(); });
+  expect(save).toHaveBeenCalledOnce();
+  expect(createProject).toHaveBeenCalledOnce();
+  expect(error).toHaveBeenCalled();
+  expect(window.location.hash).toBe('#/studio/editor/episode-1');
 });

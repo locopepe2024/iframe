@@ -44,20 +44,26 @@ export function useProductionHandoff({
     setIsEntering(true);
     try {
       let targetProjectId = projectId;
+      let targetSeriesId: string | undefined;
       if (!targetProjectId && scriptDocumentId) {
         targetProjectId = (await api.getScriptDocumentProject(scriptDocumentId)).project_id ?? undefined;
       }
       const text = editor.getText({ blockSeparator: '\n' });
       if (!targetProjectId && !text.trim()) return;
       if (!await save(false)) throw new Error(t('toolbar.saveFailed'));
-      if (!targetProjectId) {
+      // Authoring handoff is idempotent and also repairs the root-series link
+      // for projects created before series-aware handoff was available.
+      if (!projectId && scriptDocumentId) {
         const project = await api.createProject(
           title.trim() || t('document.untitled'), text, true, 'r2v', undefined, scriptDocumentId,
         );
         targetProjectId = project.id;
+        targetSeriesId = project.series_id;
       }
       if (scriptDocumentId) setAssociation({ documentId: scriptDocumentId, projectId: targetProjectId! });
-      window.location.hash = `#/project/${targetProjectId}`;
+      window.location.hash = targetSeriesId
+        ? `#/series/${targetSeriesId}/episode/${targetProjectId}`
+        : `#/project/${targetProjectId}`;
     } catch (cause) {
       toast.error(t('panels.productionFailed'), {
         body: cause instanceof Error ? cause.message : t('toolbar.saveFailedHint'),

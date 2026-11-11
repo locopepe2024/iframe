@@ -11,6 +11,19 @@ vi.mock("@/components/shared/AssetIndexPreview", () => ({
 }));
 
 describe("AssetDrawer product references", () => {
+    it("retains the chosen identity when inserting one of two same-name characters", () => {
+        const onSelectAsset = vi.fn();
+        const assetIndex = ["actor-a", "actor-b"].map((asset_id) => ({
+            asset_type: "character" as const, asset_id, name: "同名角色",
+            source_scope: "episode" as const,
+            variants: [{ id: `${asset_id}-front`, url: `${asset_id}.png` }],
+        }));
+        render(<AssetDrawer isOpen onClose={vi.fn()} characters={[]} scenes={[]} props={[]}
+            assetIndex={assetIndex} onSelectAsset={onSelectAsset} />);
+        fireEvent.click(screen.getAllByRole("button", { name: /同名角色/ })[1]);
+        expect(onSelectAsset).toHaveBeenCalledWith("character", "同名角色", "actor-b");
+    });
+
     it("selects a frame variant by asset and variant identity even when names match", () => {
         const onSelectFrameVariant = vi.fn();
         const assetIndex = ["actor-a", "actor-b"].map((asset_id) => ({

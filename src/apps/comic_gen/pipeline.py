@@ -4875,7 +4875,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         assert profile is not None
         story_map = self._effective_shooting_story_map(script, profile)
         assert story_map is not None
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         available_character_ids = {item.id for item in resolved["characters"]}
         available_scene_ids = {item.id for item in resolved["scenes"]}
         available_prop_ids = {item.id for item in resolved["props"]}
@@ -5394,7 +5394,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._validate_director_shooting_plan_for_confirmation(plan)
         baselines = {(item.place_continuity_id, item.time_continuity_id): item
                      for item in plan.lighting_baselines}
-        resolved_assets = self.resolve_episode_assets(script)
+        resolved_assets = self.resolve_project_assets(script)
         series = self.series_store.get(script.series_id) if script.series_id else None
         crowd_roster = {item.extra_id: item for item in (series.extra_roster if series else [])}
         def current_asset_id(asset_type: str, plan_asset_id: Optional[str]) -> Optional[str]:
@@ -5696,6 +5696,40 @@ class ComicGenPipeline(StudioOwnerMixin):
             ] = asset_id
             return self.sync_episode_assets_from_shooting_plan(script_id)
 
+    def _import_confirmed_plan_library_references(self, script: Script, plan: DirectorShootingPlan) -> None:
+        """Materialize exact, owned library references during an explicit plan sync.
+
+        Keep IDs so confirmed plans, shot references and variant selections stay
+        intact. Reading or rendering a shot never imports library candidates.
+        """
+        if not script.owner_profile_id or not getattr(self, "library_store", None):
+            return
+        referenced = {"character": set(script.episode_person_asset_bindings.values()),
+                      "scene": set(script.episode_plan_scene_asset_bindings.values())
+                               | set(script.episode_scene_asset_replacements.values()),
+                      "prop": set(script.episode_prop_asset_replacements.values())}
+        for scene in plan.scenes:
+            referenced["scene"].add(scene.scene_asset_id)
+            referenced["prop"].update(scene.prop_ids)
+            for beat in scene.beats:
+                for shot in beat.shots:
+                    referenced["character"].update(shot.character_ids)
+                    referenced["character"].update(cast.era_variant_id for cast in shot.cast_bindings)
+                    referenced["prop"].update(shot.prop_ids)
+                    referenced["prop"].update(binding.prop_id for binding in shot.prop_bindings)
+                    if shot.scene_binding:
+                        referenced["scene"].add(shot.scene_binding.scene_asset_id)
+        resolved = self.resolve_project_assets(script)
+        for asset_type, collection in (("character", "characters"), ("scene", "scenes"), ("prop", "props")):
+            available = {asset.id for asset in resolved[collection]}
+            retired = set(script.retired_plan_asset_ids.get(asset_type, []))
+            for asset in self._library_list_for_type(asset_type, script.owner_profile_id):
+                if asset.id in referenced[asset_type] and asset.id not in available | retired:
+                    imported = asset.model_copy(deep=True)
+                    imported.owner_user_id = script.owner_user_id
+                    imported.owner_profile_id = script.owner_profile_id
+                    getattr(script, collection).append(imported)
+
     def sync_episode_assets_from_shooting_plan(self, script_id: str) -> Dict[str, Any]:
         """Persist the context and return a non-destructive, reviewable diff."""
         with self._save_lock:
@@ -5706,6 +5740,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             if not script.director_shooting_plan_revisions:
                 raise ValueError("Confirm the shooting plan before syncing episode assets")
             plan = script.director_shooting_plan_revisions[-1].plan
+            self._validate_director_shooting_plan_for_confirmation(plan)
+            self._import_confirmed_plan_library_references(script, plan)
             scene_sources: set[str] = set()
             prop_sources: set[str] = set()
             for scene in plan.scenes:
@@ -5721,7 +5757,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                             prop_sources.add(prop_id)
                         for binding in shot.prop_bindings:
                             prop_sources.add(binding.prop_id)
-            resolved = self.resolve_episode_assets(script)
+            resolved = self.resolve_project_assets(script)
             valid_requirement_keys = {
                 f"scene:{scene.scene_id}" for scene in plan.scenes if not scene.scene_asset_id
             } | {
@@ -5753,7 +5789,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             unresolved_people = {item.person_id: item for item in context.characters
                                  if not item.character_asset_ids}
             if unresolved_people:
-                resolved_characters = self.resolve_episode_assets(script)["characters"]
+                resolved_characters = self.resolve_project_assets(script)["characters"]
                 available_ids = {item.id for item in resolved_characters}
                 profile = self.effective_director_profile(script)
                 profile_people = {item.person_id: item for item in profile.story_map.people} \
@@ -5836,7 +5872,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                     changed.append(item)
             desired_keys = {(b.asset_type, b.asset_id) for b in desired}
             stale = [b.model_copy(update={"status": "stale"}) for key, b in previous.items() if key not in desired_keys]
-            resolved = self.resolve_episode_assets(script)
+            resolved = self.resolve_project_assets(script)
             available = {
                 "character": {item.id for item in resolved["characters"]},
                 "scene": {item.id for item in resolved["scenes"]},
@@ -5894,7 +5930,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise ValueError("Frame not found")
         bindings = {(item.asset_type, item.asset_id): item for item in script.episode_asset_bindings
                     if item.status != "stale"}
-        resolved = self.resolve_episode_assets(script)
+        resolved = self.resolve_project_assets(script)
         by_type = {
             "character": {item.id: item for item in resolved["characters"]},
             "scene": {item.id: item for item in resolved["scenes"]},
@@ -12024,6 +12060,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         default_generation_mode: str = "r2v",
         owner_user_id: Optional[str] = None,
         owner_profile_id: Optional[str] = None,
+        source_script_document_id: Optional[str] = None,
     ) -> Series:
         """Create a new Series."""
         with self._save_lock:
@@ -12031,6 +12068,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 id=str(uuid.uuid4()),
                 owner_user_id=owner_user_id,
                 owner_profile_id=owner_profile_id,
+                source_script_document_id=source_script_document_id,
                 title=title,
                 description=description,
                 workflow_mode=workflow_mode,
@@ -12041,6 +12079,66 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
             self.series_store[series.id] = series
             self._save_series_data_unlocked()
+            return series
+
+    def ensure_authoring_series(
+        self, root_document_id: str, title: str, episode_numbers: Dict[str, int],
+        workflow_mode: str, owner_user_id: str, owner_profile_id: str,
+        requested_series_id: Optional[str] = None,
+    ) -> Series:
+        """Bind already-created authoring episodes without replacing production data.
+
+        Called under the same lock as handoff creation. Root identity, rather
+        than title or entry order, determines the series and episode numbers.
+        """
+        with self._save_lock:
+            matches = [series for series in self.list_series(owner_profile_id)
+                       if series.source_script_document_id == root_document_id]
+            if len(matches) > 1:
+                raise ValueError("总纲关联了多个制作系列，请先整理系列归属")
+            series = matches[0] if matches else None
+            if requested_series_id and (not series or series.id != requested_series_id):
+                raise ValueError("分集必须进入总纲对应的制作系列")
+            episodes = [script for script in self.list_scripts(owner_profile_id)
+                        if script.source_script_document_id in episode_numbers]
+            if len({script.source_script_document_id for script in episodes}) != len(episodes):
+                raise ValueError("同一分集关联了多个制作项目，请先整理分集归属")
+            for script in episodes:
+                if (script.series_id and script.series_id != (series.id if series else None)
+                        and script.series_id in self.series_store):
+                    raise ValueError("分集已归入其他系列，请先确认制作系列归属")
+            if series:
+                for script in self.scripts.values():
+                    if (script.series_id == series.id or script.id in series.episode_ids):
+                        if script.owner_profile_id != owner_profile_id:
+                            raise ValueError("制作系列存在无效的分集归属")
+                        if script not in episodes and script.episode_number in episode_numbers.values():
+                            raise ValueError("制作系列中已有相同集号，请先整理分集归属")
+            else:
+                series = self.create_series(
+                    title, workflow_mode=workflow_mode, owner_user_id=owner_user_id,
+                    owner_profile_id=owner_profile_id,
+                    source_script_document_id=root_document_id,
+                )
+            changed = False
+            for script in episodes:
+                number = episode_numbers[script.source_script_document_id]
+                if (script.series_id != series.id or script.episode_number != number
+                        or script.id not in series.episode_ids):
+                    script.series_id, script.episode_number = series.id, number
+                    if script.id not in series.episode_ids:
+                        series.episode_ids.append(script.id)
+                    changed = True
+            ordered = sorted(series.episode_ids, key=lambda episode_id:
+                             self.scripts[episode_id].episode_number or 0
+                             if episode_id in self.scripts else 0)
+            if ordered != series.episode_ids:
+                series.episode_ids = ordered
+                changed = True
+            if changed:
+                series.updated_at = time.time()
+                self._save_data()
+                self._save_series_data_unlocked()
             return series
 
     def update_series(self, series_id: str, updates: Dict[str, Any]) -> Series:

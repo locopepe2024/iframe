@@ -68,6 +68,7 @@ import {
     refreshReferenceSubmission,
     H3_MAX_REFERENCE_IMAGES,
     resolveReferenceSubmission,
+    selectReferenceAsset,
     type ReferenceAsset,
 } from "./storyboard-r2v/referenceAssets";
 
@@ -993,6 +994,7 @@ export default function StoryboardR2V() {
         try {
             const fresh = await refreshReferenceSubmission(
                 currentProject.id, shot.prompt, shot.referenceVariantIds ?? {}, api.getProjectAssetReferenceIndex,
+                currentProject.frames?.find((frame) => frame.id === shot.id),
             );
             // A slow response from the previous project must not populate the
             // current editor or start a task after the user switched projects.
@@ -1009,14 +1011,10 @@ export default function StoryboardR2V() {
         }
     }, [currentProject, t]);
 
-    const resolveShotReferences = useCallback((shot: Pick<ShotNode, "prompt" | "referenceVariantIds">) =>
-        resolveReferenceSubmission(shot.prompt, referenceAssets, shot.referenceVariantIds),
-    [referenceAssets]);
-
-    // Kept as the URL-only facade used by previews and polish calls.
-    const parseAssetTags = useCallback((prompt: string, selections?: Record<string, string[]>): string[] =>
-        resolveReferenceSubmission(prompt, referenceAssets, selections).urls,
-    [referenceAssets]);
+    const resolveShotReferences = useCallback((shot: Pick<ShotNode, "id" | "prompt" | "referenceVariantIds">) =>
+        resolveReferenceSubmission(shot.prompt, referenceAssets, shot.referenceVariantIds,
+            currentProject?.frames?.find((frame) => frame.id === shot.id)),
+    [referenceAssets, currentProject]);
 
     // Generate T2I image for a shot (t2i_i2v mode stage 1)
     const generateT2I = useCallback(async (index: number, slot: "first" | "last" = "first") => {
@@ -1180,10 +1178,12 @@ export default function StoryboardR2V() {
         // here and show inline error in the ParamsSection.
         if (tabMode === "direct_r2v") {
             const refs = referenceSubmission.urls;
-            if (refs.length === 0 || referenceSubmission.unresolvedNames.length > 0) {
+            if (refs.length === 0 || referenceSubmission.unresolvedNames.length > 0 || referenceSubmission.ambiguousNames.length > 0) {
                 const unresolved = referenceSubmission.unresolvedNames;
                 let errMsg: string;
-                if (unresolved.length > 0) {
+                if (referenceSubmission.ambiguousNames.length > 0) {
+                    errMsg = t("ambiguousRefImages", { refs: referenceSubmission.ambiguousNames.join("、") });
+                } else if (unresolved.length > 0) {
                     errMsg = t("unresolvedRefImages", { refs: unresolved.join("、") });
                 } else {
                     const r2vModelId = params?.model ?? videoConfig.r2vModel;
@@ -1569,10 +1569,20 @@ export default function StoryboardR2V() {
         return () => clearInterval(interval);
     }, [shots, persistWorkbench]);
 
-    // Insert asset tag from drawer into target shot
-    const insertAssetFromDrawer = useCallback((type: string, name: string) => {
+    const selectReferenceAssetForShot = useCallback((shotIndex: number, assetId: string) => {
+        const shot = shots[shotIndex];
+        if (!shot) return;
+        const nextMap = selectReferenceAsset(referenceAssets, shot.referenceVariantIds ?? {}, assetId);
+        setShots(prev => prev.map((item, index) => index === shotIndex
+            ? { ...item, referenceVariantIds: nextMap } : item));
+        persistWorkbench(shot.id, { workbench_reference_variant_ids: nextMap });
+    }, [shots, referenceAssets, persistWorkbench]);
+
+    // Keep the selected identity as well as the human-readable prompt tag.
+    const insertAssetFromDrawer = useCallback((type: string, name: string, assetId?: string) => {
         const shotIndex = drawerState.targetShotIndex;
         if (shotIndex === null || shotIndex === undefined) return;
+        if (assetId) selectReferenceAssetForShot(shotIndex, assetId);
 
         const tag = `[${type}:${name}]`;
         const textarea = textareaRefs.current.get(shotIndex) ?? null;
@@ -1589,7 +1599,7 @@ export default function StoryboardR2V() {
         } else {
             updatePrompt(shotIndex, shots[shotIndex].prompt + " " + tag);
         }
-    }, [drawerState.targetShotIndex, shots, updatePrompt]);
+    }, [drawerState.targetShotIndex, shots, updatePrompt, selectReferenceAssetForShot]);
 
     const toggleReferenceVariantForShot = useCallback((
         shotIndex: number,
@@ -2238,13 +2248,16 @@ export default function StoryboardR2V() {
                             projectId={currentProject?.id}
                             activeVideoTaskId={currentProject?.frames?.find((frame) => frame.id === shot.id)?.selected_video_id || shot.videoTaskId}
                             referenceImageUrls={isR2vImageBased(paramsState.model)
-                                ? parseAssetTags(shot.prompt, shot.referenceVariantIds)
+                                ? resolveShotReferences(shot).urls
                                 : []}
                             onResolvePolishReferences={async () => {
                                 const fresh = await loadShotReferences(shot);
                                 if (!fresh) throw new Error("参考素材读取失败，请重试。");
                                 if (fresh.invalidVariantIds.length) {
                                     throw new Error("部分参考图版本已失效，请重新选择。");
+                                }
+                                if (fresh.ambiguousNames.length) {
+                                    throw new Error(t("ambiguousRefImages", { refs: fresh.ambiguousNames.join("、") }));
                                 }
                                 if (fresh.unresolvedNames.length) {
                                     throw new Error(`参考素材未找到：${fresh.unresolvedNames.join("、")}`);
@@ -2291,6 +2304,7 @@ export default function StoryboardR2V() {
                                 const tag = `[${type}:${name}]`;
                                 updatePrompt(index, shots[index].prompt + " " + tag);
                             }}
+                            onSelectReferenceAsset={(assetId) => selectReferenceAssetForShot(index, assetId)}
                             onToggleReferenceVariant={(assetId, variantId, primaryVariantId) =>
                                 toggleReferenceVariantForShot(index, assetId, variantId, primaryVariantId)
                             }
@@ -2731,8 +2745,8 @@ export default function StoryboardR2V() {
                         ? { ...item, id: frameId, lastFrameImageUrls: urls, lastFrameSelectedIndex: selected, lastFrameUrl: urls[selected] }
                         : { ...item, id: frameId, t2iImageUrls: urls, t2iSelectedIndex: selected, t2iImageUrl: urls[selected] }) : item));
                 }}
-                onSelectAsset={(type, name) => {
-                    insertAssetFromDrawer(type, name);
+                onSelectAsset={(type, name, assetId) => {
+                    insertAssetFromDrawer(type, name, assetId);
                 }}
                 selectedVariantIds={drawerState.targetShotIndex == null
                     ? {}

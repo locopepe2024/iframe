@@ -228,6 +228,7 @@ interface ShotCardProps {
     onOpenDrawer: () => void;
     onSelectFrameAsset?: () => void;
     onInsertAsset: (type: string, name: string) => void;
+    onSelectReferenceAsset?: (assetId: string) => void;
     onToggleReferenceVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
     /** Duration editor config derived from model catalog */
     durationEditorConfig?: { min: number; max: number; step: number };
@@ -296,6 +297,7 @@ export default function ShotCard({
     onOpenDrawer,
     onSelectFrameAsset,
     onInsertAsset: _onInsertAsset,
+    onSelectReferenceAsset,
     onToggleReferenceVariant,
     durationEditorConfig,
     onCancelVideo,
@@ -625,7 +627,8 @@ export default function ShotCard({
         );
     }
 
-    const handleInsertAssetFromChip = (_type: string, name: string) => {
+    const handleInsertAssetFromChip = (_type: string, name: string, assetId?: string) => {
+        if (assetId) onSelectReferenceAsset?.(assetId);
         const currentPrompt = shot.prompt;
         // Each unique character gets one fixed slot number throughout this
         // prompt: slot N → reference_image_urls[N-1] in HappyHorse R2V, so

@@ -1216,8 +1216,6 @@ def _create_script_document_project(request: CreateProjectRequest, user: UserCon
     with pipeline._save_lock:
         source = load_script_document(request.source_script_document_id, user)
         existing = _find_script_document_project(request.source_script_document_id, user)
-        if existing is not None:
-            return existing
 
         def node_text(node):
             if node.get("type") == "hardBreak":
@@ -1226,14 +1224,38 @@ def _create_script_document_project(request: CreateProjectRequest, user: UserCon
             return node.get("text", "") + separator.join(node_text(child) for child in node.get("content", []))
 
         text = "\n".join(node_text(block) for block in source["content"].get("content", []))
-        if not text.strip():
+        if existing is None and not text.strip():
             raise HTTPException(status_code=422, detail="Script document is empty")
+
+        series_id = request.series_id
+        authoring = None
+        if source.get("authoring_parent_id"):
+            authoring = _authoring_store(user).workspace(source["id"])
+            episode_numbers = {episode["document_id"]: episode["number"]
+                               for episode in (authoring["plan"] or {}).get("episodes", [])}
+            if source["id"] not in episode_numbers:
+                raise HTTPException(status_code=409, detail="请先确认当前分集的编剧规划")
+
+            def ensure_series():
+                try:
+                    return pipeline.ensure_authoring_series(
+                        authoring["root_document_id"], authoring["root_title"], episode_numbers,
+                        request.workflow_mode, user.user_id, user.owner_profile_id, request.series_id,
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+            series_id = ensure_series().id
+        if existing is not None:
+            return existing
         project = pipeline.create_project(
-            request.title, text, True, request.workflow_mode, request.series_id,
+            source["title"] if authoring else request.title, text, True, request.workflow_mode, series_id,
             user.user_id, user.owner_profile_id,
             source_script_document_id=request.source_script_document_id,
         )
         save_document(project.id, SaveDocumentRequest(content=source["content"], create_snapshot=True))
+        if authoring:
+            ensure_series()
         return project
 
 
@@ -7709,7 +7731,7 @@ def _director_shooting_plan_fingerprint(script_id: str, lineage: Dict[str, Any],
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(404, "Project not found")
-    entities = pipeline.resolve_episode_assets(script)
+    entities = pipeline.resolve_project_assets(script)
     llm = pipeline.script_processor.llm
     def selected_fields(items, names):
         return [{name: getattr(item, name, None) for name in names} for item in items]

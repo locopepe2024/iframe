@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bindH3MultiReferencePrompt, buildReferenceAssets, resolveReferenceSubmission, refreshReferenceSubmission } from "./referenceAssets";
+import { bindH3MultiReferencePrompt, buildReferenceAssets, resolveReferenceSubmission, refreshReferenceSubmission, selectReferenceAsset } from "./referenceAssets";
 
 const assets = [
     {
@@ -45,7 +45,90 @@ describe("storyboard multi-reference assets", () => {
         const repeated = [assets[0], { ...assets[0], id: "host-copy", variants: [{ id: "other", url: "wrong.jpg" }] }];
         const result = resolveReferenceSubmission("[character:女主播]", repeated);
         expect(result.urls).toEqual([]);
-        expect(result.unresolvedNames).toEqual(["女主播"]);
+        expect(result.unresolvedNames).toEqual([]);
+        expect(result.ambiguousNames).toEqual(["女主播"]);
+    });
+
+    const kentRoles = ["男主", "柳如烟"].flatMap((name, index) => [
+        { id: `project-${index}`, name, kind: "character" as const, variants: [{ id: `project-image-${index}`, url: `project-${index}.jpg` }] },
+        { id: `library-${index}`, name, kind: "character" as const, variants: [{ id: `library-image-${index}`, url: `library-${index}.jpg` }] },
+    ]);
+
+    it("uses each frame's bound identities for duplicate characters with usable images", () => {
+        const result = resolveReferenceSubmission("[character1:男主] [character2:柳如烟]", kentRoles, {}, {
+            character_ids: ["library-0", "project-1"],
+        });
+        expect(result.urls).toEqual(["library-0.jpg", "project-1.jpg"]);
+        expect(result.assetInputs.map((item) => item.asset_id)).toEqual(["library-0", "project-1"]);
+        expect(result.unresolvedNames).toEqual([]);
+        expect(result.ambiguousNames).toEqual([]);
+    });
+
+    it("lets an explicit same-name selection override the original frame binding", () => {
+        const result = resolveReferenceSubmission("[character:男主]", kentRoles,
+            { "library-0": ["library-image-0"] }, { character_ids: ["project-0"] });
+        expect(result.urls).toEqual(["library-0.jpg"]);
+    });
+
+    it("does not choose another duplicate when the selected version has lost its image", () => {
+        const result = resolveReferenceSubmission("[character:男主]", kentRoles,
+            { "library-0": ["deleted-image"] }, { character_ids: ["project-0"] });
+        expect(result.urls).toEqual([]);
+        expect(result.invalidVariantIds).toEqual(["deleted-image"]);
+        expect(result.unresolvedNames).toEqual(["男主"]);
+    });
+
+    it("keeps conflicting frame bindings or explicit selections ambiguous", () => {
+        for (const result of [
+            resolveReferenceSubmission("[character:男主]", kentRoles, {}, { character_ids: ["project-0", "library-0"] }),
+            resolveReferenceSubmission("[character:男主]", kentRoles,
+                { "project-0": ["project-image-0"], "library-0": ["library-image-0"] }, { character_ids: ["project-0"] }),
+        ]) {
+            expect(result.urls).toEqual([]);
+            expect(result.ambiguousNames).toEqual(["男主"]);
+        }
+    });
+
+    it("does not substitute a same-name image for a removed frame-bound character", () => {
+        const remaining = kentRoles.filter((asset) => asset.id !== "library-0");
+        const result = resolveReferenceSubmission("[character:男主]", remaining, {}, { character_ids: ["library-0"] });
+        expect(result.urls).toEqual([]);
+        expect(result.unresolvedNames).toEqual(["男主"]);
+        const replacement = resolveReferenceSubmission("[character:男主]", remaining,
+            { "project-0": ["project-image-0"] }, { character_ids: ["library-0"] });
+        expect(replacement.urls).toEqual(["project-0.jpg"]);
+    });
+
+    it("preserves the selected product views when re-inserting the same reference", () => {
+        expect(selectReferenceAsset(assets, { product: ["product-right", "product-detail"] }, "product"))
+            .toEqual({ product: ["product-right", "product-detail"] });
+    });
+
+    it("does not guess across kinds for an unbound legacy slot", () => {
+        const repeated = [kentRoles[0], { ...kentRoles[0], id: "scene", kind: "scene" as const }];
+        expect(resolveReferenceSubmission("[character1:男主]", repeated).ambiguousNames).toEqual(["男主"]);
+        expect(resolveReferenceSubmission("[character:男主]", repeated).urls).toEqual(["project-0.jpg"]);
+    });
+
+    it("persists a specific duplicate choice while retaining unrelated asset selections", () => {
+        const selected = selectReferenceAsset(kentRoles, {
+            "project-0": ["project-image-0"], "library-1": ["library-image-1"],
+        }, "library-0");
+        expect(selected).toEqual({ "library-0": ["library-image-0"], "library-1": ["library-image-1"] });
+        expect(resolveReferenceSubmission("[character:男主] [character:柳如烟]", kentRoles, selected).urls)
+            .toEqual(["library-0.jpg", "library-1.jpg"]);
+    });
+
+    it("passes frame bindings through the authoritative preflight refresh", async () => {
+        const index = kentRoles.map((asset) => ({ asset_id: asset.id, asset_type: asset.kind,
+            name: asset.name, variants: asset.variants, source_scope: "episode" as const }));
+        const fresh = await refreshReferenceSubmission("kent-project", "[character:男主]", {},
+            async () => ({ assets: index }), { character_ids: ["library-0"] });
+        expect(fresh.submission.assetInputs[0].asset_id).toBe("library-0");
+        const removed = await refreshReferenceSubmission("kent-project", "[character:男主]", {},
+            async () => ({ assets: [] }), { character_ids: ["library-0"] });
+        expect(removed.submission.urls).toEqual([]);
+        expect(removed.submission.unresolvedNames).toEqual(["男主"]);
     });
 
     it("uses one primary image for assets without an explicit shot selection", () => {

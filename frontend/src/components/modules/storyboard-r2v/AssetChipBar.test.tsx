@@ -41,7 +41,7 @@ it("inserts one semantic asset while selecting multiple child views", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "穿心莲" }));
-    expect(insert).toHaveBeenCalledWith("prop", "穿心莲");
+    expect(insert).toHaveBeenCalledWith("prop", "穿心莲", "product");
     fireEvent.click(screen.getByRole("button", { name: "Select reference views for 穿心莲" }));
     expect(screen.getByRole("button", { name: "front" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "close" }).getAttribute("aria-pressed")).toBe("false");

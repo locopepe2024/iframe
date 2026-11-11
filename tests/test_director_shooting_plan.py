@@ -171,6 +171,61 @@ def make_plan(pipeline):
     return DirectorShootingPlan(**lineage, scenes=[scene], generated_at=10)
 
 
+def test_plan_generation_excludes_unimported_personal_library_candidates():
+    from src.apps.comic_gen.models import GlobalAssetLibrary
+
+    pipeline, script = make_pipeline()
+    del pipeline.resolve_episode_assets  # Exercise real membership resolution.
+    script.owner_profile_id = 'owner'
+    pipeline.library_store = GlobalAssetLibrary(characters=[
+        Character(id='library-only', name='Other', description='PRIVATE CANDIDATE', owner_profile_id='owner')])
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = valid_chunk()
+    pipeline.preview_director_shooting_plan(script.id)
+    entities = pipeline.script_processor.plan_director_shooting_chunk.call_args.args[1]
+    assert [item['id'] for item in entities['characters']] == ['shen-xia-young']
+    assert 'PRIVATE CANDIDATE' not in str(entities)
+
+
+@pytest.mark.parametrize('library_owner,retired,expected_import', [
+    ('owner', False, True), ('other', False, False), ('owner', True, False),
+])
+def test_explicit_plan_sync_materializes_only_owned_confirmed_library_references(
+        library_owner, retired, expected_import):
+    from src.apps.comic_gen.models import GlobalAssetLibrary, ImageVariant
+
+    pipeline, script = make_pipeline()
+    del pipeline.resolve_episode_assets
+    script.owner_profile_id = 'owner'
+    library_character = script.characters.pop()
+    library_character.owner_profile_id = library_owner
+    library_character.reference_sheet.image_variants = [ImageVariant(id='selected', url='portrait.png')]
+    library_character.reference_sheet.selected_image_id = 'selected'
+    pipeline.library_store = GlobalAssetLibrary(characters=[library_character,
+        Character(id='not-referenced', name=library_character.name, description='Same name', owner_profile_id='owner')])
+    plan = make_plan(pipeline)
+    pipeline.save_director_shooting_plan_draft(script.id, 1, 0, plan)
+    pipeline.apply_director_shooting_plan(script.id, plan, 0, 1)
+    if retired:
+        script.retired_plan_asset_ids['character'] = [library_character.id]
+    script.frames[0].character_ids = [library_character.id]
+    before_frames = [frame.model_dump() for frame in script.frames]
+    confirmed = script.director_shooting_plan_revisions[-1].model_dump()
+    before_library = pipeline.library_store.model_dump()
+
+    pipeline.sync_episode_assets_from_shooting_plan(script.id)
+    pipeline.sync_episode_assets_from_shooting_plan(script.id)
+
+    assert [item.id for item in script.characters] == ([library_character.id] if expected_import else [])
+    if expected_import:
+        assert script.characters[0] is not library_character
+        assert script.characters[0].reference_sheet.selected_image_id == 'selected'
+        assert not pipeline._shot_asset_visual_context(script, script.frames[0],
+            pipeline.resolve_project_assets(script))[1]
+    assert [frame.model_dump() for frame in script.frames] == before_frames
+    assert script.director_shooting_plan_revisions[-1].model_dump() == confirmed
+    assert pipeline.library_store.model_dump() == before_library
+
+
 def test_plan_contract_is_strict_and_requires_contiguous_order_values():
     with pytest.raises(ValidationError, match="contiguous zero-based"):
         DirectorPlanBeat(
@@ -973,7 +1028,7 @@ def test_explicit_binding_resolves_legacy_plan_person_after_asset_id_changes():
         revision=1, content_hash="historical", profile=archived_profile, confirmed_at=1))
     script.art_direction.director_profile.story_map = None
     script.characters[0].id = "replacement-asset"
-    pipeline.resolve_episode_assets.side_effect = lambda episode: {
+    pipeline.resolve_episode_assets.side_effect = lambda episode, **_: {
         "characters": episode.characters, "scenes": episode.scenes, "props": episode.props}
 
     before = pipeline.sync_episode_assets_from_shooting_plan("film")
@@ -1037,7 +1092,7 @@ def test_sync_does_not_recreate_missing_scene_and_prop_ids():
     pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
     pipeline.apply_director_shooting_plan("film", plan, 0, 1)
     confirmed = script.director_shooting_plan_revisions[-1].model_dump()
-    pipeline.resolve_episode_assets.side_effect = lambda episode: {
+    pipeline.resolve_episode_assets.side_effect = lambda episode, **_: {
         "characters": episode.characters, "scenes": episode.scenes, "props": episode.props}
 
     first = pipeline.sync_episode_assets_from_shooting_plan("film")
@@ -1082,7 +1137,7 @@ def test_confirmed_plan_preserves_identity_but_explicit_deletion_does_not_restor
     pipeline.delete_scene("film", "cinema")
     pipeline.retire_episode_plan_asset(script, "prop", "ticket")
     script.props = []
-    pipeline.resolve_episode_assets.side_effect = lambda episode: {
+    pipeline.resolve_episode_assets.side_effect = lambda episode, **_: {
         "characters": episode.characters, "scenes": episode.scenes, "props": episode.props,
     }
     pipeline.sync_episode_assets_from_shooting_plan("film")
@@ -1103,7 +1158,7 @@ def test_plan_asset_group_rebinding_changes_all_sources_atomically():
         scene_asset_id="old-scene-b")
     pipeline.save_director_shooting_plan_draft("film", 1, 0, plan)
     pipeline.apply_director_shooting_plan("film", plan, 0, 1)
-    pipeline.resolve_episode_assets.side_effect = lambda episode: {
+    pipeline.resolve_episode_assets.side_effect = lambda episode, **_: {
         "characters": episode.characters, "scenes": episode.scenes, "props": episode.props}
     pipeline.sync_episode_assets_from_shooting_plan("film")
     source_ids = ["old-scene-a", "old-scene-b"]

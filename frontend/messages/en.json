@@ -2786,6 +2786,7 @@
     "refineDoneToast": "AI refinement suggestions are ready for review",
     "unknownErrorFallback": "Unknown error",
     "videoGenFailedToast": "Video generation failed: {detail}",
+    "ambiguousRefImages": "Referenced {refs} match multiple assets. Choose the version for this shot in the asset drawer.",
     "unresolvedRefImages": "Referenced {refs} have no usable image in this project or episode. Generate an image or import the asset first.",
     "assetReferencesUnavailable": "Assets are temporarily unavailable. Refresh and try again.",
     "videoGenSubmitFailedToast": "Video generation failed: submission unsuccessful — check parameters and retry",

@@ -18,6 +18,13 @@ export interface ReferenceAsset {
     selectedId?: string | null;
 }
 
+/** Persisted frame membership disambiguates legacy tags that only store names. */
+export interface ShotReferenceBindings {
+    character_ids?: string[];
+    scene_id?: string | null;
+    prop_ids?: string[];
+}
+
 export function buildReferenceAssets(
     index: AssetReferenceIndexEntry[] | undefined,
     characters: any[], scenes: any[], props: any[],
@@ -33,11 +40,12 @@ export async function refreshReferenceSubmission(
     prompt: string,
     selections: Record<string, string[]>,
     fetchIndex: (projectId: string) => Promise<{ assets: AssetReferenceIndexEntry[] }>,
+    bindings?: ShotReferenceBindings,
 ) {
     const index = await fetchIndex(projectId);
     return {
         index: index.assets,
-        submission: resolveReferenceSubmission(prompt, buildReferenceAssets(index.assets, [], [], []), selections),
+        submission: resolveReferenceSubmission(prompt, buildReferenceAssets(index.assets, [], [], []), selections, bindings),
     };
 }
 
@@ -56,6 +64,24 @@ export interface ReferenceSubmission {
     groups: ResolvedReferenceGroup[];
     invalidVariantIds: string[];
     unresolvedNames: string[];
+    ambiguousNames: string[];
+}
+
+/** Selecting a named reference replaces only competing versions of that name. */
+export function selectReferenceAsset(
+    assets: ReferenceAsset[],
+    selections: Record<string, string[]>,
+    assetId: string,
+): Record<string, string[]> {
+    const asset = assets.find((item) => item.id === assetId);
+    if (!asset) return selections;
+    const next = { ...selections };
+    for (const candidate of assets) {
+        if (candidate.kind === asset.kind && candidate.name === asset.name) delete next[candidate.id];
+    }
+    const primary = primaryVariant(asset);
+    if (primary) next[asset.id] = selections[asset.id]?.length ? selections[asset.id] : [primary.id];
+    return next;
 }
 
 export const H3_MAX_REFERENCE_IMAGES = 9;
@@ -70,6 +96,7 @@ export function resolveReferenceSubmission(
     prompt: string,
     assets: ReferenceAsset[],
     selections: Record<string, string[]> = {},
+    bindings: ShotReferenceBindings = {},
 ): ReferenceSubmission {
     const slots = new Map<number, { name: string; kind?: ReferenceAsset["kind"] }>();
     const genericTags: Array<{ name: string; kind: ReferenceAsset["kind"] }> = [];
@@ -96,14 +123,33 @@ export function resolveReferenceSubmission(
     const groups: ResolvedReferenceGroup[] = [];
     const invalidVariantIds: string[] = [];
     const unresolvedNames = new Set<string>();
+    const ambiguousNames = new Set<string>();
+    const boundIds = {
+        character: new Set(bindings.character_ids ?? []),
+        scene: new Set(bindings.scene_id ? [bindings.scene_id] : []),
+        prop: new Set(bindings.prop_ids ?? []),
+    };
+    const missingBinding = (kind: ReferenceAsset["kind"]) =>
+        Array.from(boundIds[kind]).some((id) => !assets.some((asset) => asset.kind === kind && asset.id === id));
     for (const [slot, tag] of Array.from(slots.entries()).sort((a, b) => a[0] - b[0])) {
         const { name, kind } = tag;
         const matches = assets.filter((asset) => asset.name === name && (!kind || asset.kind === kind));
-        // Numbered characterN tags are legacy slots that could refer to any
-        // type. If names collide, require a typed tag instead of guessing.
-        const asset = matches.length === 1 ? matches[0] : undefined;
-        if (!asset) {
+        // Explicit per-shot choices win over the frame's original membership.
+        // Neither image availability nor asset storage order chooses an identity.
+        const selected = matches.filter((asset) => selections[asset.id]?.length);
+        const bound = matches.filter((asset) => boundIds[asset.kind].has(asset.id));
+        // A removed bound asset must not silently switch to a same-name copy.
+        // Explicit selection in the picker can establish the replacement.
+        if (!selected.length && !bound.length && (kind
+            ? missingBinding(kind)
+            : (["character", "scene", "prop"] as const).some(missingBinding))) {
             unresolvedNames.add(name);
+            continue;
+        }
+        const candidates = selected.length ? selected : bound.length ? bound : matches;
+        const asset = candidates.length === 1 ? candidates[0] : undefined;
+        if (!asset) {
+            (matches.length ? ambiguousNames : unresolvedNames).add(name);
             continue;
         }
         const explicitIds = selections[asset.id];
@@ -150,7 +196,8 @@ export function resolveReferenceSubmission(
             pictureNumbers: variants.map((_, index) => firstPicture + index),
         });
     }
-    return { urls, assetInputs, groups, invalidVariantIds, unresolvedNames: Array.from(unresolvedNames) };
+    return { urls, assetInputs, groups, invalidVariantIds,
+        unresolvedNames: Array.from(unresolvedNames), ambiguousNames: Array.from(ambiguousNames) };
 }
 
 function pictureList(group: ResolvedReferenceGroup): string {
