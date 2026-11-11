@@ -4898,6 +4898,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         cached = load_batches() if load_batches else {}
         scenes: List[Dict[str, Any]] = []
         unresolved_questions: List[str] = []
+        from .shooting_plan_stages import shooting_event_reference_error
         for index, chunk in enumerate(chunks):
             if self.director_shooting_plan_lineage(script_id) != lineage:
                 raise ValueError("Shooting plan inputs changed during generation")
@@ -4910,6 +4911,11 @@ class ComicGenPipeline(StudioOwnerMixin):
                 # from this implementation have shipped.
                 cached_result = prior["result"]
             else:
+                cached_result = None
+            if cached_result is not None and shooting_event_reference_error(
+                    cached_result, director_execution_payload(profile)):
+                # Re-enter its durable checkpoint so only invalid beat details
+                # are regenerated; a cached envelope is not proof of admission.
                 cached_result = None
             if prior and prior.get("source_ref") == chunk["source_ref"] and cached_result is not None:
                 chunk_result = cached_result
@@ -5192,17 +5198,21 @@ class ComicGenPipeline(StudioOwnerMixin):
                 for shot in beat["shots"]:
                     if not shot["lighting_override_selected"] or not shot["lighting_override_reason"].strip():
                         shot["lighting"] = {}
-        plan = DirectorShootingPlan(
-            **lineage,
-            creative_skill_run=director_skill_provenance(skill_snapshot or []),
-            scenes=scenes,
-            lighting_baselines=lighting_baselines,
-            unresolved_questions=list(dict.fromkeys(unresolved_questions))[:80],
-            generated_at=time.time(),
-        )
-        return self.normalize_director_shooting_plan_lighting(
-            self._validate_director_shooting_plan(script, plan)
-        )
+        try:
+            plan = DirectorShootingPlan(
+                **lineage,
+                creative_skill_run=director_skill_provenance(skill_snapshot or []),
+                scenes=scenes,
+                lighting_baselines=lighting_baselines,
+                unresolved_questions=list(dict.fromkeys(unresolved_questions))[:80],
+                generated_at=time.time(),
+            )
+            return self.normalize_director_shooting_plan_lighting(
+                self._validate_director_shooting_plan(script, plan)
+            )
+        except Exception as exc:
+            exc.shooting_plan_failure = {'stage': 'finalize'}
+            raise
 
     @staticmethod
     def normalize_director_shooting_plan_lighting(value: Any) -> DirectorShootingPlan:

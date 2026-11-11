@@ -2454,6 +2454,7 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         *, beat_plan: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Propose complete scene/beat/shot plans for one bounded source chunk."""
+        from .shooting_plan_stages import _event_catalog, shooting_event_reference_error
         if not self.is_configured:
             raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
 
@@ -2506,6 +2507,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 </source_chunk>
 <entities>{_prompt_json({k: v for k, v in entities_json.items() if k != "selected_creative_methods"})}</entities>
 <confirmed_director_profile>{_prompt_json(director_profile)}</confirmed_director_profile>
+<allowed_story_events>{_prompt_json(_event_catalog(director_profile))}</allowed_story_events>
+所有事件引用（包括 information_design 的三个事件数组）只能逐字复制 allowed_story_events 中的 event_id，不使用标题或自编编号；没有依据时留空。
 <visual_style>{_prompt_json(style_config)}</visual_style>
 <visual_style_summary>{style_summary}</visual_style_summary>
 <previous_scene_handoff>{_prompt_json(previous_scene or {})}</previous_scene_handoff>
@@ -2566,6 +2569,8 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
                                 shot.setdefault("character_ids", [])
                                 shot.setdefault("prop_ids", [])
                 last_error = envelope_error or self._validate_director_shooting_chunk(result) or ""
+                if not last_error:
+                    last_error = shooting_event_reference_error(result, director_profile)
                 if not last_error and beat_plan and (
                     len(result['scenes']) != 1 or len(result['scenes'][0]['beats']) != 1
                     or len(result['scenes'][0]['beats'][0]['shots']) > 3

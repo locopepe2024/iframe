@@ -177,11 +177,19 @@ def _invalid_event_refs(value, profile):
             continue
         for bi, beat in enumerate(beats):
             refs = beat.get('story_event_ids') if isinstance(beat, dict) else None
-            if not isinstance(refs, list):
-                continue
-            for ri, ref in enumerate(refs):
+            for ri, ref in enumerate(refs if isinstance(refs, list) else []):
                 if isinstance(ref, str) and ref not in allowed:
                     invalid.append({'path': f'scenes.{si}.beats.{bi}.story_event_ids.{ri}', 'value': ref})
+            shots = beat.get('shots') if isinstance(beat, dict) else None
+            for shi, shot in enumerate(shots if isinstance(shots, list) else []):
+                info = shot.get('information_design') if isinstance(shot, dict) else None
+                if not isinstance(info, dict):
+                    continue
+                for field in ('source_event_ids', 'reveal_event_ids', 'payoff_event_ids'):
+                    refs = info.get(field)
+                    for ri, ref in enumerate(refs if isinstance(refs, list) else []):
+                        if isinstance(ref, str) and ref not in allowed:
+                            invalid.append({'path': f'scenes.{si}.beats.{bi}.shots.{shi}.information_design.{field}.{ri}', 'value': ref})
     return invalid
 
 
@@ -189,8 +197,14 @@ def _reference_error(invalid):
     if not invalid:
         return ''
     # Values are included only in the private provider repair context below.
-    return ('story_event_ids 含未确认事件引用：' + '、'.join(item['path'] for item in invalid[:6])
+    label = 'information_design' if any('.information_design.' in item['path'] for item in invalid) else 'story_event_ids'
+    return (label + ' 含未确认事件引用：' + '、'.join(item['path'] for item in invalid[:6])
             + f'（共{len(invalid)}项）；只能选择allowed_story_events中的event_id，无关联时返回[]')
+
+
+def shooting_event_reference_error(value, profile):
+    """Check beat and shot references before admitting or reusing paid output."""
+    return _reference_error(_invalid_event_refs(value, profile))
 
 
 def _structure(value, units, profile):
@@ -390,6 +404,13 @@ story_event_ids只能从allowed_story_events逐字复制event_id，不得用标�
                 stage = {'stage': 'shots', 'scene': si + 1, 'beat': bi + 1}
                 key = f'{si}:{bi}'
                 detail = state['details'].get(key)
+                if detail is not None and shooting_event_reference_error(
+                        {'scenes': [{'beats': [{'shots': detail['shots']}]}]}, profile):
+                    # Older checkpoints admitted shape-valid but unconfirmed
+                    # information links. Reopen only this beat, never rewrite IDs.
+                    del state['details'][key]
+                    persist()
+                    detail = None
                 if detail is None:
                     source_text = ''.join(units[i]['text'] for i in beat['source_unit_ids'])
                     logger.info('Shooting plan shots: run=%s scene=%s beat=%s source_chars=%s',
@@ -406,6 +427,9 @@ story_event_ids只能从allowed_story_events逐字复制event_id，不得用标�
                 beat['shots'] = detail['shots']
                 error = processor._validate_director_shooting_chunk({'scenes': [{
                     **{k: v for k, v in scene.items() if k != 'beats'}, 'beats': [beat]}]})
+                reference_error = shooting_event_reference_error({'scenes': [{'beats': [beat]}]}, profile)
+                if reference_error:
+                    raise DirectorShootingChunkError('event_reference', reference_error)
                 if error or not 1 <= len(beat['shots']) <= MAX_BEAT_SHOTS:
                     raise RuntimeError('拍摄计划已保存节拍不符合当前镜头契约，请重新生成。')
                 if key not in state['details']:

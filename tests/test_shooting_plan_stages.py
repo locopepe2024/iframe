@@ -283,6 +283,92 @@ def test_empty_event_catalog_only_permits_empty_references():
     assert '<allowed_story_events>[]</allowed_story_events>' in prompt
 
 
+@pytest.mark.parametrize('field', ['source_event_ids', 'reveal_event_ids', 'payoff_event_ids'])
+def test_invalid_information_reference_is_repaired_before_checkpoint(field):
+    p = processor()
+    # Use the real shot provider validation/repair loop.
+    del p._plan_director_shooting_beat
+    good = valid_chunk()['scenes'][0]['beats'][0]['shots']
+    bad = copy.deepcopy(good)
+    bad[0]['information_design'] = {field: ['PRIVATE_UNKNOWN_ID']}
+    p.llm.chat.side_effect = [json.dumps(structure()), json.dumps({'shots': bad}),
+                             json.dumps({'shots': good}), json.dumps({'shots': good})]
+    snapshots = []
+    generate(p, model='deepseek-v4.1-flash', save_checkpoint=lambda s: snapshots.append(copy.deepcopy(s)) or True)
+    assert len(snapshots) == 3
+    assert p.llm.chat.call_count == 4
+    prompt = p.llm.chat.call_args_list[2].kwargs['messages'][0]['content']
+    assert f'information_design.{field}.0' in prompt
+    assert '<allowed_story_events>' in prompt
+    assert 'PRIVATE_UNKNOWN_ID' not in prompt
+    assert all(c.kwargs['model'] == 'deepseek-v4.1-flash' for c in p.llm.chat.call_args_list)
+
+
+def test_cached_result_with_unknown_information_event_repairs_only_bad_beat():
+    pipeline, script = make_pipeline()
+    p = processor()
+    pipeline.script_processor = p
+    cache = {}
+    def save(index, ref, value):
+        cache[index] = {'source_ref': ref, 'frames': copy.deepcopy(value)}
+        return True
+    pipeline.preview_director_shooting_plan(script.id, save_batch=save)
+    first = copy.deepcopy(cache[0]['frames']['checkpoint']['details']['0:0'])
+    cache[0]['frames']['result']['scenes'][0]['beats'][1] = copy.deepcopy(cache[0]['frames']['result']['scenes'][0]['beats'][1])
+    cache[0]['frames']['checkpoint']['details']['0:1'] = copy.deepcopy(cache[0]['frames']['checkpoint']['details']['0:1'])
+    for container in (cache[0]['frames']['result']['scenes'][0]['beats'][1],
+                      cache[0]['frames']['checkpoint']['details']['0:1']):
+        container['shots'][0]['information_design'] = {'source_event_ids': ['PRIVATE_UNKNOWN_ID']}
+    p.llm.chat.reset_mock()
+    p._plan_director_shooting_beat.reset_mock()
+    plan = pipeline.preview_director_shooting_plan(script.id, load_batches=lambda: copy.deepcopy(cache), save_batch=save)
+    p.llm.chat.assert_not_called()
+    assert p._plan_director_shooting_beat.call_count == 1
+    assert cache[0]['frames']['checkpoint']['details']['0:0'] == first
+    assert len(plan.scenes[0].beats) == 2
+
+
+def test_failed_cached_reference_repair_preserves_valid_steps_and_marks_bad_incomplete():
+    p = processor()
+    snapshots = []
+    generate(p, save_checkpoint=lambda s: snapshots.append(copy.deepcopy(s)) or True)
+    state = snapshots[-1]
+    state['details']['0:1'] = copy.deepcopy(state['details']['0:1'])
+    state['details']['0:1']['shots'][0]['information_design'] = {'source_event_ids': ['PRIVATE_UNKNOWN_ID']}
+    first = copy.deepcopy(state['details']['0:0'])
+    p._plan_director_shooting_beat.side_effect = RuntimeError('upstream interrupted')
+    p._plan_director_shooting_beat.reset_mock()
+    with pytest.raises(RuntimeError, match='upstream interrupted'):
+        generate(p, checkpoint=state, save_checkpoint=lambda s: snapshots.append(copy.deepcopy(s)) or True)
+    assert p._plan_director_shooting_beat.call_count == 1
+    assert snapshots[-1]['completed_steps'] == 2
+    assert snapshots[-1]['total_steps'] == 3
+    assert snapshots[-1]['details'] == {'0:0': first}
+
+
+def test_repeated_unknown_shot_reference_never_saves_a_completed_beat(caplog):
+    p = processor()
+    del p._plan_director_shooting_beat
+    shots = valid_chunk()['scenes'][0]['beats'][0]['shots']
+    shots[0]['information_design'] = {'source_event_ids': ['PRIVATE_UNKNOWN_ID']}
+    p.llm.chat.side_effect = [json.dumps(structure()), json.dumps({'shots': shots}), json.dumps({'shots': shots})]
+    snapshots = []
+    with pytest.raises(RuntimeError, match='information_design') as error:
+        generate(p, save_checkpoint=lambda s: snapshots.append(copy.deepcopy(s)) or True)
+    assert len(snapshots) == 1 and snapshots[-1]['details'] == {}
+    assert p.llm.chat.call_count == 3
+    assert 'PRIVATE_UNKNOWN_ID' not in str(error.value) + caplog.text
+
+
+def test_final_plan_validation_failure_is_marked_as_finalization():
+    pipeline, script = make_pipeline()
+    pipeline.script_processor = processor()
+    pipeline._validate_director_shooting_plan = Mock(side_effect=ValueError('private validation detail'))
+    with pytest.raises(ValueError) as error:
+        pipeline.preview_director_shooting_plan(script.id)
+    assert error.value.shooting_plan_failure == {'stage': 'finalize'}
+
+
 def structure():
     scene = raw_scene()
     scene['beats'] = [

@@ -131,6 +131,27 @@ def test_shooting_plan_unknown_failure_does_not_expose_exception_text(tmp_path):
         assert '导演拍摄计划生成失败' in done['error']
 
 
+def test_shooting_finalization_failure_reports_saved_generation_without_inventing_unfinished_steps(tmp_path):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+        def fail(job_id):
+            store.save_batch('owner', 'project', 'director_shooting_plan:finalize', job_id, 0, 'source', {
+                'checkpoint': {'structure': {'scenes': [{'beats': [{}]}]}, 'details': {'0:0': {}}}})
+            error = ValueError('private screenplay and provider token')
+            error.shooting_plan_failure = {'stage': 'finalize'}
+            raise error
+        job = store.start('owner', 'project', 'director_shooting_plan:finalize', fail,
+                          pass_job_id=True, total_batches=1)
+        done = wait_done(store, job)
+        assert done['progress'] == {'completed': 2, 'total': 2}
+        assert '汇总校验失败' in done['error']
+        assert '已保存 2/2 个生成步骤' in done['error']
+        assert '重试将复用有效结果并重新校验汇总' in done['error']
+        assert '继续未完成' not in done['error']
+        assert 'private' not in done['error']
+        assert done['result']['failure_stage'] == {'stage': 'finalize'}
+
+
 @pytest.mark.parametrize('finish_reason', ['content_filter', 'length'])
 def test_shooting_model_termination_is_not_labeled_stream_interruption(tmp_path, finish_reason):
     from src.apps.comic_gen.llm_adapter import LLMResponseTerminationError

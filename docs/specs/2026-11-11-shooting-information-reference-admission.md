@@ -1,0 +1,9 @@
+# Admit shot event references before checkpointing
+
+Observed: jobs f8a93e73ca0949d280c0b1fce9d88f11 and 12d74451859c41f59db1c62af9a31fb3 failed with ValueError after saving 9/9 generation steps. Read-only offline replay found 23 shots; three shots in scene 3 beat 1 reference an unconfirmed event through information_design.source_event_ids. Shape validation passed, but final plan reference validation rejected them. The second job reused all generation results and failed immediately. No paid request was made during diagnosis.
+
+Check all three information-design event arrays against the supplied confirmed event catalog within the existing bounded shot repair loop and before admitting a beat checkpoint. Keep the final plan validation. Never drop, relabel or infer an event link. Include exact allowed IDs in the shot request; ordinary diagnostics contain paths/counts only.
+
+Retain protocol v6/cache identity: on retry, a cached chunk with invalid references must re-enter its checkpoint. Remove only each offending beat detail from the resumable checkpoint before regenerating that beat. Preserve all other details, source structure, account/model selection and production artifacts. A failed regeneration must leave the offending step incomplete rather than report all generation complete.
+
+Label final assembly/validation errors separately from model/shot-generation errors. When all generation steps are saved, explain that retry revalidates and assembles saved results. Tests must reproduce the old late failure, prove bounded model correction, reject unresolved references before saving, and demonstrate that a cached invalid result regenerates only its offending beat. Validate the live checkpoint with a network-isolated mock repair; do not change production data or initiate paid requests.

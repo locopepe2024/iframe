@@ -325,6 +325,8 @@ class ExtractionJobs:
                     location = (f"第 {stage['chunk']}/{stage['chunks']} 段，" if stage.get('chunk') else '')
                     location += (f"场景 {stage['scene']} 节拍 {stage['beat']}，" if stage.get('scene') else '')
                     reason = '场景与节拍规划失败' if stage.get('stage') == 'structure' else '镜头生成失败'
+                    if stage.get('stage') == 'finalize':
+                        reason = '拍摄计划汇总校验失败'
                     if isinstance(diagnostic, dict):
                         reason = '模型请求失败'
                         if diagnostic.get('finish_reason') == 'content_filter':
@@ -334,7 +336,9 @@ class ExtractionJobs:
                         elif diagnostic.get('stream') and diagnostic.get('text_chars'):
                             reason = '模型流式响应中断'
                     message = f'导演拍摄计划生成失败：{location}{reason}。'
-                message += (f'已保存 {completed}/{total} 个步骤，重试会继续未完成部分。'
+                message += (f'已保存 {completed}/{total} 个生成步骤，重试将复用有效结果并重新校验汇总。'
+                            if completed and completed >= total else
+                            f'已保存 {completed}/{total} 个步骤，重试会继续未完成部分。'
                             if completed else '尚无已完成步骤，请重试。')
             if row and row['project'].startswith(('script-outline:document:', 'script-writing:')):
                 detail = str(exc).strip()
