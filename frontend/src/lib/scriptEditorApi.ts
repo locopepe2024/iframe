@@ -59,7 +59,7 @@ export interface ScriptDocumentResponse extends DocumentResponse {
 }
 
 export type ScriptWritingMode = 'expand_outline' | 'continue';
-export type ScriptWritingModel = 'llm-nf-all' | 'deepseek-v4.1-flash';
+export type ScriptWritingModel = 'llm-nf-all' | 'deepseek-v4.1-flash' | 'kimi-k3';
 
 export interface ScriptWritingJob {
   id: string;
