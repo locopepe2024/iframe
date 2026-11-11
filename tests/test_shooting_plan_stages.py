@@ -214,6 +214,75 @@ def test_valid_container_normalization_still_retries_other_invalid_fields():
     assert json.loads(p.llm.chat.call_args.kwargs['messages'][1]['content']) == value
 
 
+def test_event_reference_schema_and_catalog_match_exact_input_ids():
+    p = processor()
+    generate(p)
+    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    schema = json.loads(prompt.split('<structure_schema>')[1].split('</structure_schema>')[0])
+    assert schema['$defs']['StructureBeat']['properties']['story_event_ids']['items']['enum'] == ['event-cinema', 'unrelated-event']
+    events = json.loads(prompt.split('<allowed_story_events>')[1].split('</allowed_story_events>')[0])
+    assert [item['event_id'] for item in events] == ['event-cinema', 'unrelated-event']
+
+
+def test_event_reference_errors_are_reported_alongside_bad_scene_and_boundary():
+    p = processor()
+    value = structure()
+    value['scenes'].append('not a scene')
+    value['scenes'][0]['beats'][0]['story_event_ids'] = ['invented-id']
+    value['scenes'][0]['beats'][1]['source_end'] = 1
+    rejected = json.dumps(value)
+    p.llm.chat.side_effect = [rejected, json.dumps(structure())]
+    generate(p)
+    messages = p.llm.chat.call_args.kwargs['messages']
+    prompt = messages[0]['content']
+    assert 'scenes.1: model_type' in prompt
+    assert 'scenes.0.beats.0.story_event_ids.0' in prompt
+    refs = json.loads(prompt.split('<invalid_story_event_refs>')[1].split('</invalid_story_event_refs>')[0])
+    assert refs == [{'path': 'scenes.0.beats.0.story_event_ids.0', 'value': 'invented-id'}]
+    assert messages[1]['content'] == rejected
+    assert p._plan_director_shooting_beat.call_count == 2
+
+
+def test_reference_and_boundary_failures_are_returned_in_same_correction():
+    p = processor()
+    value = structure()
+    value['scenes'][0]['beats'][0]['story_event_ids'] = ['event-CINEMA']
+    value['scenes'][0]['beats'][1]['source_end'] = 1
+    p.llm.chat.side_effect = [json.dumps(value), json.dumps(structure())]
+    generate(p)
+    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    assert '末尾未完整覆盖' in prompt and 'scenes.0.beats.0.story_event_ids.0' in prompt
+
+
+def test_unknown_event_id_is_never_dropped_or_guessed_and_is_not_logged(caplog):
+    p = processor()
+    value = structure()
+    value['scenes'][0]['beats'][0]['story_event_ids'] = ['PRIVATE_UNKNOWN_EVENT_VALUE']
+    p.llm.chat.return_value = json.dumps(value)
+    save = Mock()
+    with pytest.raises(RuntimeError, match='story_event_ids') as error:
+        generate(p, save_checkpoint=save)
+    assert 'PRIVATE_UNKNOWN_EVENT_VALUE' not in str(error.value)
+    assert 'PRIVATE_UNKNOWN_EVENT_VALUE' not in caplog.text
+    assert p.llm.chat.call_count == 2
+    save.assert_not_called()
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_empty_event_catalog_only_permits_empty_references():
+    p = processor()
+    value = structure()
+    for beat in value['scenes'][0]['beats']:
+        beat['story_event_ids'] = []
+    p.llm.chat.return_value = json.dumps(value)
+    p.plan_director_shooting_chunk('进' * 240 + '离' * 80, {}, {}, {})
+    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    schema = json.loads(prompt.split('<structure_schema>')[1].split('</structure_schema>')[0])
+    field = schema['$defs']['StructureBeat']['properties']['story_event_ids']
+    assert field['maxItems'] == 0
+    assert '<allowed_story_events>[]</allowed_story_events>' in prompt
+
+
 def structure():
     scene = raw_scene()
     scene['beats'] = [

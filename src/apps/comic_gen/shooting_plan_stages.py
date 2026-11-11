@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from src.apps.director_skills import guidance as director_skill_guidance
 from ...utils.llm_json import parse_model_json_object
 
-VERSION = 'scene-beat-boundaries-v5'
+VERSION = 'scene-beat-boundaries-v6'
 logger = logging.getLogger(__name__)
 SOURCE_UNIT_CHARS = 240
 MAX_BEAT_CHARS = 480
@@ -153,6 +153,46 @@ def _boundary_error(assignments, units):
     return '；'.join(problems[:6])
 
 
+def _event_catalog(profile):
+    """Use only IDs from the exact read-only map supplied for this request."""
+    result = {}
+    story = profile.get('story_map') or {}
+    for phase in story.get('phases', []):
+        for event in phase.get('events', []):
+            event_id = event.get('event_id')
+            if isinstance(event_id, str) and event_id:
+                result[event_id] = {'event_id': event_id, 'title': str(event.get('title') or '')[:100]}
+    return list(result.values())
+
+
+def _invalid_event_refs(value, profile):
+    allowed = {event['event_id'] for event in _event_catalog(profile)}
+    scenes = value.get('scenes') if isinstance(value, dict) else None
+    if not isinstance(scenes, list):
+        return []
+    invalid = []
+    for si, scene in enumerate(scenes):
+        beats = scene.get('beats') if isinstance(scene, dict) else None
+        if not isinstance(beats, list):
+            continue
+        for bi, beat in enumerate(beats):
+            refs = beat.get('story_event_ids') if isinstance(beat, dict) else None
+            if not isinstance(refs, list):
+                continue
+            for ri, ref in enumerate(refs):
+                if isinstance(ref, str) and ref not in allowed:
+                    invalid.append({'path': f'scenes.{si}.beats.{bi}.story_event_ids.{ri}', 'value': ref})
+    return invalid
+
+
+def _reference_error(invalid):
+    if not invalid:
+        return ''
+    # Values are included only in the private provider repair context below.
+    return ('story_event_ids 含未确认事件引用：' + '、'.join(item['path'] for item in invalid[:6])
+            + f'（共{len(invalid)}项）；只能选择allowed_story_events中的event_id，无关联时返回[]')
+
+
 def _structure(value, units, profile):
     structure = Structure.model_validate(value)
     # A display label is not screenplay evidence. Reuse only an existing
@@ -163,11 +203,9 @@ def _structure(value, units, profile):
     boundary_error = _boundary_error(_source_assignments(structure.model_dump()), units)
     if boundary_error:
         raise ValueError('source_end 覆盖无效：' + boundary_error)
-    event_ids = {event['event_id'] for phase in profile.get('story_map', {}).get('phases', [])
-                 for event in phase.get('events', []) if event.get('event_id')}
-    if any(event not in event_ids for scene in structure.scenes for beat in scene.beats
-           for event in beat.story_event_ids):
-        raise ValueError('story_event_ids 只能引用已确认故事结构中的事件')
+    reference_error = _reference_error(_invalid_event_refs(structure.model_dump(), profile))
+    if reference_error:
+        raise ValueError(reference_error)
     result = structure.model_dump()
     start = 0
     for scene in result['scenes']:
@@ -236,6 +274,12 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
     structure_schema['$defs']['StructureBeat']['properties']['source_end']['maximum'] = len(units)
     structure_schema['properties']['scenes']['maxItems'] = min(40, len(units))
     structure_schema['$defs']['StructureScene']['properties']['beats']['maxItems'] = min(40, len(units))
+    allowed_events = _event_catalog(profile)
+    refs_schema = structure_schema['$defs']['StructureBeat']['properties']['story_event_ids']
+    if allowed_events:
+        refs_schema['items']['enum'] = [event['event_id'] for event in allowed_events]
+    else:
+        refs_schema['maxItems'] = 0
     identity = hashlib.sha256(_json([VERSION, text, entities, profile, style, previous_scene,
                                     source_ref, model]).encode()).hexdigest()
     state = copy.deepcopy(checkpoint) if isinstance(checkpoint, dict) else {}
@@ -265,6 +309,8 @@ source_end是结束位置，不是长度；本节拍来源=上个边界至本边
 节拍字段dramatic_purpose是戏剧目的，必须使用此精确键名，不要改写或另造字段名。
 边界落在同一连续动作时 keep_with_next=true。只有原文明确承接上一段时首场可设 continues_previous_scene=true。
 标题简短，目的、情绪、氛围、进出状态各用一句话，尽量不超过60字，不复述原文；story_event_ids 仅用已确认事件，无关联用 []。地点、时段连续性不按同名推断。
+story_event_ids只能从allowed_story_events逐字复制event_id，不得用标题、phase_id、人物ID或自行编号；关联不确定或列表为空时用[]。
+<allowed_story_events>{_json(allowed_events)}</allowed_story_events>
 场景标题 heading 是显示标签：有依据时填写；无法确定可省略，不要为补标题发明场景。
 只返回符合下方 JSON Schema 的完整 JSON，不要解释，不要返回 shots。
 根对象使用scenes数组，每个场景对象使用beats数组；数组元素必须是对象，不混入说明文字。
@@ -295,6 +341,7 @@ source_end是结束位置，不是长度；本节拍来源=上个边界至本边
                     value = _structure(parsed, units, profile)
                 except (ValueError, ValidationError) as exc:
                     boundary_error = ''
+                    invalid_refs = _invalid_event_refs(parsed, profile)
                     if isinstance(exc, ValidationError):
                         reasons = []
                         for issue in exc.errors()[:6]:
@@ -313,12 +360,17 @@ source_end是结束位置，不是长度；本节拍来源=上个边界至本边
                         reason = '场景与节拍规划不是完整 JSON'
                     else:
                         reason = '场景与节拍规划无效' if not str(exc).startswith(('source_end', 'story_event_ids')) else str(exc)
+                    if invalid_refs and not reason.startswith('story_event_ids'):
+                        reason += '；' + _reference_error(invalid_refs)
                     logger.warning('Shooting plan structure rejected: run=%s attempt=%s response_chars=%s error_type=%s issues=%s',
                                    identity[:12], attempt + 1, len(content or ''), type(exc).__name__,
                                    reason[:600])
                     if attempt:
                         raise DirectorShootingChunkError('structure_contract', reason) from exc
                     retry_note = '仅修正当前场景与节拍规划：' + reason
+                    if invalid_refs:
+                        private_refs = [{**item, 'value': item['value'][:240]} for item in invalid_refs[:12]]
+                        retry_note += '\n以下是未通过引用，须由你核对事件目录后修正，不由服务端猜测替换：\n<invalid_story_event_refs>' + _json(private_refs) + '</invalid_story_event_refs>'
                     # Preserve actual faulty values for correction, without
                     # sending a second unbounded screenplay/response payload.
                     rejected_content = content if isinstance(parsed, dict) and len(content or '') <= MAX_REPAIR_CHARS else ''
