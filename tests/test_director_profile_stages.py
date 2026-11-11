@@ -194,6 +194,105 @@ def test_provider_error_retries_only_unfinished_step_with_saved_source_context()
     assert result["source_audit"]["steps"][0]["reused"] is True
 
 
+def test_missing_story_fields_are_completed_once_without_rewriting_returned_fields():
+    pipeline, script, processor = setup_pipeline()
+    original = script.model_dump()
+    foundation, story, continuity = responses()
+    partial = {key: story[key] for key in ("timeline", "relationships")}
+    missing = {key: story[key] for key in ("key_events", "story_map")}
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (foundation, partial, missing, continuity)]
+    cache = {}
+    result = generate(pipeline, save_step=checkpoint_store(cache))
+    assert list(cache) == [0, 1, 2, 3] and processor.llm.chat.call_count == 4
+    assert all(result["profile"][key] == value for key, value in partial.items())
+    completion_call = processor.llm.chat.call_args_list[2].kwargs
+    prompt = completion_call["messages"][0]["content"]
+    schema = json.loads(prompt.split("<director_output_contract>")[1].split("</director_output_contract>")[0])
+    assert set(schema["required"]) == set(schema["properties"]) == set(missing)
+    assert prompt.count(script.original_text) == 1
+    assert "<completed_fields_readonly>" in prompt
+    assert "本次只输出以下顶层字段：key_events、story_map" in prompt
+    assert completion_call["stream"] and "max_tokens" not in completion_call
+    saved = cache[2]["frames"]
+    assert json.loads(saved["raw_response"]) == partial
+    assert json.loads(saved["field_completion"]["raw_response"]) == missing
+    assert saved["field_completion"]["fields"] == ["key_events", "story_map"]
+    assert script.model_dump() == original
+    processor.llm.chat.reset_mock(side_effect=True)
+    processor.llm.chat.side_effect = AssertionError("must reuse completed step")
+    resumed = generate(pipeline, cached=cache)
+    assert resumed["profile"] == result["profile"]
+    processor.llm.chat.assert_not_called()
+
+
+@pytest.mark.parametrize("completion", [{}, {"key_events": []}, {"key_events": [], "story_map": None},
+    {**responses()[1], "PRIVATE_EXTRA_FIELD": "not echoed"}])
+def test_invalid_missing_field_completion_stops_after_one_attempt(completion):
+    pipeline, _, processor = setup_pipeline()
+    partial = {key: responses()[1][key] for key in ("timeline", "relationships")}
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (responses()[0], partial, completion)]
+    cache = {}
+    with pytest.raises(ValueError) as caught:
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert processor.llm.chat.call_count == 3
+    assert list(cache) == [0, 1]
+    assert "PRIVATE_EXTRA_FIELD" not in str(caught.value)
+    assert caught.value.director_audit["failure_stage"] == "story"
+
+
+def test_completion_provider_error_keeps_prior_steps_and_does_not_auto_retry():
+    pipeline, _, processor = setup_pipeline()
+    failure = RuntimeError("upstream error event")
+    failure.llm_diagnostic = {"stream": True, "text_chars": 27}
+    partial = {key: responses()[1][key] for key in ("timeline", "relationships")}
+    processor.llm.chat.side_effect = [json.dumps(responses()[0]), json.dumps(partial), failure]
+    cache = {}
+    with pytest.raises(RuntimeError) as caught:
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert processor.llm.chat.call_count == 3 and list(cache) == [0, 1]
+    assert caught.value.director_audit["provider_response"]["text_chars"] == 27
+    assert caught.value.director_audit["field_completion"]["fields"] == ["key_events", "story_map"]
+
+
+def test_field_completion_uses_the_existing_step_budget():
+    pipeline, _, processor = setup_pipeline()
+    story = responses()[1]
+    partial = {"timeline": [{"summary": "x" * 18000}], "relationships": story["relationships"]}
+    missing = {"key_events": [{"summary": "x" * 7000}], "story_map": story["story_map"]}
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (responses()[0], partial, missing)]
+    cache = {}
+    with pytest.raises(ValueError, match="预算"):
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert processor.llm.chat.call_count == 3 and list(cache) == [0, 1]
+
+
+def test_missing_fields_failure_has_specific_public_diagnostic_and_no_partial_checkpoint(tmp_path):
+    pipeline, _, processor = setup_pipeline()
+    partial = {key: responses()[1][key] for key in ("timeline", "relationships")}
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (responses()[0], partial, {})]
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / "jobs.db", executor=executor)
+        def work(job_id):
+            return generate(pipeline, save_step=lambda i, key, value:
+                store.save_batch("owner", "project", "director:missing", job_id, i, key, value))
+        done = wait_done(store, store.start("owner", "project", "director:missing", work,
+                                         pass_job_id=True, total_batches=4))
+        assert done["status"] == "failed" and done["progress"]["completed"] == 2
+        assert "补全结果缺少必填字段：key_events、story_map" in done["error"]
+        assert "返回格式或引用校验未通过" not in done["error"]
+        assert done["result"]["source_audit"]["field_contract"]["public_reason"] in done["error"]
+
+
+@pytest.mark.parametrize("bad", [{"timeline": "invalid"}, {"story_map": None},
+    {"timeline": [], "PRIVATE_EXTRA_FIELD": "no"}])
+def test_invalid_existing_fields_are_not_sent_for_missing_field_completion(bad):
+    pipeline, _, processor = setup_pipeline()
+    processor.llm.chat.side_effect = [json.dumps(responses()[0]), json.dumps(bad)]
+    with pytest.raises((ValueError, TypeError)):
+        generate(pipeline)
+    assert processor.llm.chat.call_count == 2
+
+
 @pytest.mark.parametrize("finish_reason", ["content_filter", "sensitive"])
 def test_continuity_refusal_preserves_three_steps_and_reports_model_rejection(tmp_path, finish_reason):
     from src.apps.comic_gen.llm_adapter import LLMResponseTerminationError

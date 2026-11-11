@@ -359,13 +359,15 @@ class ExtractionJobs:
                     message = f'{label}失败：{detail[:300]}'
             director_stage = getattr(exc, 'director_profile_failure', None)
             if director_stage:
-                from .director_profile_stages import STAGES
+                from .director_profile_stages import STAGES, DirectorStepFieldsError
                 label = next((label for key, label, _ in STAGES if key == director_stage), '导演设定')
                 category = getattr(exc, 'director_profile_failure_category', '')
                 if category == 'checkpoint':
                     reason = '输入已改变或任务已失效，请重新生成'
                 elif category == 'parse':
                     reason = '模型返回的 JSON 不完整、无效或超过本步骤预算'
+                elif isinstance(exc, DirectorStepFieldsError):
+                    reason = exc.public_reason
                 elif isinstance(diagnostic, dict):
                     reason = '模型流式响应中断' if diagnostic.get('stream') else '模型请求失败'
                     if diagnostic.get('finish_reason') == 'length':

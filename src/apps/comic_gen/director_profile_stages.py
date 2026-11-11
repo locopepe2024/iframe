@@ -1,4 +1,5 @@
 """Checkpointed Director understanding; intermediate steps never become user drafts."""
+import copy
 import hashlib
 import json
 
@@ -62,13 +63,38 @@ METHOD_STEPS = {
 }
 
 
-def build_step_prompt(key, source_context, is_digest, entities, style, profile):
+class DirectorStepFieldsError(ValueError):
+    """Public diagnostics use server-owned field names, never model prose."""
+
+    def __init__(self, fields, value, *, completion=False):
+        missing = [name for name in fields if not isinstance(value, dict) or name not in value]
+        extra = isinstance(value, dict) and bool(set(value) - set(fields))
+        detail = ""
+        if missing:
+            detail = ("补全结果" if completion else "模型结果") + "缺少必填字段：" + "、".join(missing)
+        if extra or not isinstance(value, dict):
+            detail = (detail + "；" if detail else "") + "返回了本步骤之外的字段或非对象结构"
+        self.public_reason = detail
+        super().__init__(detail)
+
+
+def _require_story_map(value):
+    if (not isinstance(value, dict) or value.get("schema_version") != 1
+            or any(not isinstance(value.get(name), list)
+                   for name in ("phases", "relationship_arcs", "story_threads"))):
+        raise ValueError("故事结构步骤缺少规范的 story_map 对象，请重试。")
+
+
+def build_step_prompt(key, source_context, is_digest, entities, style, profile, *, output_fields=None, completed_fields=None):
     """Build a scoped request without full-profile/extraction preset baggage."""
     from src.apps.director_skills import guidance
     from .llm import _director_profile_output_contract, _prompt_json
     from .models import director_execution_payload
 
     _, label, fields = next(stage for stage in STAGES[1:] if stage[0] == key)
+    if output_fields is not None and (not output_fields or not set(output_fields).issubset(fields)):
+        raise ValueError("补全字段不属于当前步骤")
+    fields = fields if output_fields is None else output_fields
     series = entities.get("scope") == "series"
     scope = ("Series 全剧导演理解：梗概描述全剧走向，分集剧本描述各集实际事件，不把结局当作首集事实。"
              if series else "Episode 分集导演理解：只分析本集实际发生的事件、人物和地点。")
@@ -107,9 +133,19 @@ def build_step_prompt(key, source_context, is_digest, entities, style, profile):
         if key != "foundation" and any("unresolved_questions" in task["instructions"] for task in methods):
             destination = "key_events条目的review_notes" if key == "story" else "canon_state.uncertainties"
             parts.append("所选方法提到的unresolved_questions在本步记录到" + destination + "；不得新增顶层字段。")
-    parts.extend((GUIDANCE[key],
+    step_guidance = GUIDANCE[key]
+    if completed_fields is not None:
+        # Replace the full-step field list rather than contradicting the
+        # missing-fields-only contract later in this request.
+        step_guidance = step_guidance.split("。", 1)[1]
+    parts.extend((step_guidance,
                   "本次JSON总长度控制在18000字符内；不展开镜头和对白。",
                   _director_profile_output_contract(fields=fields)))
+    if completed_fields is not None:
+        parts.append("这是本步骤缺字段的唯一一次补全。已有字段只读，保留其含义和引用；"
+                     "不要把 timeline 复制当作 story_map，不重写已有字段或其他步骤。\n"
+                     "<completed_fields_readonly>" + _prompt_json(completed_fields) + "</completed_fields_readonly>")
+    parts.append("本次只输出以下顶层字段：" + "、".join(fields) + "。每个字段都必须存在；空数组也不得省略。")
     if profile:
         # Do not resend the source, raw responses, server metadata or empty
         # containers. Story needs the foundation summary, continuity the map too.
@@ -144,6 +180,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
             current, category = key, "validation"
             audit["raw_response"] = ""
             audit.pop("raw_response_sha256", None)
+            audit.pop("field_completion", None)
+            audit.pop("field_contract", None)
             entry = (cached or {}).get(index, {})
             saved = entry.get("frames", {})
             reused = (entry.get("source_ref") == key and isinstance(saved, dict)
@@ -190,14 +228,41 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                     raise ValueError("本步骤输出为空或超过预算，请重试。")
                 patch = json.loads(_strip_markdown_json(raw))
             category = "validation"
+            completion = saved.get("field_completion") if reused else None
+            # Only a nonempty subset with valid existing fields can be
+            # completed. Never synthesize a story map, retry malformed JSON,
+            # erase unknown keys, or rewrite fields already returned.
+            if (key == "story" and not reused and isinstance(patch, dict) and patch
+                    and set(patch) < set(fields)):
+                if "story_map" in patch:
+                    _require_story_map(patch["story_map"])
+                validate_profile(copy.deepcopy({**profile, **patch}))
+                missing = tuple(name for name in fields if name not in patch)
+                completion = {"fields": list(missing), "raw_response": ""}
+                audit["field_completion"] = completion
+                prompt = build_step_prompt(key, source_context, is_digest, entities, style, profile,
+                                           output_fields=missing, completed_fields=patch)
+                category = "provider"
+                completion_raw = (processor.llm.chat(
+                    messages=[{"role": "system", "content": prompt},
+                              {"role": "user", "content": "只补全缺失字段：" + "、".join(missing)}],
+                    response_format={"type": "json_object"}, stream=True,
+                    timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+                    max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+                ) or "").strip()
+                completion["raw_response"] = completion_raw[:MAX_RESPONSE_CHARS]
+                category = "parse"
+                if not completion_raw or len(raw) + len(completion_raw) > MAX_RESPONSE_CHARS:
+                    raise ValueError("补全输出为空或超过预算，请重试。")
+                extra_patch = json.loads(_strip_markdown_json(completion_raw))
+                category = "validation"
+                if not isinstance(extra_patch, dict) or set(extra_patch) != set(missing):
+                    raise DirectorStepFieldsError(missing, extra_patch, completion=True)
+                patch = {**patch, **extra_patch}
             if not isinstance(patch, dict) or set(patch) != set(fields):
-                raise ValueError("本步骤返回字段缺失或包含其他步骤内容，请重试。")
+                raise DirectorStepFieldsError(fields, patch)
             if key == "story":
-                story = patch.get("story_map")
-                if (not isinstance(story, dict) or story.get("schema_version") != 1
-                        or any(not isinstance(story.get(name), list)
-                               for name in ("phases", "relationship_arcs", "story_threads"))):
-                    raise ValueError("故事结构步骤缺少规范的 story_map 对象，请重试。")
+                _require_story_map(patch.get("story_map"))
             if key == "continuity":
                 has_events = any(phase["events"] for phase in profile.get("story_map", {}).get("phases", []))
                 if has_events and not patch.get("scene_summaries"):
@@ -216,6 +281,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
             normalized_patch = {name: candidate[name] for name in fields}
             if not reused:
                 saved = {"identity": identity, "stage": key, "profile": normalized_patch, "raw_response": raw}
+                if completion:
+                    saved["field_completion"] = completion
                 if save_step:
                     category = "checkpoint"
                     if save_step(index, key, saved) is False:
@@ -225,6 +292,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
             profile.update(normalized_patch)
             audit["steps"].append({"stage": key, "status": "completed", "reused": bool(reused),
                                    "raw_response": raw, "raw_response_sha256": hashlib.sha256(raw.encode()).hexdigest()})
+            if completion:
+                audit["steps"][-1]["field_completion"] = completion
         audit.update(parse_status="parsed", normalization_status="normalized", admission_status="confirmable",
                      raw_response_received=True)
         return {"profile": profile, "source_audit": audit}
@@ -233,6 +302,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
         audit["failure_category"] = category
         audit["raw_response_received"] = bool(audit.get("raw_response"))
         audit["admission_status"] = "blocked"
+        if isinstance(exc, DirectorStepFieldsError):
+            audit["field_contract"] = {"public_reason": exc.public_reason}
         diagnostic = getattr(exc, "llm_diagnostic", None)
         if isinstance(diagnostic, dict):
             audit["provider_response"] = diagnostic
