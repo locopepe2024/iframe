@@ -131,6 +131,20 @@ def test_shooting_plan_unknown_failure_does_not_expose_exception_text(tmp_path):
         assert '导演拍摄计划生成失败' in done['error']
 
 
+def test_shooting_contract_diagnostics_survive_owner_scoped_job_failure(tmp_path):
+    store = ExtractionJobs(tmp_path / 'jobs.db')
+    diagnostic = {'scope': 'shots', 'attempts': 2, 'response_chars': 100,
+                  'issues': ['shots.2.visual_intensity: 存在未知字段', 'shots.1.duration_seconds: int_type']}
+    def fail():
+        error = DirectorShootingChunkError('contract_violation', diagnostic['issues'][0])
+        error.shooting_contract_diagnostic = diagnostic
+        raise error
+    done = wait_done(store, store.start('owner', 'project', 'director_shooting_plan:diagnostics', fail))
+    assert done['result']['contract_diagnostic'] == diagnostic
+    with pytest.raises(HTTPException):
+        store.get('other', 'project', done['id'])
+
+
 def test_shooting_finalization_failure_reports_saved_generation_without_inventing_unfinished_steps(tmp_path):
     with ThreadPoolExecutor(max_workers=1) as executor:
         store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)

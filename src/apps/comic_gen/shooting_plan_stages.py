@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from src.apps.director_skills import guidance as director_skill_guidance
 from ...utils.llm_json import parse_model_json_object
@@ -23,12 +23,18 @@ Detail = Annotated[str, Field(max_length=240)]
 
 class StructureBeat(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
-    title: Text
+    title: Annotated[str, Field(max_length=180)]
     dramatic_purpose: Detail
     emotional_change: Text
     source_end: int = Field(ge=1)
     story_event_ids: list[Text] = Field(default_factory=list, max_length=20)
     keep_with_next: bool = False
+
+    @model_validator(mode='after')
+    def unique_events(self):
+        if len(self.story_event_ids) != len(set(self.story_event_ids)):
+            raise ValueError('Duplicate story_event_ids')
+        return self
 
 
 class StructureScene(BaseModel):
@@ -36,9 +42,9 @@ class StructureScene(BaseModel):
     scene_ref: Text = ''
     heading: Text = ''
     location: Text = ''
-    time_anchor: Text = ''
-    place_continuity_id: Text = ''
-    time_continuity_id: Text = ''
+    time_anchor: Annotated[str, Field(max_length=160)] = ''
+    place_continuity_id: Annotated[str, Field(max_length=120)] = ''
+    time_continuity_id: Annotated[str, Field(max_length=120)] = ''
     environment_atmosphere: Detail = ''
     continuity_in: Detail = ''
     continuity_out: Detail = ''
@@ -46,6 +52,12 @@ class StructureScene(BaseModel):
     prop_ids: list[Text] = Field(default_factory=list, max_length=40)
     unresolved_questions: list[Text] = Field(default_factory=list, max_length=10)
     beats: list[StructureBeat] = Field(min_length=1, max_length=40)
+
+    @model_validator(mode='after')
+    def unique_props(self):
+        if len(self.prop_ids) != len(set(self.prop_ids)):
+            raise ValueError('Duplicate prop_ids')
+        return self
 
 
 class Structure(BaseModel):
@@ -279,6 +291,7 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
                    source_ref='', model=None, checkpoint=None, save_checkpoint=None):
     from .llm import (DirectorShootingChunkError, DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS,
                       DIRECTOR_PROFILE_MAX_RETRIES)
+    from .shooting_shot_contract import output_issues
     if not processor.is_configured:
         raise ValueError('LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。')
     units = split_shooting_source(text)
@@ -404,10 +417,9 @@ story_event_ids只能从allowed_story_events逐字复制event_id，不得用标�
                 stage = {'stage': 'shots', 'scene': si + 1, 'beat': bi + 1}
                 key = f'{si}:{bi}'
                 detail = state['details'].get(key)
-                if detail is not None and shooting_event_reference_error(
-                        {'scenes': [{'beats': [{'shots': detail['shots']}]}]}, profile):
-                    # Older checkpoints admitted shape-valid but unconfirmed
-                    # information links. Reopen only this beat, never rewrite IDs.
+                if detail is not None and output_issues(detail, profile, beat_only=True):
+                    # Reopen only the detail failing the same admission contract
+                    # used for new generation; never rewrite its fields locally.
                     del state['details'][key]
                     persist()
                     detail = None

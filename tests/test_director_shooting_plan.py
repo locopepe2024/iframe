@@ -305,7 +305,7 @@ def test_lighting_retry_identifies_invalid_shape_and_provides_canonical_schema(l
     assert result == valid_chunk()
     prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
     assert reason in prompt
-    schema = json.loads(prompt.split('<shot_lighting_schema>')[1].split('</shot_lighting_schema>')[0])
+    schema = json.loads(prompt.split('<shot_output_contract>')[1].split('</shot_output_contract>')[0])['$defs']['DirectorPlanLighting']
     assert schema['additionalProperties'] is False
     assert set(schema['properties']) == {'key_source', 'color_tone', 'contrast', 'practical_sources'}
     assert schema['properties']['practical_sources']['type'] == 'array'
@@ -321,7 +321,7 @@ def test_shooting_plan_accepts_provider_commentary_but_retries_unknown_shot_fiel
     processor.llm.chat.side_effect = [prefix + json.dumps(invalid), prefix + json.dumps(valid_chunk())]
     assert processor._plan_director_shooting_beat('场景原文', {}, {'story_map': story_map().model_dump()}, {}) == valid_chunk()
     prompt = processor.llm.chat.call_args.kwargs['messages'][0]['content']
-    assert '存在未知字段 performance_change' in prompt
+    assert 'performance_change: 存在未知字段' in prompt
 
 
 @pytest.mark.parametrize('response', [

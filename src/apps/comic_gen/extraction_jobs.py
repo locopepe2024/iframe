@@ -383,6 +383,9 @@ class ExtractionJobs:
             failure_result = None
             if shooting:
                 failure_result = {'failure_stage': stage}
+                contract = getattr(exc, 'shooting_contract_diagnostic', None)
+                if isinstance(contract, dict):
+                    failure_result['contract_diagnostic'] = contract
                 if isinstance(diagnostic, dict):
                     failure_result['provider_response'] = diagnostic
             if isinstance(audit, dict):

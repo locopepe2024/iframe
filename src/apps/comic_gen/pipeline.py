@@ -4912,8 +4912,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 cached_result = prior["result"]
             else:
                 cached_result = None
-            if cached_result is not None and shooting_event_reference_error(
-                    cached_result, director_execution_payload(profile)):
+            if cached_result is not None and (
+                    ScriptProcessor._validate_director_shooting_chunk(cached_result)
+                    or shooting_event_reference_error(cached_result, director_execution_payload(profile))):
                 # Re-enter its durable checkpoint so only invalid beat details
                 # are regenerated; a cached envelope is not proof of admission.
                 cached_result = None
@@ -4974,9 +4975,13 @@ class ComicGenPipeline(StudioOwnerMixin):
                         save_checkpoint=save_checkpoint,
                     )
                 except DirectorShootingChunkError as exc:
+                    stage = getattr(exc, 'shooting_plan_failure', {})
+                    location = f"，场景 {stage['scene']} 节拍 {stage['beat']}" if stage.get('scene') else ''
                     error = DirectorShootingChunkError(
-                        exc.category, f"第 {index + 1}/{len(chunks)} 段：{exc.public_reason}"
+                        exc.category, f"第 {index + 1}/{len(chunks)} 段{location}：{exc.public_reason}"
                     )
+                    if hasattr(exc, 'shooting_contract_diagnostic'):
+                        error.shooting_contract_diagnostic = exc.shooting_contract_diagnostic
                     error.shooting_plan_failure = {**getattr(exc, 'shooting_plan_failure', {}),
                                                    'chunk': index + 1, 'chunks': len(chunks)}
                     raise error from exc

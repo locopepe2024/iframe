@@ -522,7 +522,7 @@ def test_each_detail_call_repairs_only_the_current_beat_and_enforces_shot_budget
     assert len(result['scenes'][0]['beats']) == 2
     assert p.llm.chat.call_count == 4
     repair_prompt = p.llm.chat.call_args_list[2].kwargs['messages'][0]['content']
-    assert '1–3 个 shots' in repair_prompt
+    assert '1–3个镜头' in repair_prompt
     assert '离' * 80 not in repair_prompt
 
 def test_pipeline_persists_structure_and_detail_checkpoints_through_real_job_store(tmp_path):
