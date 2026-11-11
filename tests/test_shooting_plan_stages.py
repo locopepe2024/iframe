@@ -139,6 +139,91 @@ def test_structure_correction_reports_all_missing_fields_in_one_attempt():
     assert '缺少必填字段' in repair_prompt
 
 
+def test_schema_typo_retry_receives_rejected_json_and_coverage_errors_together():
+    p = processor()
+    invalid = structure()
+    beat = invalid['scenes'][0]['beats'][1]
+    beat['dramatic_penalty'] = beat.pop('dramatic_purpose')
+    beat['source_unit_ids'] = [0]
+    rejected = json.dumps(invalid)
+    p.llm.chat.side_effect = [rejected, json.dumps(structure())]
+    snapshots = []
+    generate(p, save_checkpoint=lambda value: snapshots.append(copy.deepcopy(value)) or True)
+    messages = p.llm.chat.call_args.kwargs['messages']
+    assert messages[1] == {'role': 'assistant', 'content': rejected}
+    assert '修正上条JSON' in messages[2]['content']
+    prompt = messages[0]['content']
+    for problem in ('dramatic_purpose', 'dramatic_penalty', '缺失编号=[1]', '重复编号=[0]'):
+        assert problem in prompt
+    assert p.llm.chat.call_count == 2
+    assert all('dramatic_penalty' not in json.dumps(s) for s in snapshots)
+
+
+def test_structure_request_bounds_scene_and_beat_counts_by_input_units():
+    p = processor()
+    generate(p)
+    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    schema = json.loads(prompt.split('<structure_schema>')[1].split('</structure_schema>')[0])
+    assert schema['properties']['scenes']['maxItems'] == 2
+    assert schema['$defs']['StructureScene']['properties']['beats']['maxItems'] == 2
+    assert '全部场景合计最多2个节拍' in prompt
+    assert 'dramatic_purpose是戏剧目的' in prompt
+
+
+def test_typo_is_not_locally_renamed_or_saved_when_provider_does_not_fix_it():
+    p = processor()
+    invalid = structure()
+    invalid['scenes'][0]['beats'][0]['dramatic_penalty'] = invalid['scenes'][0]['beats'][0].pop('dramatic_purpose')
+    p.llm.chat.return_value = json.dumps(invalid)
+    save = Mock()
+    with pytest.raises(RuntimeError, match='dramatic_purpose'):
+        generate(p, save_checkpoint=save)
+    assert p.llm.chat.call_count == 2
+    save.assert_not_called()
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_oversized_rejected_output_is_not_fed_back_into_retry():
+    p = processor()
+    invalid = structure()
+    invalid['scenes'][0]['beats'][0]['dramatic_purpose'] = 'X' * 17000
+    p.llm.chat.side_effect = [json.dumps(invalid), json.dumps(structure())]
+    generate(p)
+    messages = p.llm.chat.call_args.kwargs['messages']
+    assert len(messages) == 2
+    assert 'X' * 17000 not in json.dumps(messages)
+
+
+def test_sixteenth_beat_typo_and_repeated_four_unit_assignments_are_repaired_together():
+    p = processor()
+    invalid = structure()
+    template = invalid['scenes'][0]['beats'][0]
+    invalid['scenes'][0]['beats'] = [dict(template, source_unit_ids=[i % 4]) for i in range(16)]
+    last = invalid['scenes'][0]['beats'][15]
+    last['dramatic_penalty'] = last.pop('dramatic_purpose')
+    corrected = structure()
+    corrected['scenes'][0]['beats'] = [dict(template, source_unit_ids=[i]) for i in range(4)]
+    p.llm.chat.side_effect = [json.dumps(invalid), json.dumps(corrected)]
+    result = p.plan_director_shooting_chunk('文' * 807, {},
+        {'story_map': {'phases': [{'events': [{'event_id': 'event-cinema'}]}]}}, {})
+    assert len(result['scenes'][0]['beats']) == 4
+    messages = p.llm.chat.call_args.kwargs['messages']
+    assert 'scenes.0.beats.15.dramatic_purpose' in messages[0]['content']
+    assert '重复编号=[0,1,2,3]' in messages[0]['content']
+    assert '全部场景合计最多4个节拍' in messages[0]['content']
+    assert json.loads(messages[1]['content']) == invalid
+    assert p._plan_director_shooting_beat.call_count == 4
+
+
+def test_badly_typed_source_ids_do_not_crash_schema_error_feedback():
+    p = processor()
+    invalid = structure()
+    invalid['scenes'][0]['beats'][0]['source_unit_ids'] = 'bad'
+    p.llm.chat.side_effect = [json.dumps(invalid), json.dumps(structure())]
+    generate(p)
+    assert 'scenes.0.beats.0.source_unit_ids' in p.llm.chat.call_args.kwargs['messages'][0]['content']
+
+
 @pytest.mark.parametrize('assignments,reason', [
     ([[0]], '缺失编号=[1]'),
     ([[0], [0, 1]], '重复编号=[0]'),
