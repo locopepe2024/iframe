@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from src.apps.comic_gen.llm import ScriptProcessor
-from src.apps.comic_gen.shooting_plan_stages import split_shooting_source
+from src.apps.comic_gen.shooting_plan_stages import split_shooting_source, normalize_structure_containers
 from tests.test_director_shooting_plan import make_pipeline, raw_scene, valid_chunk
 
 
@@ -131,6 +131,87 @@ def test_corrupted_checkpoint_cannot_skip_source_by_forging_internal_ranges():
         generate(p, checkpoint=state)
     p.llm.chat.assert_not_called()
     p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_beams_container_typo_is_normalized_once_without_changing_values():
+    p = processor()
+    value = structure()
+    value['scenes'][0]['beams'] = value['scenes'][0].pop('beats')
+    raw = json.dumps(value)
+    p.llm.chat.return_value = raw
+    snapshots = []
+    result = generate(p, save_checkpoint=lambda s: snapshots.append(copy.deepcopy(s)) or True)
+    assert p.llm.chat.call_count == 1
+    assert [b['title'] for b in result['scenes'][0]['beats']] == ['进入', '离开']
+    assert p._plan_director_shooting_beat.call_args_list[0].args[0] == '进' * 240
+    assert p._plan_director_shooting_beat.call_args_list[1].args[0] == '离' * 80
+    assert snapshots[0]['structure_key_corrections'] == [
+        {'path': 'scenes.0', 'from': 'beams', 'to': 'beats'}]
+    assert json.dumps(value) == raw
+    normalized, corrections = normalize_structure_containers(value)
+    assert normalized == structure() and json.dumps(value) == raw
+    assert corrections == snapshots[0]['structure_key_corrections']
+    p.llm.chat.reset_mock()
+    p._plan_director_shooting_beat.reset_mock()
+    resumed = generate(p, checkpoint=snapshots[-1])
+    assert resumed == result
+    p.llm.chat.assert_not_called()
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_root_container_single_character_typo_uses_same_admission():
+    p = processor()
+    value = structure()
+    value['scene'] = value.pop('scenes')
+    p.llm.chat.return_value = json.dumps(value)
+    snapshots = []
+    generate(p, save_checkpoint=lambda s: snapshots.append(copy.deepcopy(s)) or True)
+    assert p.llm.chat.call_count == 1
+    assert snapshots[0]['structure_key_corrections'] == [{'path': '$', 'from': 'scene', 'to': 'scenes'}]
+
+
+@pytest.mark.parametrize('kind', ['both', 'ambiguous', 'strings', 'bad_scene', 'boundary', 'purpose'])
+def test_container_normalization_never_hides_other_contract_failures(kind):
+    p = processor()
+    value = structure()
+    scene = value['scenes'][0]
+    scene['beams'] = scene.pop('beats')
+    if kind == 'both':
+        scene['beats'] = copy.deepcopy(scene['beams'])
+    elif kind == 'ambiguous':
+        scene['bears'] = copy.deepcopy(scene['beams'])
+    elif kind == 'strings':
+        scene['beams'] = ['not a beat']
+    elif kind == 'bad_scene':
+        value['scenes'].append('not a scene')
+    elif kind == 'boundary':
+        scene['beams'][1]['source_end'] = 1
+    else:
+        beat = scene['beams'][0]
+        beat['dramatic_penalty'] = beat.pop('dramatic_purpose')
+    p.llm.chat.return_value = json.dumps(value)
+    save = Mock()
+    with pytest.raises(RuntimeError):
+        generate(p, save_checkpoint=save)
+    assert p.llm.chat.call_count == 2
+    save.assert_not_called()
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_valid_container_normalization_still_retries_other_invalid_fields():
+    p = processor()
+    value = structure()
+    value['scenes'][0]['beams'] = value['scenes'][0].pop('beats')
+    value['scenes'].append('bad scene')
+    corrected = structure()
+    corrected['scenes'][0]['beams'] = corrected['scenes'][0].pop('beats')
+    p.llm.chat.side_effect = [json.dumps(value), json.dumps(corrected)]
+    generate(p)
+    assert p.llm.chat.call_count == 2
+    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    assert 'scenes.1: model_type' in prompt
+    assert 'scenes.0.beats: 缺少必填字段' not in prompt
+    assert json.loads(p.llm.chat.call_args.kwargs['messages'][1]['content']) == value
 
 
 def structure():

@@ -10,6 +10,12 @@ Tests cover exact source reconstruction (CRLF, whitespace, quotes, blank lines, 
 
 ## Earlier iterations and evidence
 
+### Structure container spelling normalization
+
+Job 867eb6d8160b4714aafba714258aefb3 returned a missing beats / extra beams pair on both attempts; the first also contained two non-object scenes. JSON-object mode does not enforce the supplied schema. Introduce a local normalization limited to the required scenes and beats array containers: only when the canonical key is absent, exactly one unknown key differs by one insertion/deletion/substitution and its value is an array of objects. Preserve values exactly; do not merge keys, discard extras, create objects from text or rename semantic fields. All existing Pydantic, boundary, event-reference and size checks still run before persistence or shot expansion. A rename alone is not successful admission. Do not assume json_schema support or change upstream model/credentials.
+
+Record normalized key paths/from/to in accepted checkpoints and logs without content values. Preserve the raw provider JSON for bounded retry when other errors remain. Revalidate persisted structures as before. Tests include beams→beats, singleton scene spelling, ambiguous candidates, simultaneous canonical+typo keys, invalid container content, non-object scene rows, repeated boundary violations and semantic-field typos. No extra paid request is needed to correct an unambiguous container spelling.
+
 Observed: the live 807-character source was split into four units. Both structure responses failed the existing exact coverage contract. Rejected assignments were not retained, so the specific missing/duplicated/reordered/out-of-range IDs cannot be recovered for that request. Existing retries only repeated a generic error.
 
 Keep the admission boundary: flattening all scenes/beats must equal the zero-based input IDs in order, once each. Do not guess, renumber, sort, drop or add assignments locally. Structures with invalid coverage must never be checkpointed or trigger shot generation.

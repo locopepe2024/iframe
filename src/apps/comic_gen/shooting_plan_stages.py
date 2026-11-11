@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from src.apps.director_skills import guidance as director_skill_guidance
 from ...utils.llm_json import parse_model_json_object
 
-VERSION = 'scene-beat-boundaries-v4'
+VERSION = 'scene-beat-boundaries-v5'
 logger = logging.getLogger(__name__)
 SOURCE_UNIT_CHARS = 240
 MAX_BEAT_CHARS = 480
@@ -56,6 +56,47 @@ class Structure(BaseModel):
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
+
+
+def _one_character_typo(left, right):
+    if left == right or abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) == len(right):
+        return sum(a != b for a, b in zip(left, right)) == 1
+    shorter, longer = sorted((left, right), key=len)
+    return any(longer[:i] + longer[i + 1:] == shorter for i in range(len(longer)))
+
+
+def normalize_structure_containers(value):
+    """Correct only unique structural array spelling, never semantic fields.
+
+    Values are unchanged, and the complete normal schema/boundary validation
+    remains mandatory. Conflicting/ambiguous keys and malformed rows survive
+    unchanged so that validation rejects them instead of dropping evidence.
+    """
+    result = copy.deepcopy(value)
+    corrections = []
+
+    def container(obj, canonical, model, path):
+        if not isinstance(obj, dict) or canonical in obj:
+            return
+        candidates = [key for key in obj if key not in model.model_fields
+                      and _one_character_typo(key, canonical)]
+        if len(candidates) != 1:
+            return
+        key = candidates[0]
+        rows = obj[key]
+        if not isinstance(rows, list) or not rows or any(not isinstance(row, dict) for row in rows):
+            return
+        obj[canonical] = obj.pop(key)
+        corrections.append({'path': path, 'from': key, 'to': canonical})
+
+    container(result, 'scenes', Structure, '$')
+    scenes = result.get('scenes') if isinstance(result, dict) else None
+    if isinstance(scenes, list):
+        for index, scene in enumerate(scenes):
+            container(scene, 'beats', StructureScene, f'scenes.{index}')
+    return result, corrections
 
 
 def split_shooting_source(text):
@@ -226,6 +267,7 @@ source_end是结束位置，不是长度；本节拍来源=上个边界至本边
 标题简短，目的、情绪、氛围、进出状态各用一句话，尽量不超过60字，不复述原文；story_event_ids 仅用已确认事件，无关联用 []。地点、时段连续性不按同名推断。
 场景标题 heading 是显示标签：有依据时填写；无法确定可省略，不要为补标题发明场景。
 只返回符合下方 JSON Schema 的完整 JSON，不要解释，不要返回 shots。
+根对象使用scenes数组，每个场景对象使用beats数组；数组元素必须是对象，不混入说明文字。
 <structure_schema>{_json(structure_schema)}</structure_schema>
 <source_units>{_json([{'start': i, 'end': i+1, 'text': unit['text']} for i, unit in enumerate(units)])}</source_units>
 <confirmed_director_profile>{_json(profile)}</confirmed_director_profile>
@@ -246,8 +288,10 @@ source_end是结束位置，不是长度；本节拍来源=上个边界至本边
                     max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
                     **({'model': model} if model else {}))
                 parsed = None
+                key_corrections = []
                 try:
                     parsed = parse_model_json_object(content or '')
+                    parsed, key_corrections = normalize_structure_containers(parsed)
                     value = _structure(parsed, units, profile)
                 except (ValueError, ValidationError) as exc:
                     boundary_error = ''
@@ -279,7 +323,11 @@ source_end是结束位置，不是长度；本节拍来源=上个边界至本边
                     # sending a second unbounded screenplay/response payload.
                     rejected_content = content if isinstance(parsed, dict) and len(content or '') <= MAX_REPAIR_CHARS else ''
                 else:
-                    state = {'version': VERSION, 'input_hash': identity, 'structure': value, 'details': {}}
+                    state = {'version': VERSION, 'input_hash': identity, 'structure': value, 'details': {},
+                             'structure_key_corrections': key_corrections}
+                    if key_corrections:
+                        logger.info('Shooting plan structural spelling normalized: run=%s corrections=%s',
+                                    identity[:12], _json(key_corrections))
                     persist()
                     break
         structure = _structure(_boundary_payload(state['structure']), units, profile)
