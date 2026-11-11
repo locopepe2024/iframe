@@ -5,19 +5,143 @@ from unittest.mock import Mock
 import pytest
 
 from src.apps.comic_gen.llm import ScriptProcessor
+from src.apps.comic_gen.shooting_plan_stages import split_shooting_source
 from tests.test_director_shooting_plan import make_pipeline, raw_scene, valid_chunk
+
+
+@pytest.mark.parametrize('text', [
+    '场景一\r\n动作。\r\n\r\n“停！”\n\t对白\r结尾',
+    ' \n\n' + '甲' * 600 + '\n \n乙',
+    '一。二！三？四；五;六?七!最后一句',
+    '',
+])
+def test_natural_source_units_reconstruct_exact_text_and_ranges(text):
+    units = split_shooting_source(text)
+    assert ''.join(unit['text'] for unit in units) == text
+    assert all(0 < len(unit['text']) <= 240 for unit in units)
+    cursor = 0
+    for unit in units:
+        assert unit['char_start'] == cursor
+        assert text[unit['char_start']:unit['char_end']] == unit['text']
+        cursor = unit['char_end']
+    assert cursor == len(text)
+
+
+def test_natural_lines_can_form_sixteen_beats_inside_old_four_coarse_blocks():
+    text = ''.join(f'动作{i}：' + '文' * 17 + '\n' for i in range(34))
+    units = split_shooting_source(text)
+    assert len(units) == 34
+    p = processor()
+    value = structure()
+    template = value['scenes'][0]['beats'][0]
+    ends = list(range(2, 32, 2)) + [34]
+    value['scenes'][0]['beats'] = [dict(template, source_end=end) for end in ends]
+    p.llm.chat.return_value = json.dumps(value)
+    snapshots = []
+    p.plan_director_shooting_chunk(text, {},
+        {'story_map': {'phases': [{'events': [{'event_id': 'event-cinema'}]}]}}, {},
+        save_checkpoint=lambda value: snapshots.append(copy.deepcopy(value)) or True)
+    assert p._plan_director_shooting_beat.call_count == 16
+    assert ''.join(call.args[0] for call in p._plan_director_shooting_beat.call_args_list) == text
+    assert all(len(call.args[0]) <= 480 for call in p._plan_director_shooting_beat.call_args_list)
+    ids = [i for beat in snapshots[0]['structure']['scenes'][0]['beats'] for i in beat['source_unit_ids']]
+    assert ids == list(range(34))
+
+
+@pytest.mark.parametrize('ends,reason', [
+    ([1, 1], '须大于前一边界'),
+    ([2, 1], '须大于前一边界'),
+    ([1, 3], '不超过2'),
+    ([1], '末尾未完整覆盖'),
+    ([0, 2], '须大于前一边界'),
+    (['bad', 2], 'source_end'),
+])
+def test_invalid_boundaries_are_rejected_without_saving_or_shots(ends, reason):
+    p = processor()
+    value = structure()
+    template = value['scenes'][0]['beats'][0]
+    value['scenes'][0]['beats'] = [dict(template, source_end=end) for end in ends]
+    p.llm.chat.return_value = json.dumps(value)
+    save = Mock()
+    with pytest.raises(RuntimeError, match=reason):
+        generate(p, save_checkpoint=save)
+    assert p.llm.chat.call_count == 2
+    save.assert_not_called()
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_schema_and_boundary_errors_are_corrected_together_from_original_json():
+    p = processor()
+    value = structure()
+    beat = value['scenes'][0]['beats'][1]
+    beat['dramatic_penalty'] = beat.pop('dramatic_purpose')
+    beat['source_end'] = 1
+    rejected = json.dumps(value)
+    p.llm.chat.side_effect = [rejected, json.dumps(structure())]
+    generate(p)
+    messages = p.llm.chat.call_args.kwargs['messages']
+    assert messages[1] == {'role': 'assistant', 'content': rejected}
+    assert '修正上条JSON' in messages[2]['content']
+    for problem in ('dramatic_penalty', 'dramatic_purpose', '须大于前一边界', '末尾未完整覆盖'):
+        assert problem in messages[0]['content']
+
+
+def test_legacy_lists_are_rejected_instead_of_implicitly_converted():
+    p = processor()
+    value = structure()
+    for beat in value['scenes'][0]['beats']:
+        beat['source_unit_ids'] = [beat.pop('source_end') - 1]
+    p.llm.chat.return_value = json.dumps(value)
+    with pytest.raises(RuntimeError, match='source_end'):
+        generate(p)
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_single_oversized_boundary_requires_more_beats():
+    p = processor()
+    value = structure()
+    value['scenes'][0]['beats'] = [dict(value['scenes'][0]['beats'][0], source_end=3)]
+    p.llm.chat.return_value = json.dumps(value)
+    with pytest.raises(RuntimeError, match='480字符'):
+        p.plan_director_shooting_chunk('文' * 600, {}, {}, {})
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_request_schema_and_examples_use_exclusive_boundaries():
+    p = processor()
+    generate(p)
+    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    schema = json.loads(prompt.split('<structure_schema>')[1].split('</structure_schema>')[0])
+    field = schema['$defs']['StructureBeat']['properties']['source_end']
+    assert field['minimum'] == 1 and field['maximum'] == 2
+    assert 'source_unit_ids' not in schema['$defs']['StructureBeat']['properties']
+    assert '最后一个必须为2' in prompt
+    assert '跨场景也不重置' in prompt
+
+
+def test_corrupted_checkpoint_cannot_skip_source_by_forging_internal_ranges():
+    p = processor()
+    snapshots = []
+    generate(p, save_checkpoint=lambda value: snapshots.append(copy.deepcopy(value)) or True)
+    state = snapshots[-1]
+    state['structure']['scenes'][0]['beats'][0]['source_unit_ids'] = [1]
+    p.llm.chat.reset_mock()
+    p._plan_director_shooting_beat.reset_mock()
+    with pytest.raises(ValueError, match='不连续'):
+        generate(p, checkpoint=state)
+    p.llm.chat.assert_not_called()
+    p._plan_director_shooting_beat.assert_not_called()
 
 
 def structure():
     scene = raw_scene()
     scene['beats'] = [
         {'title': '进入', 'dramatic_purpose': '建立关系', 'emotional_change': '平静',
-         'source_unit_ids': [0], 'story_event_ids': ['event-cinema']},
+         'source_end': 1, 'story_event_ids': ['event-cinema']},
         {'title': '离开', 'dramatic_purpose': '结束相遇', 'emotional_change': '不舍',
-         'source_unit_ids': [1], 'story_event_ids': []},
+         'source_end': 2, 'story_event_ids': []},
     ]
     return {'scenes': [scene], 'unresolved_questions': []}
-
 
 def processor():
     p = ScriptProcessor.__new__(ScriptProcessor)
@@ -26,14 +150,12 @@ def processor():
     p._plan_director_shooting_beat = Mock(return_value=valid_chunk())
     return p
 
-
 def generate(p, **kwargs):
     # Each source unit is at most 240 characters, preserving the exact source.
     return p.plan_director_shooting_chunk(
         '进' * 240 + '离' * 80, {'characters': [], 'props': []},
         {'story_map': {'phases': [{'events': [{'event_id': 'event-cinema'},
                                              {'event_id': 'unrelated-event'}]}]}}, {}, **kwargs)
-
 
 def test_completed_beats_resume_without_repeating_structure_or_paid_work():
     p = processor()
@@ -54,7 +176,6 @@ def test_completed_beats_resume_without_repeating_structure_or_paid_work():
     assert [beat['title'] for beat in result['scenes'][0]['beats']] == ['进入', '离开']
     assert snapshots[-1]['completed_steps'] == snapshots[-1]['total_steps'] == 3
 
-
 def test_detail_request_contains_only_current_source_and_relevant_events():
     p = processor()
     generate(p, model='deepseek-v4.1-flash')
@@ -65,19 +186,6 @@ def test_detail_request_contains_only_current_source_and_relevant_events():
     assert all(call.kwargs['model'] == 'deepseek-v4.1-flash' for call in calls)
     assert p.llm.chat.call_args.kwargs['model'] == 'deepseek-v4.1-flash'
 
-
-@pytest.mark.parametrize('ids', [[0, 0], [1, 0], [0], [0, 1, 2]])
-def test_structure_cannot_duplicate_skip_reorder_or_invent_source_units(ids):
-    p = processor()
-    invalid = structure()
-    invalid['scenes'][0]['beats'] = [dict(invalid['scenes'][0]['beats'][0], source_unit_ids=ids)]
-    p.llm.chat.return_value = json.dumps(invalid)
-    with pytest.raises(RuntimeError):
-        generate(p)
-    assert p.llm.chat.call_count == 2
-    p._plan_director_shooting_beat.assert_not_called()
-
-
 def test_changed_input_does_not_reuse_checkpoint():
     p = processor()
     snapshots = []
@@ -86,13 +194,11 @@ def test_changed_input_does_not_reuse_checkpoint():
     generate(p, checkpoint=snapshots[-1], model='different-model')
     assert p.llm.chat.call_count == 1
 
-
 def test_checkpoint_rejection_stops_before_next_model_call():
     p = processor()
     with pytest.raises(RuntimeError, match='过期'):
         generate(p, save_checkpoint=lambda value: False)
     p._plan_director_shooting_beat.assert_not_called()
-
 
 @pytest.mark.parametrize('labels,expected', [
     ({'scene_ref': '场景二·门外', 'location': '门外'}, '场景二·门外'),
@@ -114,7 +220,6 @@ def test_missing_second_scene_heading_uses_existing_label_without_model_retry(la
     assert snapshots[0]['structure']['scenes'][1]['heading'] == expected
     assert snapshots[-1]['completed_steps'] == snapshots[-1]['total_steps'] == 3
 
-
 def test_missing_label_does_not_admit_missing_beats_or_source_coverage():
     p = processor()
     value = structure()
@@ -125,39 +230,17 @@ def test_missing_label_does_not_admit_missing_beats_or_source_coverage():
     assert p.llm.chat.call_count == 2
     p._plan_director_shooting_beat.assert_not_called()
 
-
 def test_structure_correction_reports_all_missing_fields_in_one_attempt():
     p = processor()
     value = structure()
     for beat in value['scenes'][0]['beats']:
-        del beat['source_unit_ids']
+        del beat['source_end']
     p.llm.chat.side_effect = [json.dumps(value), json.dumps(structure())]
     generate(p)
     repair_prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
-    assert 'scenes.0.beats.0.source_unit_ids' in repair_prompt
-    assert 'scenes.0.beats.1.source_unit_ids' in repair_prompt
+    assert 'scenes.0.beats.0.source_end' in repair_prompt
+    assert 'scenes.0.beats.1.source_end' in repair_prompt
     assert '缺少必填字段' in repair_prompt
-
-
-def test_schema_typo_retry_receives_rejected_json_and_coverage_errors_together():
-    p = processor()
-    invalid = structure()
-    beat = invalid['scenes'][0]['beats'][1]
-    beat['dramatic_penalty'] = beat.pop('dramatic_purpose')
-    beat['source_unit_ids'] = [0]
-    rejected = json.dumps(invalid)
-    p.llm.chat.side_effect = [rejected, json.dumps(structure())]
-    snapshots = []
-    generate(p, save_checkpoint=lambda value: snapshots.append(copy.deepcopy(value)) or True)
-    messages = p.llm.chat.call_args.kwargs['messages']
-    assert messages[1] == {'role': 'assistant', 'content': rejected}
-    assert '修正上条JSON' in messages[2]['content']
-    prompt = messages[0]['content']
-    for problem in ('dramatic_purpose', 'dramatic_penalty', '缺失编号=[1]', '重复编号=[0]'):
-        assert problem in prompt
-    assert p.llm.chat.call_count == 2
-    assert all('dramatic_penalty' not in json.dumps(s) for s in snapshots)
-
 
 def test_structure_request_bounds_scene_and_beat_counts_by_input_units():
     p = processor()
@@ -168,7 +251,6 @@ def test_structure_request_bounds_scene_and_beat_counts_by_input_units():
     assert schema['$defs']['StructureScene']['properties']['beats']['maxItems'] == 2
     assert '全部场景合计最多2个节拍' in prompt
     assert 'dramatic_purpose是戏剧目的' in prompt
-
 
 def test_typo_is_not_locally_renamed_or_saved_when_provider_does_not_fix_it():
     p = processor()
@@ -182,7 +264,6 @@ def test_typo_is_not_locally_renamed_or_saved_when_provider_does_not_fix_it():
     save.assert_not_called()
     p._plan_director_shooting_beat.assert_not_called()
 
-
 def test_oversized_rejected_output_is_not_fed_back_into_retry():
     p = processor()
     invalid = structure()
@@ -192,100 +273,6 @@ def test_oversized_rejected_output_is_not_fed_back_into_retry():
     messages = p.llm.chat.call_args.kwargs['messages']
     assert len(messages) == 2
     assert 'X' * 17000 not in json.dumps(messages)
-
-
-def test_sixteenth_beat_typo_and_repeated_four_unit_assignments_are_repaired_together():
-    p = processor()
-    invalid = structure()
-    template = invalid['scenes'][0]['beats'][0]
-    invalid['scenes'][0]['beats'] = [dict(template, source_unit_ids=[i % 4]) for i in range(16)]
-    last = invalid['scenes'][0]['beats'][15]
-    last['dramatic_penalty'] = last.pop('dramatic_purpose')
-    corrected = structure()
-    corrected['scenes'][0]['beats'] = [dict(template, source_unit_ids=[i]) for i in range(4)]
-    p.llm.chat.side_effect = [json.dumps(invalid), json.dumps(corrected)]
-    result = p.plan_director_shooting_chunk('文' * 807, {},
-        {'story_map': {'phases': [{'events': [{'event_id': 'event-cinema'}]}]}}, {})
-    assert len(result['scenes'][0]['beats']) == 4
-    messages = p.llm.chat.call_args.kwargs['messages']
-    assert 'scenes.0.beats.15.dramatic_purpose' in messages[0]['content']
-    assert '重复编号=[0,1,2,3]' in messages[0]['content']
-    assert '全部场景合计最多4个节拍' in messages[0]['content']
-    assert json.loads(messages[1]['content']) == invalid
-    assert p._plan_director_shooting_beat.call_count == 4
-
-
-def test_badly_typed_source_ids_do_not_crash_schema_error_feedback():
-    p = processor()
-    invalid = structure()
-    invalid['scenes'][0]['beats'][0]['source_unit_ids'] = 'bad'
-    p.llm.chat.side_effect = [json.dumps(invalid), json.dumps(structure())]
-    generate(p)
-    assert 'scenes.0.beats.0.source_unit_ids' in p.llm.chat.call_args.kwargs['messages'][0]['content']
-
-
-@pytest.mark.parametrize('assignments,reason', [
-    ([[0]], '缺失编号=[1]'),
-    ([[0], [0, 1]], '重复编号=[0]'),
-    ([[1], [0]], '顺序错误'),
-    ([[1], [2]], '越界编号=[2]'),
-])
-def test_source_coverage_retry_receives_exact_assignments_and_diff(assignments, reason):
-    p = processor()
-    invalid = structure()
-    template = invalid['scenes'][0]['beats'][0]
-    invalid['scenes'][0]['beats'] = [dict(template, source_unit_ids=ids) for ids in assignments]
-    p.llm.chat.side_effect = [json.dumps(invalid), json.dumps(structure())]
-    result = generate(p)
-    assert len(result['scenes'][0]['beats']) == 2
-    assert p.llm.chat.call_count == 2
-    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
-    assert reason in prompt
-    assert '期望展平编号=[0,1]' in prompt
-    previous = json.loads(prompt.split('<rejected_source_assignments>')[1].split('</rejected_source_assignments>')[0])
-    assert [beat['source_unit_ids'] for beat in previous] == assignments
-
-
-def test_structure_schema_uses_only_actual_zero_based_source_ids():
-    p = processor()
-    generate(p)
-    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
-    schema = json.loads(prompt.split('<structure_schema>')[1].split('</structure_schema>')[0])
-    assert schema['$defs']['StructureBeat']['properties']['source_unit_ids']['items']['enum'] == [0, 1]
-    assert '编号从0开始' in prompt and '期望展平编号=[0,1]' in prompt
-
-
-def test_coverage_failure_remains_bounded_and_never_saves_or_expands():
-    p = processor()
-    invalid = structure()
-    invalid['scenes'][0]['beats'][1]['source_unit_ids'] = [0]
-    p.llm.chat.return_value = json.dumps(invalid)
-    save = Mock()
-    with pytest.raises(RuntimeError, match='缺失编号='):
-        generate(p, save_checkpoint=save)
-    assert p.llm.chat.call_count == 2
-    save.assert_not_called()
-    p._plan_director_shooting_beat.assert_not_called()
-
-
-def test_four_source_units_repair_duplicates_without_local_reassignment():
-    p = processor()
-    invalid = structure()
-    template = invalid['scenes'][0]['beats'][0]
-    invalid['scenes'][0]['beats'] = [dict(template, source_unit_ids=[i]) for i in (0, 1, 1, 3)]
-    corrected = copy.deepcopy(invalid)
-    corrected['scenes'][0]['beats'][2]['source_unit_ids'] = [2]
-    p.llm.chat.side_effect = [json.dumps(invalid), json.dumps(corrected)]
-    snapshots = []
-    p.plan_director_shooting_chunk('文' * 807, {},
-        {'story_map': {'phases': [{'events': [{'event_id': 'event-cinema'}]}]}}, {},
-        save_checkpoint=lambda value: snapshots.append(copy.deepcopy(value)) or True)
-    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
-    assert '期望展平编号=[0,1,2,3]' in prompt
-    assert '缺失编号=[2]' in prompt and '重复编号=[1]' in prompt
-    assert [beat['source_unit_ids'] for beat in snapshots[0]['structure']['scenes'][0]['beats']] == [[0], [1], [2], [3]]
-    assert p._plan_director_shooting_beat.call_count == 4
-
 
 def test_each_detail_call_repairs_only_the_current_beat_and_enforces_shot_budget():
     p = ScriptProcessor.__new__(ScriptProcessor)
@@ -302,7 +289,6 @@ def test_each_detail_call_repairs_only_the_current_beat_and_enforces_shot_budget
     assert '1–3 个 shots' in repair_prompt
     assert '离' * 80 not in repair_prompt
 
-
 def test_pipeline_persists_structure_and_detail_checkpoints_through_real_job_store(tmp_path):
     from concurrent.futures import ThreadPoolExecutor
     from src.apps.comic_gen.extraction_jobs import ExtractionJobs
@@ -313,6 +299,7 @@ def test_pipeline_persists_structure_and_detail_checkpoints_through_real_job_sto
     p.llm = Mock(is_configured=True)
     skeleton = structure()
     skeleton['scenes'][0]['beats'] = skeleton['scenes'][0]['beats'][:1]
+    skeleton['scenes'][0]['beats'][0]['source_end'] = len(split_shooting_source(script.original_text))
     provider_error = RuntimeError('private provider body')
     provider_error.llm_diagnostic = {'stream': True, 'text_chars': 100, 'elapsed_seconds': 154}
     detail = {'shots': valid_chunk()['scenes'][0]['beats'][0]['shots'], 'unresolved_questions': []}

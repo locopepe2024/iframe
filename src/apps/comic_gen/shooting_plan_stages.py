@@ -3,7 +3,7 @@ import copy
 import hashlib
 import json
 import logging
-from collections import Counter
+import re
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -11,10 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from src.apps.director_skills import guidance as director_skill_guidance
 from ...utils.llm_json import parse_model_json_object
 
-VERSION = 'scene-beat-shots-v3'
+VERSION = 'scene-beat-boundaries-v4'
 logger = logging.getLogger(__name__)
 SOURCE_UNIT_CHARS = 240
-MAX_BEAT_UNITS = 2
+MAX_BEAT_CHARS = 480
 MAX_BEAT_SHOTS = 3
 MAX_REPAIR_CHARS = 16000
 Text = Annotated[str, Field(max_length=240)]
@@ -26,7 +26,7 @@ class StructureBeat(BaseModel):
     title: Text
     dramatic_purpose: Detail
     emotional_change: Text
-    source_unit_ids: list[int] = Field(min_length=1, max_length=MAX_BEAT_UNITS)
+    source_end: int = Field(ge=1)
     story_event_ids: list[Text] = Field(default_factory=list, max_length=20)
     keep_with_next: bool = False
 
@@ -58,8 +58,28 @@ def _json(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
 
 
+def split_shooting_source(text):
+    """Keep natural source boundaries instead of coalescing several beat lines."""
+    positions = {0, len(text)}
+    for match in re.finditer(r'\r\n|\r|\n|[。！？!?；;]["”’\'』」）】》]*', text):
+        positions.add(match.end())
+    units = []
+    boundaries = sorted(positions)
+    for start, end in zip(boundaries, boundaries[1:]):
+        # Attach blank lines to preceding evidence when the size budget fits.
+        if not text[start:end].strip():
+            if units and len(units[-1]['text']) + end - start <= SOURCE_UNIT_CHARS:
+                units[-1]['text'] += text[start:end]
+                units[-1]['char_end'] = end
+                continue
+        for offset in range(start, end, SOURCE_UNIT_CHARS):
+            stop = min(end, offset + SOURCE_UNIT_CHARS)
+            units.append({'text': text[offset:stop], 'char_start': offset, 'char_end': stop})
+    return units
+
+
 def _source_assignments(value):
-    """Inspect coverage independently of unrelated model-field validation."""
+    """Inspect boundaries independently of unrelated field validation."""
     if not isinstance(value, dict) or not isinstance(value.get('scenes'), list):
         return None
     assignments = []
@@ -67,35 +87,29 @@ def _source_assignments(value):
         if not isinstance(scene, dict) or not isinstance(scene.get('beats'), list):
             return None
         for bi, beat in enumerate(scene['beats']):
-            ids = beat.get('source_unit_ids') if isinstance(beat, dict) else None
-            if not isinstance(ids, list) or any(type(i) is not int for i in ids):
+            end = beat.get('source_end') if isinstance(beat, dict) else None
+            if type(end) is not int:
                 return None
-            assignments.append({'scene': si + 1, 'beat': bi + 1, 'source_unit_ids': ids})
+            assignments.append({'scene': si + 1, 'beat': bi + 1, 'source_end': end})
     return assignments
 
 
-class SourceCoverageError(ValueError):
-    """Numeric-only evidence for a bounded structure correction."""
-
-    def __init__(self, assignments, unit_count):
-        covered = [i for beat in assignments for i in beat['source_unit_ids']]
-        counts = Counter(covered)
-        missing = [i for i in range(unit_count) if i not in counts]
-        duplicate = sorted(i for i, n in counts.items() if n > 1)
-        outside = sorted(i for i in counts if not 0 <= i < unit_count)
-        differences = []
-        for name, ids in (('缺失编号', missing), ('重复编号', duplicate), ('越界编号', outside)):
-            if ids:
-                differences.append(name + '=' + _json(ids[:12]))
-        if covered != sorted(covered):
-            differences.append('顺序错误')
-        super().__init__('source_unit_ids 覆盖无效：' + '；'.join(differences))
-        self.retry_context = ('\n期望展平编号=' + _json(list(range(unit_count)))
-                              + '\n上次各节拍分配（最多80项，总数=' + str(len(assignments)) + '）：'
-                              + '\n<rejected_source_assignments>' + _json([
-                                  {**beat, 'source_unit_ids': beat['source_unit_ids'][:MAX_BEAT_UNITS]}
-                                  for beat in assignments[:80]])
-                              + '</rejected_source_assignments>')
+def _boundary_error(assignments, units):
+    if assignments is None:
+        return ''
+    start = 0
+    problems = []
+    for beat in assignments:
+        end = beat['source_end']
+        prefix = f"场景{beat['scene']}节拍{beat['beat']}"
+        if not start < end <= len(units):
+            problems.append(prefix + f': source_end={end}须大于前一边界{start}且不超过{len(units)}')
+        elif sum(len(unit['text']) for unit in units[start:end]) > MAX_BEAT_CHARS:
+            problems.append(prefix + f': 来源超过{MAX_BEAT_CHARS}字符，须增加节拍边界')
+        start = end
+    if start != len(units):
+        problems.append(f'末尾未完整覆盖：最后source_end={start}，必须为{len(units)}')
+    return '；'.join(problems[:6])
 
 
 def _structure(value, units, profile):
@@ -105,15 +119,37 @@ def _structure(value, units, profile):
     for scene in structure.scenes:
         if not scene.heading.strip():
             scene.heading = scene.scene_ref.strip() or scene.location.strip()
-    covered = [i for scene in structure.scenes for beat in scene.beats for i in beat.source_unit_ids]
-    if covered != list(range(len(units))):
-        raise SourceCoverageError(_source_assignments(structure.model_dump()), len(units))
+    boundary_error = _boundary_error(_source_assignments(structure.model_dump()), units)
+    if boundary_error:
+        raise ValueError('source_end 覆盖无效：' + boundary_error)
     event_ids = {event['event_id'] for phase in profile.get('story_map', {}).get('phases', [])
                  for event in phase.get('events', []) if event.get('event_id')}
     if any(event not in event_ids for scene in structure.scenes for beat in scene.beats
            for event in beat.story_event_ids):
         raise ValueError('story_event_ids 只能引用已确认故事结构中的事件')
-    return structure.model_dump()
+    result = structure.model_dump()
+    start = 0
+    for scene in result['scenes']:
+        for beat in scene['beats']:
+            end = beat.pop('source_end')
+            beat['source_unit_ids'] = list(range(start, end))
+            start = end
+    return result
+
+
+def _boundary_payload(structure):
+    """Revalidate saved internal ranges against the same model contract."""
+    result = copy.deepcopy(structure)
+    start = 0
+    for scene in result['scenes']:
+        for beat in scene['beats']:
+            ids = beat.pop('source_unit_ids')
+            if (not isinstance(ids, list) or not ids or any(type(i) is not int for i in ids)
+                    or ids != list(range(start, ids[-1] + 1))):
+                raise ValueError('已保存来源范围不连续，请重新生成。')
+            start = ids[-1] + 1
+            beat['source_end'] = start
+    return result
 
 
 def _scoped_profile(profile, scene, beat):
@@ -149,14 +185,14 @@ def _handoff(scene, beat, detail):
 def plan_in_stages(processor, text, entities, profile, style, previous_scene=None, *,
                    source_ref='', model=None, checkpoint=None, save_checkpoint=None):
     from .llm import (DirectorShootingChunkError, DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS,
-                      DIRECTOR_PROFILE_MAX_RETRIES, split_director_source)
+                      DIRECTOR_PROFILE_MAX_RETRIES)
     if not processor.is_configured:
         raise ValueError('LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。')
-    units = split_director_source(text, direct_max_chars=SOURCE_UNIT_CHARS,
-                                  target_chars=SOURCE_UNIT_CHARS, max_chars=SOURCE_UNIT_CHARS)
-    expected_ids = list(range(len(units)))
+    units = split_shooting_source(text)
+    if not text.strip():
+        raise ValueError('拍摄计划需要非空剧本。')
     structure_schema = Structure.model_json_schema()
-    structure_schema['$defs']['StructureBeat']['properties']['source_unit_ids']['items']['enum'] = expected_ids
+    structure_schema['$defs']['StructureBeat']['properties']['source_end']['maximum'] = len(units)
     structure_schema['properties']['scenes']['maxItems'] = min(40, len(units))
     structure_schema['$defs']['StructureScene']['properties']['beats']['maxItems'] = min(40, len(units))
     identity = hashlib.sha256(_json([VERSION, text, entities, profile, style, previous_scene,
@@ -179,11 +215,11 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
             for attempt in range(2):
                 prompt = f'''你是导演。当前只规划场景和戏剧节拍，不生成镜头、摄影、光影字段。
 输入单元按原文切分，不等于场景或节拍边界。先识别场景，再按原文顺序组织节拍；
-每个节拍引用 1–{MAX_BEAT_UNITS} 个连续 source_unit_ids，后续将为该节拍生成 1–{MAX_BEAT_SHOTS} 个镜头。
+每个节拍只填写source_end，表示本节拍覆盖到的结束边界（不含该边界后的单元），后续生成1–{MAX_BEAT_SHOTS}个镜头。
 必须覆盖所有输入单元，不能重复、跳过、重排或扩写剧情；若一场较长，拆成多个节拍，不要新增场景。
-编号从0开始，只能使用source_units中的id；期望展平编号={_json(expected_ids)}。
-将所有scenes内的beats依次展开，再连接各source_unit_ids，必须恰好等于这个编号序列。
-单元是来源分配块，不是动作编号或镜头编号；同一块内有多个动作仍只分配一次，由后续镜头展开。
+首个节拍从边界0开始，后续节拍从上一个source_end开始；跨场景也不重置。
+所有source_end必须严格递增，最后一个必须为{len(units)}；不要输出source_unit_ids或重复列举单元编号。
+source_end是结束位置，不是长度；本节拍来源=上个边界至本边界之间的全部单元。每节拍来源最多{MAX_BEAT_CHARS}字符。
 全部场景合计最多{len(units)}个节拍，不能按每个动作/对白另建节拍并重复引用单元。
 节拍字段dramatic_purpose是戏剧目的，必须使用此精确键名，不要改写或另造字段名。
 边界落在同一连续动作时 keep_with_next=true。只有原文明确承接上一段时首场可设 continues_previous_scene=true。
@@ -191,7 +227,7 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
 场景标题 heading 是显示标签：有依据时填写；无法确定可省略，不要为补标题发明场景。
 只返回符合下方 JSON Schema 的完整 JSON，不要解释，不要返回 shots。
 <structure_schema>{_json(structure_schema)}</structure_schema>
-<source_units>{_json([{'id': i, 'text': unit['text']} for i, unit in enumerate(units)])}</source_units>
+<source_units>{_json([{'start': i, 'end': i+1, 'text': unit['text']} for i, unit in enumerate(units)])}</source_units>
 <confirmed_director_profile>{_json(profile)}</confirmed_director_profile>
 <entities>{_json({k: v for k, v in entities.items() if k != 'selected_creative_methods'})}</entities>
 <previous_scene_handoff>{_json(previous_scene or {})}</previous_scene_handoff>
@@ -214,7 +250,7 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
                     parsed = parse_model_json_object(content or '')
                     value = _structure(parsed, units, profile)
                 except (ValueError, ValidationError) as exc:
-                    coverage_error = exc if isinstance(exc, SourceCoverageError) else None
+                    boundary_error = ''
                     if isinstance(exc, ValidationError):
                         reasons = []
                         for issue in exc.errors()[:6]:
@@ -226,21 +262,19 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
                             reasons.append(detail)
                         reason = '；'.join(reasons)
                         assignments = _source_assignments(parsed)
-                        if assignments is not None and [i for beat in assignments for i in beat['source_unit_ids']] != expected_ids:
-                            coverage_error = SourceCoverageError(assignments, len(units))
-                            reason += '；' + str(coverage_error)
+                        boundary_error = _boundary_error(assignments, units)
+                        if boundary_error:
+                            reason += '；source_end 覆盖无效：' + boundary_error
                     elif isinstance(exc, json.JSONDecodeError):
                         reason = '场景与节拍规划不是完整 JSON'
                     else:
-                        reason = '场景与节拍规划无效' if not str(exc).startswith(('source_unit_ids', 'story_event_ids')) else str(exc)
+                        reason = '场景与节拍规划无效' if not str(exc).startswith(('source_end', 'story_event_ids')) else str(exc)
                     logger.warning('Shooting plan structure rejected: run=%s attempt=%s response_chars=%s error_type=%s issues=%s',
                                    identity[:12], attempt + 1, len(content or ''), type(exc).__name__,
                                    reason[:600])
                     if attempt:
                         raise DirectorShootingChunkError('structure_contract', reason) from exc
                     retry_note = '仅修正当前场景与节拍规划：' + reason
-                    if coverage_error is not None:
-                        retry_note += coverage_error.retry_context
                     # Preserve actual faulty values for correction, without
                     # sending a second unbounded screenplay/response payload.
                     rejected_content = content if isinstance(parsed, dict) and len(content or '') <= MAX_REPAIR_CHARS else ''
@@ -248,7 +282,7 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
                     state = {'version': VERSION, 'input_hash': identity, 'structure': value, 'details': {}}
                     persist()
                     break
-        structure = _structure(state['structure'], units, profile)
+        structure = _structure(_boundary_payload(state['structure']), units, profile)
         result = copy.deepcopy(structure)
         handoff = previous_scene
         for si, scene in enumerate(result['scenes']):

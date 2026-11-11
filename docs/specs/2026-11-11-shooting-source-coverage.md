@@ -1,5 +1,15 @@
 # Shooting structure source coverage
 
+## Current protocol: source boundaries (supersedes list assignment below)
+
+Live job 84b4f906f80b4e33b511626d298f8236 returned duplicate IDs 1/2/3 and out-of-order coverage on both attempts. Its source contains 807 characters across 34 nonempty lines, while the previous splitter coalesced those into four 240-character blocks. The exact failed assignments were not retained. Four exclusive ownership blocks cannot express independent beat boundaries within those lines; further list-enumeration instructions do not address that limitation.
+
+Split the source losslessly at existing line/sentence boundaries, hard-splitting only spans over 240 characters. Do not infer scene identity from these boundaries. The model chooses each beat's exclusive end boundary (`source_end`), with implicit start zero for the first beat and the previous end thereafter, continuously across scene boundaries. End boundaries must be strictly increasing, within the input, end at the final boundary and give each beat at most 480 characters. The server deterministically derives internal source_unit_ids from these explicit ranges; it never guesses or repairs an invalid boundary. This removes arbitrary ID-list duplication while permitting multiple beats inside former coarse blocks. Keep existing strict data/schema/story-event checks, bounded format repair, and checkpoint admission. New source/boundary protocol invalidates previous checkpoints.
+
+Tests cover exact source reconstruction (CRLF, whitespace, quotes, blank lines, long unpunctuated text), multi-scene boundaries, 16 beats over 34 natural lines, increasing/end/size rejection, format+boundary feedback, resumed checkpoints and exact source passed to shot generation. Old list payloads are rejected instead of silently translated. Provider tests are mocked; successful completion by the live model requires user testing.
+
+## Earlier iterations and evidence
+
 Observed: the live 807-character source was split into four units. Both structure responses failed the existing exact coverage contract. Rejected assignments were not retained, so the specific missing/duplicated/reordered/out-of-range IDs cannot be recovered for that request. Existing retries only repeated a generic error.
 
 Keep the admission boundary: flattening all scenes/beats must equal the zero-based input IDs in order, once each. Do not guess, renumber, sort, drop or add assignments locally. Structures with invalid coverage must never be checkpointed or trigger shot generation.
