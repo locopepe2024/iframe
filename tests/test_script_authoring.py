@@ -319,7 +319,7 @@ def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_k
         model = processor.llm.chat([{'role': 'user', 'content': 'test'}], model=kwargs.get('model'))
         assert model == studio_script_model().split('/', 1)[1]
         return {'model': model, 'source_cache': processor._director_source_cache_key('source')}
-    engine.preview_director_profile = lambda *args, **kwargs: generate()
+    engine.preview_director_profile_with_audit = lambda *args, **kwargs: {"profile": generate(), "source_audit": {}}
     engine.preview_storyboard_analysis = lambda *args, **kwargs: generate(**kwargs)
     monkeypatch.setattr(api, 'pipeline', engine)
     pending = []
