@@ -12024,6 +12024,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         default_generation_mode: str = "r2v",
         owner_user_id: Optional[str] = None,
         owner_profile_id: Optional[str] = None,
+        source_script_document_id: Optional[str] = None,
     ) -> Series:
         """Create a new Series."""
         with self._save_lock:
@@ -12031,6 +12032,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 id=str(uuid.uuid4()),
                 owner_user_id=owner_user_id,
                 owner_profile_id=owner_profile_id,
+                source_script_document_id=source_script_document_id,
                 title=title,
                 description=description,
                 workflow_mode=workflow_mode,
@@ -12041,6 +12043,66 @@ class ComicGenPipeline(StudioOwnerMixin):
             )
             self.series_store[series.id] = series
             self._save_series_data_unlocked()
+            return series
+
+    def ensure_authoring_series(
+        self, root_document_id: str, title: str, episode_numbers: Dict[str, int],
+        workflow_mode: str, owner_user_id: str, owner_profile_id: str,
+        requested_series_id: Optional[str] = None,
+    ) -> Series:
+        """Bind already-created authoring episodes without replacing production data.
+
+        Called under the same lock as handoff creation. Root identity, rather
+        than title or entry order, determines the series and episode numbers.
+        """
+        with self._save_lock:
+            matches = [series for series in self.list_series(owner_profile_id)
+                       if series.source_script_document_id == root_document_id]
+            if len(matches) > 1:
+                raise ValueError("总纲关联了多个制作系列，请先整理系列归属")
+            series = matches[0] if matches else None
+            if requested_series_id and (not series or series.id != requested_series_id):
+                raise ValueError("分集必须进入总纲对应的制作系列")
+            episodes = [script for script in self.list_scripts(owner_profile_id)
+                        if script.source_script_document_id in episode_numbers]
+            if len({script.source_script_document_id for script in episodes}) != len(episodes):
+                raise ValueError("同一分集关联了多个制作项目，请先整理分集归属")
+            for script in episodes:
+                if (script.series_id and script.series_id != (series.id if series else None)
+                        and script.series_id in self.series_store):
+                    raise ValueError("分集已归入其他系列，请先确认制作系列归属")
+            if series:
+                for script in self.scripts.values():
+                    if (script.series_id == series.id or script.id in series.episode_ids):
+                        if script.owner_profile_id != owner_profile_id:
+                            raise ValueError("制作系列存在无效的分集归属")
+                        if script not in episodes and script.episode_number in episode_numbers.values():
+                            raise ValueError("制作系列中已有相同集号，请先整理分集归属")
+            else:
+                series = self.create_series(
+                    title, workflow_mode=workflow_mode, owner_user_id=owner_user_id,
+                    owner_profile_id=owner_profile_id,
+                    source_script_document_id=root_document_id,
+                )
+            changed = False
+            for script in episodes:
+                number = episode_numbers[script.source_script_document_id]
+                if (script.series_id != series.id or script.episode_number != number
+                        or script.id not in series.episode_ids):
+                    script.series_id, script.episode_number = series.id, number
+                    if script.id not in series.episode_ids:
+                        series.episode_ids.append(script.id)
+                    changed = True
+            ordered = sorted(series.episode_ids, key=lambda episode_id:
+                             self.scripts[episode_id].episode_number or 0
+                             if episode_id in self.scripts else 0)
+            if ordered != series.episode_ids:
+                series.episode_ids = ordered
+                changed = True
+            if changed:
+                series.updated_at = time.time()
+                self._save_data()
+                self._save_series_data_unlocked()
             return series
 
     def update_series(self, series_id: str, updates: Dict[str, Any]) -> Series:

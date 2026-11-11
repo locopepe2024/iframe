@@ -3367,6 +3367,9 @@ class Series(BaseModel):
     id: str = Field(..., description="Unique identifier for the series")
     owner_user_id: Optional[str] = Field(None, description="Authenticated UniArt user owner")
     owner_profile_id: Optional[str] = Field(None, description="Authenticated UniArt profile owner")
+    source_script_document_id: Optional[str] = Field(
+        None, description="Authoring root document that owns this production series"
+    )
     title: str = Field(..., description="Title of the series")
     description: str = Field("", description="Series description/synopsis")
     # Whole-work submission material and Director understanding live at Series
