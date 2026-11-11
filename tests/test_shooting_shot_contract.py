@@ -120,3 +120,90 @@ def test_pipeline_keeps_real_beat_location_and_safe_contract_diagnostics():
         pipeline.preview_director_shooting_plan(script.id)
     assert '场景 3 节拍 1' in failure.value.public_reason
     assert failure.value.shooting_contract_diagnostic == error.shooting_contract_diagnostic
+
+
+def test_beat_root_keys_and_readonly_style_are_explicit_in_final_instruction():
+    p, call = run([{'shots': [raw_shot()]}])
+    call()
+    messages = p.llm.chat.call_args.kwargs['messages']
+    assert '<read_only_style_context>' in messages[0]['content']
+    assert '<visual_style>' not in messages[0]['content']
+    assert '根对象只能包含 shots、continuity_out、unresolved_questions' in messages[-1]['content']
+    assert 'visual_style' in messages[-1]['content'] and '不得返回' in messages[-1]['content']
+
+
+def test_correction_explicitly_removes_root_and_nested_unknown_fields():
+    bad = {'shots': [raw_shot(information_design={'character_knowths': 'PRIVATE_VALUE'})],
+           'visual_style': 'changed style'}
+    p, call = run([bad, {'shots': [raw_shot()]}])
+    call()
+    instructions = p.llm.chat.call_args.kwargs['messages'][-1]['content']
+    assert '删除根对象的额外键 visual_style' in instructions
+    assert '删除 shots.0.information_design 的额外键 character_knowths' in instructions
+    assert 'PRIVATE_VALUE' not in instructions
+
+
+def test_exact_root_style_echo_is_audited_without_mutating_shots_or_input():
+    style = {'selected_style_id': 'film', 'style_config': {'positive_prompt': 'restrained'}}
+    value = {'shots': [raw_shot()], 'visual_style': copy.deepcopy(style)}
+    original = copy.deepcopy(value)
+    p = ScriptProcessor.__new__(ScriptProcessor)
+    p.llm = Mock(is_configured=True)
+    p.llm.chat.return_value = json.dumps(value)
+    beat = raw_scene()
+    beat['beats'][0].pop('shots')
+    result = p._plan_director_shooting_beat('source', {}, {'story_map': story_map().model_dump()}, style,
+                                           beat_plan=beat)
+    assert p.llm.chat.call_count == 1 and value == original
+    assert result['scenes'][0]['beats'][0]['shots'] == original['shots']
+    assert result['generation_admission_audit'] == [
+        {'path': '$.visual_style', 'action': 'exclude_exact_input_echo', 'input': 'read_only_style_context'}]
+
+
+@pytest.mark.parametrize('root_style', ['different', None, {'changed': True}])
+def test_changed_root_style_is_never_silently_discarded(root_style):
+    bad = {'shots': [raw_shot()], 'visual_style': root_style}
+    p, call = run([bad, bad])
+    with pytest.raises(DirectorShootingChunkError, match='visual_style'):
+        call()
+    assert p.llm.chat.call_count == 2
+
+
+@pytest.mark.parametrize('style, echoed', [({'enabled': True}, {'enabled': 1}),
+                                          ({'order': [1, 2]}, {'order': [2, 1]})])
+def test_style_echo_requires_exact_json_types_values_and_list_order(style, echoed):
+    from src.apps.comic_gen.shooting_shot_contract import exclude_exact_style_echo
+    value = {'shots': [raw_shot()], 'visual_style': echoed}
+    result, audit = exclude_exact_style_echo(value, style)
+    assert result == value and audit == []
+
+
+def test_exact_echo_cannot_hide_nested_unknown_fields_or_bypass_response_budget():
+    from src.apps.comic_gen.shooting_shot_contract import exclude_exact_style_echo, output_issues
+    bad = {'shots': [raw_shot(visual_style={})], 'visual_style': {}}
+    normalized, audit = exclude_exact_style_echo(bad, {})
+    assert audit and 'visual_style' in normalized['shots'][0]
+    assert any('shots.0.visual_style' in e for e in output_issues(normalized, {}, beat_only=True))
+    large_style = {'description': 'x' * 7000}
+    oversized = {'shots': [raw_shot()], 'visual_style': large_style}
+    result, audit = exclude_exact_style_echo(oversized, large_style)
+    assert audit == [] and result == oversized
+    assert any('6000' in e for e in output_issues(result, {}, beat_only=True))
+
+
+def test_exact_style_echo_audit_is_durable_and_does_not_reopen_valid_cached_beats():
+    from tests.test_shooting_plan_stages import processor, generate, structure
+    p = processor()
+    del p._plan_director_shooting_beat
+    good = {'shots': [raw_shot()]}
+    p.llm.chat.side_effect = [json.dumps(structure()), json.dumps({**good, 'visual_style': {}}), json.dumps(good)]
+    snapshots = []
+    result = generate(p, save_checkpoint=lambda s: snapshots.append(copy.deepcopy(s)) or True)
+    audit = snapshots[-1]['details']['0:0']['generation_admission_audit']
+    assert audit == [{'path': '$.visual_style', 'action': 'exclude_exact_input_echo', 'input': 'read_only_style_context'}]
+    assert 'generation_admission_audit' not in result
+    p.llm.chat.reset_mock()
+    p.llm.chat.side_effect = AssertionError('Must reuse valid saved details')
+    resumed = generate(p, checkpoint=snapshots[-1])
+    assert resumed == result
+    p.llm.chat.assert_not_called()

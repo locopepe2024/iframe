@@ -1,0 +1,9 @@
+# Separate read-only style context from the shot output envelope
+
+Observed job e194cbac92564c4ab91700ade09dde79 kept8/9steps. First response3387chars rejected shots.2.information_design.character_knowths and root visual_style; second3384chars rejected only root visual_style. Raw values unavailable, so exact echoed content is unproven. Existing schema correctly forbids it, but prompt calls an input context visual_style and repair only labels extras without explicit removal operations.
+
+Give beat-only root keys and a minimal JSON shape in the last user instruction. Rename style input tag to read_only_style_context and explicitly distinguish input contexts from returned fields. Generate safe actionable unknown-field paths (remove) alongside all existing shape/type/reference feedback; repeat these instructions in the final correction user turn. Preserve bounded rejected history and model/timeout/attempt behavior.
+
+A root visual_style equal in JSON type and value to supplied style is redundant read-only input: on a copy remove only that root value and record its path/action/reason in owner-scoped generation admission audit/checkpoint. Missing/null/different values, nested values and other unknown fields stay invalid; shots, dialogue, order and constraints never change. Audit stored without content values. Schema remains closed; this is verified input-echo normalization, not an alias or dropping generated creative content. Validate raw response size before normalizing so metadata cannot bypass6k budget. Do not claim old live return was a literal echo.
+
+Use existing v6 cache identity to retain7valid beats. Add tests for explicit root instructions, actionable root/nested removals, exact echo audit and unchanged inputs, changed-style rejection, nested/style-adjacent unknown fields, mixed errors, output-size limit, durable audit on new generation/resume. No paid requests; deploy idle with existing backup/rollback validation.

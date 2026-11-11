@@ -417,7 +417,9 @@ story_event_ids只能从allowed_story_events逐字复制event_id，不得用标�
                 stage = {'stage': 'shots', 'scene': si + 1, 'beat': bi + 1}
                 key = f'{si}:{bi}'
                 detail = state['details'].get(key)
-                if detail is not None and output_issues(detail, profile, beat_only=True):
+                if detail is not None and output_issues(
+                        {k: v for k, v in detail.items() if k != 'generation_admission_audit'},
+                        profile, beat_only=True):
                     # Reopen only the detail failing the same admission contract
                     # used for new generation; never rewrite its fields locally.
                     del state['details'][key]
@@ -435,6 +437,8 @@ story_event_ids只能从allowed_story_events逐字复制event_id，不得用标�
                               'continuity_out': generated['scenes'][0].get('continuity_out', ''),
                               'unresolved_questions': generated.get('unresolved_questions', [])
                               + generated['scenes'][0].get('unresolved_questions', [])}
+                    if generated.get('generation_admission_audit'):
+                        detail['generation_admission_audit'] = generated['generation_admission_audit']
                 beat.pop('source_unit_ids')
                 beat['shots'] = detail['shots']
                 error = processor._validate_director_shooting_chunk({'scenes': [{
