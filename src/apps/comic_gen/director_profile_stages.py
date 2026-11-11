@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import re
 
 VERSION = "director-profile-stages-v2"
 STAGES = (
@@ -97,7 +98,43 @@ def _require_story_map(value):
         raise DirectorStepFieldsError(STORY_MAP_FIELDS, value, prefix="story_map.")
 
 
-def build_step_prompt(key, source_context, is_digest, entities, style, profile, *, output_fields=None, completed_fields=None, story_map_fields=None):
+def _displaced_story_arrays(value):
+    """Recognize container drift, never interpret prose as a new story phase.
+
+    Some valid JSON responses append field labels and nested arc/thread arrays
+    to phases. Collect the existing objects for preflight validation and for
+    enforcing a lossless, single model correction. This projection is never
+    saved as a Director result by itself.
+    """
+    phases = value.get("phases", [])
+    if not any(not isinstance(item, dict) for item in phases):
+        return None
+    groups = {"phases": [], "relationship_arcs": [], "story_threads": []}
+
+    def collect(items, *, root=False):
+        for item in items:
+            if isinstance(item, dict):
+                kinds = [name for name, identifier in (
+                    ("phases", "phase_id"), ("relationship_arcs", "relationship_id"),
+                    ("story_threads", "thread_id")) if identifier in item]
+                if len(kinds) != 1 or (kinds[0] == "phases") != root:
+                    raise ValueError("故事结构存在无法安全修正的错位条目")
+                groups[kinds[0]].append(item)
+            elif isinstance(item, list):
+                collect(item)
+            elif not isinstance(item, str) or not re.fullmatch(r"[a-z_]{1,40}", item):
+                # Narrative text, numbers and unknown object shapes must not
+                # be discarded or converted into server-invented events.
+                raise ValueError("故事阶段包含非结构性条目，请重新生成")
+
+    collect(phases, root=True)
+    moved = [name for name in ("relationship_arcs", "story_threads") if groups[name]]
+    if not moved or any(name in value for name in moved):
+        raise ValueError("故事结构错位字段不明确，请重新生成")
+    return {"phases": groups["phases"], **{name: groups[name] for name in moved}}
+
+
+def build_step_prompt(key, source_context, is_digest, entities, style, profile, *, output_fields=None, completed_fields=None, story_map_fields=None, displaced_arrays=None):
     """Build a scoped request without full-profile/extraction preset baggage."""
     from src.apps.director_skills import guidance
     from .llm import _director_profile_output_contract, _prompt_json
@@ -154,12 +191,17 @@ def build_step_prompt(key, source_context, is_digest, entities, style, profile, 
                   "本次JSON总长度控制在18000字符内；不展开镜头和对白。",
                   _director_profile_output_contract(fields=fields, story_map_fields=story_map_fields)))
     if completed_fields is not None:
-        parts.append("这是本步骤缺字段的唯一一次补全。已有字段只读，保留其含义和引用；"
+        parts.append("这是本步骤缺字段或容器错位的唯一一次补全。已有合法对象只读，保留其含义和引用；"
                      "不要把 timeline 复制当作 story_map，不重写已有字段或其他步骤。\n"
                      "<completed_fields_readonly>" + _prompt_json(completed_fields) + "</completed_fields_readonly>")
     if story_map_fields:
         parts.append("story_map 本次只补全：" + "、".join("story_map." + name for name in story_map_fields)
-                     + "。已有 phases、事件和其他字段只读，禁止重复输出或覆盖；新引用必须对应已有阶段和事件ID。")
+                     + "。已有合法阶段、事件和其他字段只读；新引用必须对应已有阶段和事件ID。")
+    if displaced_arrays:
+        parts.append("原结果把关系线/故事线数组和字段名误放入phases。本次只纠正容器位置："
+                     "phases只保留原有阶段对象，顺序不变；将错位的关系线和故事线对象放回对应数组。"
+                     "所有已有对象必须逐项原样保留，不增删阶段、事件或ID；结构字段名不是剧情。\n"
+                     "<displaced_objects_readonly>" + _prompt_json(displaced_arrays) + "</displaced_objects_readonly>")
     parts.append("本次只输出以下顶层字段：" + "、".join(fields) + "。每个字段都必须存在；空数组也不得省略。")
     if profile:
         # Do not resend the source, raw responses, server metadata or empty
@@ -248,11 +290,19 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
             # completed. Never synthesize a story map, retry malformed JSON,
             # erase unknown keys, or rewrite fields already returned.
             nested_missing = ()
+            displaced_arrays = None
             if key == "story" and isinstance(patch, dict) and "story_map" in patch:
                 nested_missing = _missing_story_map_fields(patch["story_map"])
+                displaced_arrays = _displaced_story_arrays(patch["story_map"])
+                if displaced_arrays:
+                    nested_missing = tuple(name for name in STORY_MAP_FIELDS
+                                           if name in nested_missing or name in displaced_arrays)
             if (key == "story" and not reused and isinstance(patch, dict) and patch
                     and set(patch).issubset(fields) and (set(patch) < set(fields) or nested_missing)):
-                validate_profile(copy.deepcopy({**profile, **patch}))
+                preflight = copy.deepcopy({**profile, **patch})
+                if displaced_arrays:
+                    preflight["story_map"].update(copy.deepcopy(displaced_arrays))
+                validate_profile(preflight)
                 missing = tuple(name for name in fields if name not in patch or name == "story_map" and nested_missing)
                 paths = [name for name in missing if name != "story_map" or not nested_missing]
                 paths.extend("story_map." + name for name in nested_missing)
@@ -260,7 +310,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                 audit["field_completion"] = completion
                 prompt = build_step_prompt(key, source_context, is_digest, entities, style, profile,
                                            output_fields=missing, completed_fields=patch,
-                                           story_map_fields=nested_missing or None)
+                                           story_map_fields=nested_missing or None,
+                                           displaced_arrays=displaced_arrays)
                 category = "provider"
                 completion_raw = (processor.llm.chat(
                     messages=[{"role": "system", "content": prompt},
@@ -281,6 +332,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                     nested_patch = extra_patch["story_map"]
                     if not isinstance(nested_patch, dict) or set(nested_patch) != set(nested_missing):
                         raise DirectorStepFieldsError(nested_missing, nested_patch, completion=True, prefix="story_map.")
+                    if displaced_arrays and any(nested_patch[name] != objects for name, objects in displaced_arrays.items()):
+                        raise ValueError("故事结构容器修正改变了已有对象，请重新生成")
                     extra_patch["story_map"] = {**patch["story_map"], **nested_patch}
                 patch = {**patch, **extra_patch}
             if not isinstance(patch, dict) or set(patch) != set(fields):

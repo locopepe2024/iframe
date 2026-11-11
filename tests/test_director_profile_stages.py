@@ -283,6 +283,75 @@ def test_top_level_and_nested_missing_fields_share_one_completion_request():
     assert cache[2]["frames"]["field_completion"]["paths"] == ["key_events", "story_map.story_threads"]
 
 
+def displaced_story_response():
+    story = copy.deepcopy(responses()[1])
+    original_map = copy.deepcopy(story["story_map"])
+    arcs = story["story_map"].pop("relationship_arcs")
+    threads = story["story_map"].pop("story_threads")
+    story["story_map"]["phases"].extend([
+        "relationship_arcsale", "relationships", [*arcs, "story_threads", threads]])
+    return story, {"story_map": {name: original_map[name] for name in
+                                ("phases", "relationship_arcs", "story_threads")}}
+
+
+def test_displaced_story_arrays_are_corrected_once_without_rewriting_objects():
+    pipeline, script, processor = setup_pipeline()
+    original = script.model_dump()
+    partial, correction = displaced_story_response()
+    processor.llm.chat.side_effect = [json.dumps(step) for step in
+                                    (responses()[0], partial, correction, responses()[2])]
+    cache = {}
+    result = generate(pipeline, save_step=checkpoint_store(cache))
+    assert len(cache) == 4 and processor.llm.chat.call_count == 4
+    assert script.model_dump() == original
+    assert len(result["profile"]["story_map"]["phases"]) == 1
+    assert json.loads(cache[2]["frames"]["raw_response"]) == partial
+    prompt = processor.llm.chat.call_args_list[2].kwargs["messages"][0]["content"]
+    assert "<displaced_objects_readonly>" in prompt
+    assert "不增删阶段、事件或ID" in prompt
+    schema = json.loads(prompt.split("<director_output_contract>")[1].split("</director_output_contract>")[0])
+    assert schema["$defs"]["DirectorStoryMap"]["required"] == ["phases", "relationship_arcs", "story_threads"]
+    processor.llm.chat.reset_mock(side_effect=True)
+    processor.llm.chat.side_effect = AssertionError("must reuse corrected step")
+    assert generate(pipeline, cached=cache)["profile"] == result["profile"]
+    processor.llm.chat.assert_not_called()
+
+
+@pytest.mark.parametrize("mutation", ["phase", "event", "thread", "drop", "unknown_reference"])
+def test_displaced_array_correction_cannot_change_or_drop_existing_objects(mutation):
+    pipeline, _, processor = setup_pipeline()
+    partial, correction = displaced_story_response()
+    sm = correction["story_map"]
+    if mutation == "phase":
+        sm["phases"][0]["label"] = "changed"
+    elif mutation == "event":
+        sm["phases"][0]["events"][0]["event_id"] = "changed"
+    elif mutation == "thread":
+        sm["story_threads"][0]["label"] = "changed"
+    elif mutation == "drop":
+        sm["phases"] = []
+    else:
+        partial["story_map"]["phases"][-1][-1][0]["milestones"][0]["event_id"] = "unknown"
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (responses()[0], partial, correction)]
+    cache = {}
+    with pytest.raises(ValueError):
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert list(cache) == [0, 1]
+    assert processor.llm.chat.call_count == (2 if mutation == "unknown_reference" else 3)
+
+
+@pytest.mark.parametrize("bad_item", ["真实剧情不得丢弃", "A narrative sentence", 7, None, {"unknown": "shape"}])
+def test_nonstructural_phase_items_are_not_dropped_or_sent_for_correction(bad_item):
+    pipeline, _, processor = setup_pipeline()
+    partial, _ = displaced_story_response()
+    partial["story_map"]["phases"].append(bad_item)
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (responses()[0], partial)]
+    cache = {}
+    with pytest.raises(ValueError):
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert list(cache) == [0, 1] and processor.llm.chat.call_count == 2
+
+
 @pytest.mark.parametrize("completion", [{}, {"key_events": []}, {"key_events": [], "story_map": None},
     {**responses()[1], "PRIVATE_EXTRA_FIELD": "not echoed"}])
 def test_invalid_missing_field_completion_stops_after_one_attempt(completion):
