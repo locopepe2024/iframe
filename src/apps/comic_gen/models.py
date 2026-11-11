@@ -2595,10 +2595,15 @@ def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
     return result
 
 
-def _normalize_director_object_list(value: Any) -> Any:
+def _normalize_director_object_list(value: Any, *, allow_single_object: bool = False) -> Any:
     """Keep object-list shape while preserving scalar model output as data."""
     if value is None:
         return []
+    if allow_single_object and isinstance(value, dict):
+        # A sample plan may arrive as one object with named sections. Keep the
+        # whole plan, including its keys/order/nesting, as one array item. Do
+        # not guess whether keys are item names or fields, or split its values.
+        return [value]
     if not isinstance(value, list):
         return value
     normalized = []
@@ -2638,7 +2643,9 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
 
     for field in _DIRECTOR_OBJECT_LIST_FIELDS:
         if field in normalized:
-            normalized[field] = _normalize_director_object_list(normalized[field])
+            normalized[field] = _normalize_director_object_list(
+                normalized[field], allow_single_object=field == "sample_plan"
+            )
 
     for field in _DIRECTOR_SCENE_SUMMARY_FIELDS:
         if field in normalized:
@@ -2843,7 +2850,9 @@ def normalize_director_profile_patch(patch: Dict[str, Any]) -> Dict[str, Any]:
         normalized["setting"] = {}
     for field in _DIRECTOR_OBJECT_LIST_FIELDS:
         if field in normalized:
-            normalized[field] = _normalize_director_object_list(normalized[field])
+            normalized[field] = _normalize_director_object_list(
+                normalized[field], allow_single_object=field == "sample_plan"
+            )
     if "scene_summaries" in normalized:
         normalized["scene_summaries"] = _normalize_director_object_list(
             normalized["scene_summaries"]

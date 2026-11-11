@@ -303,6 +303,53 @@ def test_director_preview_normalizes_structured_text_fields_without_losing_conte
     DirectorProfile(**result)
 
 
+@pytest.mark.parametrize("normalize", [normalize_director_profile_draft, normalize_director_profile_patch])
+@pytest.mark.parametrize("sample", [
+    {"Opening": "开场", "Core_Action": "主要动作", "Transition": "转场", "Climax": "高潮"},
+    {"seconds": "0-8", "scene": "21", "purpose": "离校"},
+    {"scene": {"summary": "离校", "cues": ["雨声", "停顿"]}},
+    {},
+])
+def test_sample_plan_single_object_normalizes_losslessly_at_shared_boundaries(normalize, sample):
+    original = json.dumps(sample, ensure_ascii=False)
+    normalized = normalize({"sample_plan": sample})
+    assert normalized["sample_plan"] == [sample]
+    assert json.dumps(sample, ensure_ascii=False) == original
+    DirectorProfile(**normalized)
+    assert normalize(normalized) == normalized
+
+
+@pytest.mark.parametrize("normalize", [normalize_director_profile_draft, normalize_director_profile_patch])
+def test_sample_plan_normalization_preserves_arrays_and_rejects_scalar_containers(normalize):
+    sample = [{"seconds": "0-8", "purpose": "离校"}, {"purpose": "回望"}]
+    assert normalize({"sample_plan": sample})["sample_plan"] == sample
+    assert normalize({"sample_plan": None})["sample_plan"] == []
+    assert "sample_plan" not in normalize({})
+    for bad in ("not a sample plan object", 42, False):
+        with pytest.raises(ValueError, match="sample_plan"):
+            DirectorProfile(**normalize({"sample_plan": bad}))
+    # This exception is specific to a free-form sample plan, not a blanket
+    # conversion of all structural containers (notably scenes/story maps).
+    with pytest.raises(ValueError, match="timeline"):
+        DirectorProfile(**normalize({"timeline": {"phase": "毕业"}}))
+
+
+def test_legacy_director_preview_normalizes_single_sample_plan_object():
+    pipeline, _ = make_pipeline()
+    payload = profile_payload()
+    payload["sample_plan"] = {"Opening": "开场", "Climax": "高潮"}
+    pipeline.script_processor.analyze_director_profile.return_value = payload
+    assert pipeline.preview_director_profile("film")["sample_plan"] == [payload["sample_plan"]]
+
+
+def test_director_refinement_accepts_single_sample_plan_object_patch():
+    pipeline, _ = make_pipeline()
+    sample = {"Scene_1_Flow": "第一场", "Scene_2_Flow": "第二场"}
+    pipeline.script_processor.refine_director_profile.return_value = {"sample_plan": sample}
+    result = pipeline.refine_director_profile("film", profile_payload(), ["调整样片安排"])
+    assert result["sample_plan"] == [sample]
+
+
 def test_director_preview_moves_unknown_character_refs_to_unresolved_list():
     pipeline, _ = make_pipeline()
     payload = profile_payload()

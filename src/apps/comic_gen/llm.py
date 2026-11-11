@@ -47,6 +47,11 @@ class SceneBasisFormatError(ValueError):
 
 def _director_profile_output_contract(*, partial: bool = False, story_map_only: bool = False, fields=None) -> str:
     """Keep the model's nested field contract derived from runtime validation."""
+    sample_plan_contract = (
+        'sample_plan 必须是对象数组；单个计划也放在数组内，例如 '
+        '[{"Opening":"开场安排","Climax":"高潮安排"}]；没有样片安排时返回 []。'
+        if not story_map_only and (fields is None or "sample_plan" in fields) else ""
+    )
     schema = DirectorProfile.model_json_schema()
     for key in ("revision", "content_hash", "confirmed_at", "creative_skill_run"):
         schema["properties"].pop(key, None)
@@ -103,14 +108,14 @@ def _director_profile_output_contract(*, partial: bool = False, story_map_only: 
             schema["$defs"] = {key: definitions[key] for key in sorted(needed)}
         return ("只返回符合以下Schema的实际数据对象，不返回Schema本身；字段不能省略，不含其他步骤或服务端字段。\n"
                 "<director_output_contract>" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
-                + "</director_output_contract>")
+                + "</director_output_contract>" + sample_plan_contract)
     requirement = ("仅返回发生变化的顶层字段；若修改 story_map，必须返回完整的 story_map 对象，不能为 null；"
                    if partial else "story_map 为必填对象，不能省略或为 null；")
     return (
         "嵌套字段必须遵守以下 JSON Schema（来源版本、people 和事实账本版本由服务端绑定，不要生成）：\n"
         "<director_output_contract>" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
         + "</director_output_contract>\n"
-        '必须输出实际 Director 数据对象，不能输出 Schema 本身。' + requirement +
+        '必须输出实际 Director 数据对象，不能输出 Schema 本身。' + sample_plan_contract + requirement +
         '必须保留 phases、relationship_arcs、story_threads，不能以 timeline/relationships/key_events 代替 story_map。'
         'relationship_arcs 每项必须含非空 relationship_id；story_threads 每项必须含非空 thread_id。'
         'relationship_arcs 必须是对象数组，不能夹杂文字字符串。只有关系文字、没有阶段依据时，'

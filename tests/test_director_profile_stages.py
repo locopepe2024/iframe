@@ -53,6 +53,7 @@ def test_scoped_contracts_have_only_reachable_definitions():
         schema = json.loads(contract.split("<director_output_contract>")[1].split("</director_output_contract>")[0])
         assert set(schema["properties"]) == set(schema["required"]) == set(fields)
         assert schema["additionalProperties"] is False
+        assert ("sample_plan 必须是对象数组" in contract) == ("sample_plan" in fields)
         assert ("$defs" in schema) == ("story_map" in fields)
         if "story_map" in fields:
             assert "people" not in schema["$defs"]["DirectorStoryMap"]["properties"]
@@ -79,6 +80,29 @@ def test_three_bounded_streamed_requests_complete_without_mutating_user_drafts()
         assert set(schema["properties"]) == set(fields)
         assert "生成完整导演设定草稿" not in prompt
     assert result["source_audit"]["admission_status"] == "confirmable"
+
+
+@pytest.mark.parametrize("sample", [
+    {"Opening": "开场", "Core_Action": "主要动作", "Transition": "转场", "Climax": "高潮"},
+    {"Scene_1_Flow": "第一场", "Scene_2_Flow": "第二场", "Scene_3_Flow": "第三场", "Scene_4_Flow": "第四场"},
+])
+def test_named_sample_plan_object_is_preserved_and_checkpointed_without_another_call(sample):
+    pipeline, script, processor = setup_pipeline()
+    original = script.model_dump()
+    steps = responses()
+    steps[0]["sample_plan"] = sample
+    processor.llm.chat.side_effect = [json.dumps(step, ensure_ascii=False) for step in steps]
+    cache = {}
+    result = generate(pipeline, save_step=checkpoint_store(cache))
+    assert result["profile"]["sample_plan"] == [sample]
+    assert cache[1]["frames"]["profile"]["sample_plan"] == [sample]
+    assert json.loads(cache[1]["frames"]["raw_response"])["sample_plan"] == sample
+    assert processor.llm.chat.call_count == 3
+    assert script.model_dump() == original
+    processor.llm.chat.reset_mock(side_effect=True)
+    processor.llm.chat.side_effect = AssertionError("must reuse admitted steps")
+    assert generate(pipeline, cached=cache)["profile"] == result["profile"]
+    processor.llm.chat.assert_not_called()
 
 
 def test_staged_prompts_exclude_other_steps_and_empty_context():
