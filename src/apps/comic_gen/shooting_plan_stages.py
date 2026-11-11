@@ -3,6 +3,7 @@ import copy
 import hashlib
 import json
 import logging
+from collections import Counter
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -10,7 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from src.apps.director_skills import guidance as director_skill_guidance
 from ...utils.llm_json import parse_model_json_object
 
-VERSION = 'scene-beat-shots-v1'
+VERSION = 'scene-beat-shots-v2'
 logger = logging.getLogger(__name__)
 SOURCE_UNIT_CHARS = 240
 MAX_BEAT_UNITS = 2
@@ -56,6 +57,30 @@ def _json(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
 
 
+class SourceCoverageError(ValueError):
+    """Numeric-only evidence for a bounded structure correction."""
+
+    def __init__(self, structure, unit_count):
+        assignments = [{'scene': si + 1, 'beat': bi + 1, 'source_unit_ids': beat.source_unit_ids}
+                       for si, scene in enumerate(structure.scenes) for bi, beat in enumerate(scene.beats)]
+        covered = [i for beat in assignments for i in beat['source_unit_ids']]
+        counts = Counter(covered)
+        missing = [i for i in range(unit_count) if i not in counts]
+        duplicate = sorted(i for i, n in counts.items() if n > 1)
+        outside = sorted(i for i in counts if not 0 <= i < unit_count)
+        differences = []
+        for name, ids in (('缺失编号', missing), ('重复编号', duplicate), ('越界编号', outside)):
+            if ids:
+                differences.append(name + '=' + _json(ids[:12]))
+        if covered != sorted(covered):
+            differences.append('顺序错误')
+        super().__init__('source_unit_ids 覆盖无效：' + '；'.join(differences))
+        self.retry_context = ('\n期望展平编号=' + _json(list(range(unit_count)))
+                              + '\n上次各节拍分配（最多80项，总数=' + str(len(assignments)) + '）：'
+                              + '\n<rejected_source_assignments>' + _json(assignments[:80])
+                              + '</rejected_source_assignments>')
+
+
 def _structure(value, units, profile):
     structure = Structure.model_validate(value)
     # A display label is not screenplay evidence. Reuse only an existing
@@ -65,7 +90,7 @@ def _structure(value, units, profile):
             scene.heading = scene.scene_ref.strip() or scene.location.strip()
     covered = [i for scene in structure.scenes for beat in scene.beats for i in beat.source_unit_ids]
     if covered != list(range(len(units))):
-        raise ValueError('source_unit_ids 必须按原文顺序完整覆盖每个输入单元且不重复')
+        raise SourceCoverageError(structure, len(units))
     event_ids = {event['event_id'] for phase in profile.get('story_map', {}).get('phases', [])
                  for event in phase.get('events', []) if event.get('event_id')}
     if any(event not in event_ids for scene in structure.scenes for beat in scene.beats
@@ -112,6 +137,9 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
         raise ValueError('LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。')
     units = split_director_source(text, direct_max_chars=SOURCE_UNIT_CHARS,
                                   target_chars=SOURCE_UNIT_CHARS, max_chars=SOURCE_UNIT_CHARS)
+    expected_ids = list(range(len(units)))
+    structure_schema = Structure.model_json_schema()
+    structure_schema['$defs']['StructureBeat']['properties']['source_unit_ids']['items']['enum'] = expected_ids
     identity = hashlib.sha256(_json([VERSION, text, entities, profile, style, previous_scene,
                                     source_ref, model]).encode()).hexdigest()
     state = copy.deepcopy(checkpoint) if isinstance(checkpoint, dict) else {}
@@ -133,11 +161,14 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
 输入单元按原文切分，不等于场景或节拍边界。先识别场景，再按原文顺序组织节拍；
 每个节拍引用 1–{MAX_BEAT_UNITS} 个连续 source_unit_ids，后续将为该节拍生成 1–{MAX_BEAT_SHOTS} 个镜头。
 必须覆盖所有输入单元，不能重复、跳过、重排或扩写剧情；若一场较长，拆成多个节拍，不要新增场景。
+编号从0开始，只能使用source_units中的id；期望展平编号={_json(expected_ids)}。
+将所有scenes内的beats依次展开，再连接各source_unit_ids，必须恰好等于这个编号序列。
+单元是来源分配块，不是动作编号或镜头编号；同一块内有多个动作仍只分配一次，由后续镜头展开。
 边界落在同一连续动作时 keep_with_next=true。只有原文明确承接上一段时首场可设 continues_previous_scene=true。
 标题简短，目的、情绪、氛围、进出状态各用一句话，尽量不超过60字，不复述原文；story_event_ids 仅用已确认事件，无关联用 []。地点、时段连续性不按同名推断。
 场景标题 heading 是显示标签：有依据时填写；无法确定可省略，不要为补标题发明场景。
 只返回符合下方 JSON Schema 的完整 JSON，不要解释，不要返回 shots。
-<structure_schema>{_json(Structure.model_json_schema())}</structure_schema>
+<structure_schema>{_json(structure_schema)}</structure_schema>
 <source_units>{_json([{'id': i, 'text': unit['text']} for i, unit in enumerate(units)])}</source_units>
 <confirmed_director_profile>{_json(profile)}</confirmed_director_profile>
 <entities>{_json({k: v for k, v in entities.items() if k != 'selected_creative_methods'})}</entities>
@@ -168,11 +199,14 @@ def plan_in_stages(processor, text, entities, profile, style, previous_scene=Non
                         reason = '场景与节拍规划不是完整 JSON'
                     else:
                         reason = '场景与节拍规划无效' if not str(exc).startswith(('source_unit_ids', 'story_event_ids')) else str(exc)
+                    logger.warning('Shooting plan structure rejected: run=%s attempt=%s response_chars=%s error_type=%s coverage=%s',
+                                   identity[:12], attempt + 1, len(content or ''), type(exc).__name__,
+                                   str(exc)[:300] if isinstance(exc, SourceCoverageError) else 'not_applicable')
                     if attempt:
                         raise DirectorShootingChunkError('structure_contract', reason) from exc
-                    logger.warning('Shooting plan structure rejected: run=%s response_chars=%s error_type=%s',
-                                   identity[:12], len(content or ''), type(exc).__name__)
                     retry_note = '仅修正当前场景与节拍规划：' + reason
+                    if isinstance(exc, SourceCoverageError):
+                        retry_note += exc.retry_context
                 else:
                     state = {'version': VERSION, 'input_hash': identity, 'structure': value, 'details': {}}
                     persist()

@@ -139,6 +139,69 @@ def test_structure_correction_reports_all_missing_fields_in_one_attempt():
     assert '缺少必填字段' in repair_prompt
 
 
+@pytest.mark.parametrize('assignments,reason', [
+    ([[0]], '缺失编号=[1]'),
+    ([[0], [0, 1]], '重复编号=[0]'),
+    ([[1], [0]], '顺序错误'),
+    ([[1], [2]], '越界编号=[2]'),
+])
+def test_source_coverage_retry_receives_exact_assignments_and_diff(assignments, reason):
+    p = processor()
+    invalid = structure()
+    template = invalid['scenes'][0]['beats'][0]
+    invalid['scenes'][0]['beats'] = [dict(template, source_unit_ids=ids) for ids in assignments]
+    p.llm.chat.side_effect = [json.dumps(invalid), json.dumps(structure())]
+    result = generate(p)
+    assert len(result['scenes'][0]['beats']) == 2
+    assert p.llm.chat.call_count == 2
+    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    assert reason in prompt
+    assert '期望展平编号=[0,1]' in prompt
+    previous = json.loads(prompt.split('<rejected_source_assignments>')[1].split('</rejected_source_assignments>')[0])
+    assert [beat['source_unit_ids'] for beat in previous] == assignments
+
+
+def test_structure_schema_uses_only_actual_zero_based_source_ids():
+    p = processor()
+    generate(p)
+    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    schema = json.loads(prompt.split('<structure_schema>')[1].split('</structure_schema>')[0])
+    assert schema['$defs']['StructureBeat']['properties']['source_unit_ids']['items']['enum'] == [0, 1]
+    assert '编号从0开始' in prompt and '期望展平编号=[0,1]' in prompt
+
+
+def test_coverage_failure_remains_bounded_and_never_saves_or_expands():
+    p = processor()
+    invalid = structure()
+    invalid['scenes'][0]['beats'][1]['source_unit_ids'] = [0]
+    p.llm.chat.return_value = json.dumps(invalid)
+    save = Mock()
+    with pytest.raises(RuntimeError, match='缺失编号='):
+        generate(p, save_checkpoint=save)
+    assert p.llm.chat.call_count == 2
+    save.assert_not_called()
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_four_source_units_repair_duplicates_without_local_reassignment():
+    p = processor()
+    invalid = structure()
+    template = invalid['scenes'][0]['beats'][0]
+    invalid['scenes'][0]['beats'] = [dict(template, source_unit_ids=[i]) for i in (0, 1, 1, 3)]
+    corrected = copy.deepcopy(invalid)
+    corrected['scenes'][0]['beats'][2]['source_unit_ids'] = [2]
+    p.llm.chat.side_effect = [json.dumps(invalid), json.dumps(corrected)]
+    snapshots = []
+    p.plan_director_shooting_chunk('文' * 807, {},
+        {'story_map': {'phases': [{'events': [{'event_id': 'event-cinema'}]}]}}, {},
+        save_checkpoint=lambda value: snapshots.append(copy.deepcopy(value)) or True)
+    prompt = p.llm.chat.call_args.kwargs['messages'][0]['content']
+    assert '期望展平编号=[0,1,2,3]' in prompt
+    assert '缺失编号=[2]' in prompt and '重复编号=[1]' in prompt
+    assert [beat['source_unit_ids'] for beat in snapshots[0]['structure']['scenes'][0]['beats']] == [[0], [1], [2], [3]]
+    assert p._plan_director_shooting_beat.call_count == 4
+
+
 def test_each_detail_call_repairs_only_the_current_beat_and_enforces_shot_budget():
     p = ScriptProcessor.__new__(ScriptProcessor)
     p.llm = Mock(is_configured=True)
