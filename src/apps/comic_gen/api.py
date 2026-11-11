@@ -55,6 +55,7 @@ from .pipeline import (
     DIRECTOR_PLAN_STABLE_LINEAGE_KEYS,
     _director_style_hash,
 )
+from .director_profile_stages import VERSION as DIRECTOR_PROFILE_STAGES_VERSION, STAGES as DIRECTOR_PROFILE_STAGES
 from .structured_evidence import (
     query_asset_mentions,
     query_director_facts,
@@ -7097,7 +7098,7 @@ def _director_profile_fingerprint(script_id: str, draft=None, instructions=None)
     script, entities, style = pipeline.director_analysis_context(script_id)
     llm = pipeline.script_processor.llm
     return hashlib.sha256(json.dumps([
-        script.original_text, entities, style, draft, instructions,
+        script.original_text, script.source_revision, script.fact_ledger_revision, entities, style, draft, instructions,
         director_preset_identity("director-interpretation"),
         director_preset_identity("director-intent"),
         llm.provider, llm._get_default_model(),
@@ -7111,15 +7112,29 @@ def start_director_profile_analysis(
     user: UserContext = Depends(require_studio_user),
 ):
     skill_snapshot = _freeze_director_skills("episode", request)
-    fingerprint = _director_profile_fingerprint(script_id) + hashlib.sha256(json.dumps(skill_snapshot, sort_keys=True).encode()).hexdigest()
+    source_identity = _director_profile_fingerprint(script_id)
+    fingerprint = "director:" + hashlib.sha256(json.dumps([
+        DIRECTOR_PROFILE_STAGES_VERSION, source_identity, skill_snapshot,
+    ], sort_keys=True).encode()).hexdigest()
+    owner = user.owner_profile_id
+
+    def work(job_id):
+        def check_inputs():
+            if _director_profile_fingerprint(script_id) != source_identity:
+                raise ValueError("剧本或导演设置已改变，请重新生成导演解读。")
+        def save_step(index, stage, payload):
+            check_inputs()
+            return extraction_jobs.save_batch(owner, script_id, fingerprint, job_id, index, stage, payload)
+        check_inputs()
+        result = pipeline.preview_director_profile_with_audit(
+            script_id, skill_snapshot=skill_snapshot,
+            stage_cache=extraction_jobs.load_batches(owner, script_id, fingerprint), save_step=save_step)
+        check_inputs()
+        return result
+
     return extraction_jobs.start(
-        user.owner_profile_id, script_id, "director:" + fingerprint,
-        lambda: {
-            "profile": pipeline.preview_director_profile(script_id, skill_snapshot=skill_snapshot),
-            "source_audit": getattr(pipeline, "_last_director_analysis_audit", {}),
-        },
-        queue_group="director",
-    )
+        owner, script_id, fingerprint, work, pass_job_id=True,
+        total_batches=len(DIRECTOR_PROFILE_STAGES), queue_group="director")
 
 
 @app.post("/projects/{script_id}/director-profile-jobs/refine", status_code=202)
@@ -7268,16 +7283,35 @@ def start_series_director_profile_analysis(
     series = pipeline.get_series(series_id)
     if not series:
         raise HTTPException(404, "Series not found")
-    fingerprint = hashlib.sha256(json.dumps([
-        series.source_context, skill_snapshot,
-        [pipeline.get_script(item).original_text for item in series.episode_ids if pipeline.get_script(item)],
-        series.characters, series.scenes, series.props,
-    ], ensure_ascii=False, default=str, sort_keys=True).encode()).hexdigest()
+    def input_identity():
+        _, _, source, entities, style = pipeline.series_director_analysis_context(series_id)
+        llm = pipeline.script_processor.llm
+        return hashlib.sha256(json.dumps([
+            DIRECTOR_PROFILE_STAGES_VERSION, source, entities, style, skill_snapshot,
+            director_preset_identity("director-interpretation"), director_preset_identity("director-intent"),
+            llm.provider, llm._get_default_model(),
+        ], ensure_ascii=False, default=str, sort_keys=True).encode()).hexdigest()
+    source_identity = input_identity()
+    fingerprint = "series-director:" + source_identity
+    owner, project = user.owner_profile_id, "series:" + series_id
+
+    def work(job_id):
+        def check_inputs():
+            if input_identity() != source_identity:
+                raise ValueError("系列资料或导演设置已改变，请重新生成全剧理解。")
+        def save_step(index, stage, payload):
+            check_inputs()
+            return extraction_jobs.save_batch(owner, project, fingerprint, job_id, index, stage, payload)
+        check_inputs()
+        result = pipeline.preview_series_director_profile(
+            series_id, skill_snapshot=skill_snapshot,
+            stage_cache=extraction_jobs.load_batches(owner, project, fingerprint), save_step=save_step)
+        check_inputs()
+        return result
+
     return extraction_jobs.start(
-        user.owner_profile_id, "series:" + series_id, "series-director:" + fingerprint,
-        lambda: pipeline.preview_series_director_profile(series_id, skill_snapshot=skill_snapshot),
-        queue_group="series-director",
-    )
+        owner, project, fingerprint, work, pass_job_id=True,
+        total_batches=len(DIRECTOR_PROFILE_STAGES), queue_group="series-director")
 
 
 @app.get("/series/{series_id}/director-profile-jobs/{job_id}")

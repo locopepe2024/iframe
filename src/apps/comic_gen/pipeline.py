@@ -3691,7 +3691,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             return series.director_profile_revisions[-1].profile
         return series.art_direction.director_profile if series.art_direction else None
 
-    def preview_series_director_profile(self, series_id: str, *, skill_snapshot=None) -> Dict[str, Any]:
+    def series_director_analysis_context(self, series_id: str):
         series = self.series_store.get(series_id)
         if not series:
             raise ValueError("Series not found")
@@ -3714,13 +3714,35 @@ class ComicGenPipeline(StudioOwnerMixin):
                     entities[kind].append({field: getattr(item, field, None) for field in fields})
                     known.add(item.id)
         entities["scope"] = "series"
+        style = series.art_direction.style_config if series.art_direction else {}
+        return series, episodes, source, entities, style
+
+    def preview_series_director_profile(self, series_id: str, *, skill_snapshot=None, stage_cache=None, save_step=None) -> Dict[str, Any]:
+        series, episodes, source, entities, style = self.series_director_analysis_context(series_id)
         if skill_snapshot:
             entities["selected_creative_methods"] = skill_snapshot
-        style = series.art_direction.style_config if series.art_direction else {}
         try:
-            analyzed = self.script_processor.analyze_director_profile_with_audit(
-                source, entities, style, "auto"
-            )
+            if stage_cache is not None:
+                from .director_profile_stages import analyze_in_stages
+                def validate_stage(draft):
+                    normalized = normalize_director_profile_draft(draft)
+                    if isinstance(normalized.get("story_map"), dict):
+                        # Series has no Episode ledger. Bind a transient global
+                        # source identity for structural validation, then omit
+                        # the map from the final Series handoff as before.
+                        normalized["story_map"].update(
+                            source_revision=1, source_revision_id="series-source:" + hashlib.sha256(source.encode()).hexdigest(),
+                            people=self._director_story_people(entities["characters"]))
+                    validated = DirectorProfile(**normalized)
+                    if validated.story_map is not None:
+                        normalized["story_map"] = validated.story_map.model_dump()
+                    return normalized
+                analyzed = analyze_in_stages(
+                    self.script_processor, source, entities, style, cached=stage_cache,
+                    save_step=save_step, validate_profile=validate_stage)
+            else:
+                analyzed = self.script_processor.analyze_director_profile_with_audit(
+                    source, entities, style, "auto")
         except Exception as exc:
             audit = getattr(exc, "director_audit", None)
             if not isinstance(audit, dict):
@@ -4257,14 +4279,28 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._last_director_analysis_audit = analyzed.get("source_audit", {})
         return analyzed["profile"]
 
-    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto", *, skill_snapshot=None) -> Dict[str, Any]:
+    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto", *, skill_snapshot=None, stage_cache=None, save_step=None) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
         if skill_snapshot:
             entities["selected_creative_methods"] = skill_snapshot
         source_audit = {}
         analyzer = getattr(self.script_processor, "analyze_director_profile_with_audit", None)
         try:
-            if callable(analyzer):
+            if stage_cache is not None:
+                from .director_profile_stages import analyze_in_stages
+                def validate_stage(draft):
+                    normalized = normalize_director_profile_draft(draft)
+                    self._bind_director_story_map(script, entities, normalized)
+                    validated = DirectorProfile(**normalized)
+                    self._validate_director_story_map(script, normalized.get("story_map"))
+                    if validated.story_map is not None:
+                        normalized["story_map"] = validated.story_map.model_dump()
+                    return normalized
+                analyzed = analyze_in_stages(
+                    self.script_processor, script.original_text, entities, style, source_mode=source_mode,
+                    cached=stage_cache, save_step=save_step, validate_profile=validate_stage)
+                draft, source_audit = analyzed["profile"], analyzed["source_audit"]
+            elif callable(analyzer):
                 analyzed = analyzer(script.original_text, entities, style, source_mode)
                 if isinstance(analyzed, dict) and isinstance(analyzed.get("profile"), dict):
                     draft = analyzed["profile"]

@@ -1914,7 +1914,7 @@ def test_director_jobs_are_durable_owner_scoped_and_non_mutating(tmp_path, monke
             provider="openai", _get_default_model=lambda: "test",
         )),
         director_analysis_context=lambda project: (source, {"characters": []}, {"name": "style"}),
-        preview_director_profile=lambda project, **kwargs: profile_payload(),
+        preview_director_profile_with_audit=lambda project, **kwargs: {"profile": profile_payload(), "source_audit": {}},
         refine_director_profile=lambda project, draft, instructions: (
             captured.update(draft=draft, instructions=instructions) or profile_payload()
         ),

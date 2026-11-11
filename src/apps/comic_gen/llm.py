@@ -45,7 +45,7 @@ class SceneBasisFormatError(ValueError):
     """A field-specific extraction error that permits one model correction."""
 
 
-def _director_profile_output_contract(*, partial: bool = False, story_map_only: bool = False) -> str:
+def _director_profile_output_contract(*, partial: bool = False, story_map_only: bool = False, fields=None) -> str:
     """Keep the model's nested field contract derived from runtime validation."""
     schema = DirectorProfile.model_json_schema()
     for key in ("revision", "content_hash", "confirmed_at", "creative_skill_run"):
@@ -80,6 +80,30 @@ def _director_profile_output_contract(*, partial: bool = False, story_map_only: 
         schema["properties"] = {"story_map": schema["properties"]["story_map"]}
         schema["required"] = ["story_map"]
         schema["additionalProperties"] = False
+    if fields is not None:
+        schema["properties"] = {key: schema["properties"][key] for key in fields}
+        schema["required"] = list(fields)
+        schema["additionalProperties"] = False
+        # Send only definitions reachable from this step's fields.
+        definitions = schema.pop("$defs", {})
+        needed = set()
+        def visit(value):
+            if isinstance(value, dict):
+                ref = value.get("$ref", "")
+                if ref.startswith("#/$defs/") and ref[8:] not in needed:
+                    needed.add(ref[8:])
+                    visit(definitions[ref[8:]])
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+        visit(schema)
+        if needed:
+            schema["$defs"] = {key: definitions[key] for key in sorted(needed)}
+        return ("只返回本步骤的数据对象，字段不能省略；不得返回其他步骤或服务端字段。\n"
+                "<director_output_contract>" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+                + "</director_output_contract>")
     requirement = ("仅返回发生变化的顶层字段；若修改 story_map，必须返回完整的 story_map 对象，不能为 null；"
                    if partial else "story_map 为必填对象，不能省略或为 null；")
     return (
@@ -2031,13 +2055,11 @@ class ScriptProcessor:
             audit['story_map_completion'] = evidence
             self._last_director_source_audit = audit
 
-    def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
-                                 style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
-        """Create a reviewable director draft without mutating project data."""
-        self._last_director_raw_response = ""
-        if not self.is_configured:
-            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
-        source_context, is_source_digest = self._director_source_context(text, source_mode)
+    def _director_profile_prompt(self, text: str, entities_json: Dict[str, Any],
+                                 style_config: Dict[str, Any], source_mode: str = "auto",
+                                 prepared_source=None, context_only=False):
+        source_context, is_source_digest = (prepared_source if prepared_source is not None
+                                            else self._director_source_context(text, source_mode))
         source_label = (
             "长篇原始剧本的来源摘要（含首尾原文锚点和分块来源区间）"
             if is_source_digest
@@ -2096,7 +2118,10 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 在 story_map 中保持事件时序，在 scene_summaries 的 state_in/state_out 中保留有依据的跨场变化。
 同名地点或同一时间词不足以证明同一物理地点、同一连续时段；证据不足时保留为待核验关系，
 不要用导演推测填补剧本的时空空白，也不要生成尚未确认的连续性 ID。
-不得发明对白、剧情、文化符号或人物动机。
+不得发明对白、剧情、文化符号或人物动机。"""
+        if context_only:
+            return prompt, source_context, is_source_digest, scope_guidance
+        prompt += f"""
 
 只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events, story_map,
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
@@ -2136,6 +2161,16 @@ lighting_cues 只记录有依据的自然光、画内光源、方向或阴影，
 canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事实必须尽量带 source_refs，
 人物状态或规则变化要保留旧事实并用 supersedes_fact_id/status 表达关系；不要静默覆盖、
 删除或把未知内容标成 active。"""
+        return prompt, source_context, is_source_digest, scope_guidance
+
+    def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
+                                 style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
+        """Create a reviewable director draft without mutating project data."""
+        self._last_director_raw_response = ""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        prompt, source_context, is_source_digest, scope_guidance = self._director_profile_prompt(
+            text, entities_json, style_config, source_mode)
         content = (self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "生成完整导演设定草稿。"}],

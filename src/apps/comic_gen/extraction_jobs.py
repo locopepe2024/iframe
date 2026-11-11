@@ -72,7 +72,7 @@ class ExtractionJobs:
             db.execute('BEGIN IMMEDIATE')
             self._expire_storyboard_jobs(db, time.time())
             active = db.execute(
-                "SELECT 1 FROM jobs WHERE id=? AND owner=? AND project=? AND fingerprint=? AND status='running'",
+                "SELECT 1 FROM jobs WHERE id=? AND owner=? AND project=? AND fingerprint=? AND status='running' AND superseded=0",
                 (job_id, owner, project, fingerprint),
             ).fetchone()
             if not active:
@@ -110,8 +110,15 @@ class ExtractionJobs:
         error = row['error']
         if status == 'superseded' and not error:
             error = '该修订已被更新的请求替代。'
+        progress = ({'completed': completed_batches,
+                     'total': total_batches if total_batches is not None else row['total_batches']}
+                    if row['total_batches'] else None)
+        if progress and row['fingerprint'].startswith(('director:', 'series-director:')):
+            from .director_profile_stages import STAGES
+            progress['stage'] = (STAGES[min(completed_batches, len(STAGES) - 1)][0]
+                                 if completed_batches < progress['total'] else None)
         return {'id': row['id'], 'status': status,
-                'progress': {'completed': completed_batches, 'total': total_batches if total_batches is not None else row['total_batches']} if row['total_batches'] else None,
+                'progress': progress,
                 'result': json.loads(row['result']) if row['result'] and status != 'superseded' else None,
                 'error': error}
 
@@ -178,8 +185,7 @@ class ExtractionJobs:
         except Exception:
             self._finish(job_id, error='分析任务未能启动，请重试。')
             raise HTTPException(503, '分析任务未能启动，请重试。')
-        return {'id': job_id, 'status': 'running', 'result': None, 'error': None,
-                'progress': {'completed': completed, 'total': total} if total_batches else None}
+        return self.public(row, completed, total)
 
     def _start_lifo(self, owner, project, fingerprint, work, queue_group):
         """Queue a latest-wins job without changing other extraction flows."""
@@ -346,6 +352,26 @@ class ExtractionJobs:
                                else '实体提取请求超时，请稍后重试；已有资产不会受影响。')
                 elif detail:
                     message = f'{label}失败：{detail[:300]}'
+            director_stage = getattr(exc, 'director_profile_failure', None)
+            if director_stage:
+                from .director_profile_stages import STAGES
+                label = next((label for key, label, _ in STAGES if key == director_stage), '导演设定')
+                category = getattr(exc, 'director_profile_failure_category', '')
+                if category == 'checkpoint':
+                    reason = '输入已改变或任务已失效，请重新生成'
+                elif category == 'parse':
+                    reason = '模型返回的 JSON 不完整、无效或超过本步骤预算'
+                elif isinstance(diagnostic, dict):
+                    reason = '模型流式响应中断' if diagnostic.get('stream') else '模型请求失败'
+                    if diagnostic.get('finish_reason') == 'length':
+                        reason = '模型输出达到长度上限，本步骤未完整生成'
+                    elif diagnostic.get('finish_reason') == 'content_filter':
+                        reason = '所选模型拒绝处理本次内容，请调整输入或切换剧本模型'
+                else:
+                    reason = '返回格式或引用校验未通过，请重试或切换剧本模型'
+                message = f'导演分析失败：{label}步骤，{reason}。'
+                message += (f'已保存 {completed}/{total} 个步骤，重试会从未完成步骤继续。'
+                            if completed else '尚无已完成步骤，请重试。')
             # Preserve bounded Director evidence even when admission/validation
             # rejects the structured profile. This is deliberately stored in
             # the owner-scoped job row, never emitted to ordinary logs.
