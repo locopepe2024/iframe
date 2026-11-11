@@ -16,7 +16,7 @@ interface AssetDrawerProps {
     scenes: any[];
     props: any[];
     assetIndex?: AssetReferenceIndexEntry[];
-    onSelectAsset: (type: string, name: string) => void;
+    onSelectAsset: (type: string, name: string, assetId?: string) => void;
     selectedVariantIds?: Record<string, string[]>;
     onToggleVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
     frameSlot?: "first" | "last";
@@ -187,13 +187,13 @@ export default function AssetDrawer({
                                                 <span className="text-[0.6875rem] font-medium text-text-secondary uppercase tracking-wide">{t("characters")}</span>
                                             </div>
                                             <div className="grid grid-cols-2 gap-2">
-                                                {characters.map((c: any, i: number) => {
+                                                {characters.map((c: any) => {
                                                     const thumb = getAssetThumbnail(c);
                                                     return (
                                                         <button
                                                             key={c.asset_id}
                                                             onClick={() => {
-                                                                onSelectAsset(`character${i + 1}`, c.name);
+                                                                onSelectAsset("character", c.name, c.asset_id);
                                                                 onClose();
                                                             }}
                                                             className="flex flex-col items-center gap-1.5 p-2 rounded-xl border border-glass-border bg-glass hover:border-foreground/30 hover:bg-hover-bg transition-all duration-200 group"
@@ -227,7 +227,7 @@ export default function AssetDrawer({
                                                         <button
                                                             key={s.asset_id}
                                                             onClick={() => {
-                                                                onSelectAsset("scene", s.name);
+                                                                onSelectAsset("scene", s.name, s.asset_id);
                                                                 onClose();
                                                             }}
                                                             className="flex flex-col items-center gap-1.5 p-2 rounded-xl border border-glass-border bg-glass hover:border-foreground/30 hover:bg-hover-bg transition-all duration-200 group"
@@ -265,7 +265,7 @@ export default function AssetDrawer({
                                                         <div key={p.asset_id} className="rounded-lg border border-glass-border bg-glass p-2">
                                                             <button
                                                                 type="button"
-                                                                onClick={() => onSelectAsset("prop", p.name)}
+                                                                onClick={() => onSelectAsset("prop", p.name, p.asset_id)}
                                                                 className="flex w-full items-center gap-2 text-left hover:text-primary"
                                                             >
                                                                 <div className="h-11 w-11 shrink-0 overflow-hidden rounded-md bg-surface-inset flex items-center justify-center">

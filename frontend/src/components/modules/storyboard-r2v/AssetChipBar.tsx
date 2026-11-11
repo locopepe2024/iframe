@@ -13,7 +13,7 @@ interface AssetChipBarProps {
     props: any[];
     assetIndex?: AssetReferenceIndexEntry[];
     selectedVariantIds?: Record<string, string[]>;
-    onInsertAsset: (type: string, name: string) => void;
+    onInsertAsset: (type: string, name: string, assetId?: string) => void;
     onToggleVariant?: (assetId: string, variantId: string, primaryVariantId?: string) => void;
 }
 
@@ -47,10 +47,15 @@ export default function AssetChipBar({
                         <div className="inline-flex min-h-9 max-w-[240px] items-stretch overflow-hidden rounded-md border border-glass-border bg-surface-inset">
                             <button
                                 type="button"
-                                onClick={() => onInsertAsset(asset.asset_type, asset.name)}
+                                onClick={() => onInsertAsset(asset.asset_type, asset.name, asset.asset_id)}
                                 className="inline-flex min-w-0 items-center gap-1.5 px-3 py-1 text-[13px] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/55"
                             >
                                 <span className={`h-[6px] w-[6px] shrink-0 rounded-full ${colors[asset.asset_type]}`} />
+                                {variants.length > 0 && assets.some((other) => other.asset_id !== asset.asset_id && other.asset_type === asset.asset_type && other.name === asset.name) ? (
+                                    <span className="h-6 w-6 shrink-0 overflow-hidden rounded">
+                                        <AssetIndexPreview asset={{ ...asset, variant_id: primaryId }} alt={asset.name} />
+                                    </span>
+                                ) : null}
                                 <span className="truncate">{asset.name}</span>
                             </button>
                             {supportsMultipleViews && variants.length > 1 && onToggleVariant ? (

@@ -12,5 +12,5 @@ it('offers only project and inherited series entries as shot references', () => 
     expect(screen.queryByText('Global actor')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Local actor'));
     fireEvent.click(screen.getByText('Inherited actor'));
-    expect(onInsertAsset.mock.calls).toEqual([['character', 'Local actor'], ['character', 'Inherited actor']]);
+    expect(onInsertAsset.mock.calls).toEqual([['character', 'Local actor', 'Local actor'], ['character', 'Inherited actor', 'Inherited actor']]);
 });
