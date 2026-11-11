@@ -453,6 +453,10 @@ story_event_ids只能从allowed_story_events逐字复制event_id，不得用标�
                     persist()
                 result['unresolved_questions'].extend(detail['unresolved_questions'])
                 handoff = _handoff(scene, beat, detail)
+        # Scene-level questions are carried through each beat checkpoint. They
+        # must not count again for every beat in the assembled chunk. Preserve
+        # the first occurrence verbatim and never truncate distinct questions.
+        result['unresolved_questions'] = list(dict.fromkeys(result['unresolved_questions']))
         return result
     except Exception as exc:
         exc.shooting_plan_failure = stage

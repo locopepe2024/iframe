@@ -369,6 +369,62 @@ def test_final_plan_validation_failure_is_marked_as_finalization():
     assert error.value.shooting_plan_failure == {'stage': 'finalize'}
 
 
+def test_thirteen_completed_beats_deduplicate_questions_and_resume_without_paid_calls():
+    p = processor()
+    text = ''.join(f'动作{i}。\n' for i in range(13))
+    skeleton = structure()
+    template = skeleton['scenes'][0]['beats'][0]
+    skeleton['scenes'][0]['beats'] = [dict(template, source_end=i + 1) for i in range(13)]
+    questions = ['全局待确认1', '全局待确认2', '全局待确认3']
+    skeleton['unresolved_questions'] = questions
+    detail = valid_chunk()
+    detail['unresolved_questions'] = ['节拍待确认1', '节拍待确认2', '节拍待确认3']
+    detail['scenes'][0]['unresolved_questions'] = ['场景待确认1', questions[0], questions[1]]
+    p.llm.chat.return_value = json.dumps(skeleton)
+    p._plan_director_shooting_beat.return_value = detail
+    snapshots = []
+    profile = {'story_map': {'phases': [{'events': [{'event_id': 'event-cinema'}]}]}}
+    result = p.plan_director_shooting_chunk(text, {}, profile, {},
+        save_checkpoint=lambda s: snapshots.append(copy.deepcopy(s)) or True)
+    assert len(snapshots) == 14 and snapshots[-1]['completed_steps'] == 14
+    assert sum(len(d['unresolved_questions']) for d in snapshots[-1]['details'].values()) + 3 == 81
+    assert result['unresolved_questions'] == [*questions, *detail['unresolved_questions'], '场景待确认1']
+    assert ScriptProcessor._validate_director_shooting_chunk(result) is None
+    saved = copy.deepcopy(snapshots[-1])
+    p.llm.chat.reset_mock()
+    p._plan_director_shooting_beat.reset_mock()
+    p.llm.chat.side_effect = AssertionError('must reuse all completed steps')
+    p._plan_director_shooting_beat.side_effect = AssertionError('must reuse all saved shots')
+    assert p.plan_director_shooting_chunk(text, {}, profile, {}, checkpoint=saved) == result
+    assert saved == snapshots[-1]
+    p.llm.chat.assert_not_called()
+    p._plan_director_shooting_beat.assert_not_called()
+
+
+def test_aggregate_questions_preserve_distinct_items_and_do_not_bypass_limits():
+    from src.apps.comic_gen.llm import DirectorShootingChunkError
+    pipeline, script = make_pipeline()
+    invalid = valid_chunk()
+    invalid['unresolved_questions'] = [f'待确认{i}' for i in range(81)]
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = invalid
+    with pytest.raises(DirectorShootingChunkError) as error:
+        pipeline.preview_director_shooting_plan(script.id)
+    assert error.value.category == 'aggregate_contract'
+    assert 'unresolved_questions' in error.value.public_reason
+    assert error.value.shooting_plan_failure['stage'] == 'finalize'
+    assert len(invalid['unresolved_questions']) == 81
+
+
+def test_pipeline_preserves_all_admitted_chunk_questions_beyond_twenty():
+    pipeline, script = make_pipeline()
+    chunk = valid_chunk()
+    questions = [f'待确认{i}' for i in range(35)]
+    chunk['unresolved_questions'] = questions
+    pipeline.script_processor.plan_director_shooting_chunk.return_value = chunk
+    result = pipeline.preview_director_shooting_plan(script.id)
+    assert result.unresolved_questions == questions
+
+
 def structure():
     scene = raw_scene()
     scene['beats'] = [

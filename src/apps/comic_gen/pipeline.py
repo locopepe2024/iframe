@@ -4991,9 +4991,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                     raise
                 chunk_error = ScriptProcessor._validate_director_shooting_chunk(chunk_result)
                 if chunk_error:
-                    raise RuntimeError(
-                        f"拍摄计划分析第 {index + 1}/{len(chunks)} 段未通过镜头契约校验：{chunk_error}"
+                    error = DirectorShootingChunkError(
+                        'aggregate_contract',
+                        f"第 {index + 1}/{len(chunks)} 段汇总未通过校验：{chunk_error}"
                     )
+                    error.shooting_plan_failure = {'stage': 'finalize', 'chunk': index + 1, 'chunks': len(chunks)}
+                    raise error
                 batch_result = {'result': chunk_result}
                 if checkpoint:
                     batch_result['checkpoint'] = checkpoint
@@ -5004,7 +5007,7 @@ class ComicGenPipeline(StudioOwnerMixin):
 
             chunk_questions = chunk_result.get("unresolved_questions", [])
             if isinstance(chunk_questions, list):
-                unresolved_questions.extend(str(item)[:500] for item in chunk_questions[:20] if str(item).strip())
+                unresolved_questions.extend(str(item)[:500] for item in chunk_questions if str(item).strip())
             raw_scenes = chunk_result.get("scenes", [])
             if not raw_scenes:
                 raise RuntimeError(f"拍摄计划分析第 {index + 1}/{len(chunks)} 段没有返回场景。")
