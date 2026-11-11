@@ -45,7 +45,7 @@ class SceneBasisFormatError(ValueError):
     """A field-specific extraction error that permits one model correction."""
 
 
-def _director_profile_output_contract(*, partial: bool = False, story_map_only: bool = False, fields=None) -> str:
+def _director_profile_output_contract(*, partial: bool = False, story_map_only: bool = False, fields=None, story_map_fields=None) -> str:
     """Keep the model's nested field contract derived from runtime validation."""
     sample_plan_contract = (
         'sample_plan 必须是对象数组；单个计划也放在数组内，例如 '
@@ -64,6 +64,12 @@ def _director_profile_output_contract(*, partial: bool = False, story_map_only: 
     for key in server_fields:
         story_map["properties"].pop(key, None)
     story_map["required"] = ["schema_version", "phases", "relationship_arcs", "story_threads"]
+    if story_map_fields is not None:
+        if (fields is None or "story_map" not in fields or not story_map_fields
+                or not set(story_map_fields).issubset(story_map["required"])):
+            raise ValueError("Invalid story-map completion fields")
+        story_map["properties"] = {key: story_map["properties"][key] for key in story_map_fields}
+        story_map["required"] = list(story_map_fields)
     for name in ("DirectorStoryEvent", "DirectorRelationshipState"):
         claim = schema["$defs"][name]
         if partial:

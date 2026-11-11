@@ -66,26 +66,38 @@ METHOD_STEPS = {
 class DirectorStepFieldsError(ValueError):
     """Public diagnostics use server-owned field names, never model prose."""
 
-    def __init__(self, fields, value, *, completion=False):
+    def __init__(self, fields, value, *, completion=False, prefix=""):
         missing = [name for name in fields if not isinstance(value, dict) or name not in value]
         extra = isinstance(value, dict) and bool(set(value) - set(fields))
         detail = ""
         if missing:
-            detail = ("补全结果" if completion else "模型结果") + "缺少必填字段：" + "、".join(missing)
+            detail = ("补全结果" if completion else "模型结果") + "缺少必填字段：" + "、".join(prefix + name for name in missing)
         if extra or not isinstance(value, dict):
             detail = (detail + "；" if detail else "") + "返回了本步骤之外的字段或非对象结构"
         self.public_reason = detail
         super().__init__(detail)
 
 
+STORY_MAP_FIELDS = ("schema_version", "phases", "relationship_arcs", "story_threads")
+
+
+def _missing_story_map_fields(value):
+    if not isinstance(value, dict):
+        raise ValueError("故事结构步骤的 story_map 必须为对象")
+    if "schema_version" in value and value["schema_version"] != 1:
+        raise ValueError("story_map.schema_version 必须为 1")
+    for name in STORY_MAP_FIELDS[1:]:
+        if name in value and not isinstance(value[name], list):
+            raise ValueError("story_map." + name + " 必须为数组")
+    return tuple(name for name in STORY_MAP_FIELDS if name not in value)
+
+
 def _require_story_map(value):
-    if (not isinstance(value, dict) or value.get("schema_version") != 1
-            or any(not isinstance(value.get(name), list)
-                   for name in ("phases", "relationship_arcs", "story_threads"))):
-        raise ValueError("故事结构步骤缺少规范的 story_map 对象，请重试。")
+    if _missing_story_map_fields(value):
+        raise DirectorStepFieldsError(STORY_MAP_FIELDS, value, prefix="story_map.")
 
 
-def build_step_prompt(key, source_context, is_digest, entities, style, profile, *, output_fields=None, completed_fields=None):
+def build_step_prompt(key, source_context, is_digest, entities, style, profile, *, output_fields=None, completed_fields=None, story_map_fields=None):
     """Build a scoped request without full-profile/extraction preset baggage."""
     from src.apps.director_skills import guidance
     from .llm import _director_profile_output_contract, _prompt_json
@@ -140,11 +152,14 @@ def build_step_prompt(key, source_context, is_digest, entities, style, profile, 
         step_guidance = step_guidance.split("。", 1)[1]
     parts.extend((step_guidance,
                   "本次JSON总长度控制在18000字符内；不展开镜头和对白。",
-                  _director_profile_output_contract(fields=fields)))
+                  _director_profile_output_contract(fields=fields, story_map_fields=story_map_fields)))
     if completed_fields is not None:
         parts.append("这是本步骤缺字段的唯一一次补全。已有字段只读，保留其含义和引用；"
                      "不要把 timeline 复制当作 story_map，不重写已有字段或其他步骤。\n"
                      "<completed_fields_readonly>" + _prompt_json(completed_fields) + "</completed_fields_readonly>")
+    if story_map_fields:
+        parts.append("story_map 本次只补全：" + "、".join("story_map." + name for name in story_map_fields)
+                     + "。已有 phases、事件和其他字段只读，禁止重复输出或覆盖；新引用必须对应已有阶段和事件ID。")
     parts.append("本次只输出以下顶层字段：" + "、".join(fields) + "。每个字段都必须存在；空数组也不得省略。")
     if profile:
         # Do not resend the source, raw responses, server metadata or empty
@@ -232,16 +247,20 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
             # Only a nonempty subset with valid existing fields can be
             # completed. Never synthesize a story map, retry malformed JSON,
             # erase unknown keys, or rewrite fields already returned.
+            nested_missing = ()
+            if key == "story" and isinstance(patch, dict) and "story_map" in patch:
+                nested_missing = _missing_story_map_fields(patch["story_map"])
             if (key == "story" and not reused and isinstance(patch, dict) and patch
-                    and set(patch) < set(fields)):
-                if "story_map" in patch:
-                    _require_story_map(patch["story_map"])
+                    and set(patch).issubset(fields) and (set(patch) < set(fields) or nested_missing)):
                 validate_profile(copy.deepcopy({**profile, **patch}))
-                missing = tuple(name for name in fields if name not in patch)
-                completion = {"fields": list(missing), "raw_response": ""}
+                missing = tuple(name for name in fields if name not in patch or name == "story_map" and nested_missing)
+                paths = [name for name in missing if name != "story_map" or not nested_missing]
+                paths.extend("story_map." + name for name in nested_missing)
+                completion = {"fields": list(missing), "paths": paths, "raw_response": ""}
                 audit["field_completion"] = completion
                 prompt = build_step_prompt(key, source_context, is_digest, entities, style, profile,
-                                           output_fields=missing, completed_fields=patch)
+                                           output_fields=missing, completed_fields=patch,
+                                           story_map_fields=nested_missing or None)
                 category = "provider"
                 completion_raw = (processor.llm.chat(
                     messages=[{"role": "system", "content": prompt},
@@ -258,6 +277,11 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                 category = "validation"
                 if not isinstance(extra_patch, dict) or set(extra_patch) != set(missing):
                     raise DirectorStepFieldsError(missing, extra_patch, completion=True)
+                if nested_missing:
+                    nested_patch = extra_patch["story_map"]
+                    if not isinstance(nested_patch, dict) or set(nested_patch) != set(nested_missing):
+                        raise DirectorStepFieldsError(nested_missing, nested_patch, completion=True, prefix="story_map.")
+                    extra_patch["story_map"] = {**patch["story_map"], **nested_patch}
                 patch = {**patch, **extra_patch}
             if not isinstance(patch, dict) or set(patch) != set(fields):
                 raise DirectorStepFieldsError(fields, patch)

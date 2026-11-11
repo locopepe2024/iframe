@@ -225,6 +225,64 @@ def test_missing_story_fields_are_completed_once_without_rewriting_returned_fiel
     processor.llm.chat.assert_not_called()
 
 
+def test_missing_story_map_arrays_are_completed_without_regenerating_phases():
+    pipeline, script, processor = setup_pipeline()
+    foundation, story, continuity = responses()
+    partial = copy.deepcopy(story)
+    nested = {key: partial["story_map"].pop(key) for key in ("relationship_arcs", "story_threads")}
+    processor.llm.chat.side_effect = [json.dumps(step) for step in
+                                    (foundation, partial, {"story_map": nested}, continuity)]
+    cache = {}
+    result = generate(pipeline, save_step=checkpoint_store(cache))
+    assert list(cache) == [0, 1, 2, 3] and processor.llm.chat.call_count == 4
+    completed = result["profile"]["story_map"]
+    assert completed["phases"][0]["phase_id"] == partial["story_map"]["phases"][0]["phase_id"]
+    assert completed["phases"][0]["events"][0]["description"] == partial["story_map"]["phases"][0]["events"][0]["description"]
+    assert completed["story_threads"][0]["milestones"] == story["story_map"]["story_threads"][0]["milestones"]
+    prompt = processor.llm.chat.call_args_list[2].kwargs["messages"][0]["content"]
+    schema = json.loads(prompt.split("<director_output_contract>")[1].split("</director_output_contract>")[0])
+    sm = schema["$defs"]["DirectorStoryMap"]
+    assert sm["required"] == list(nested) and set(sm["properties"]) == set(nested)
+    assert schema["required"] == ["story_map"]
+    assert "story_map.relationship_arcs" in prompt and "story_map.story_threads" in prompt
+    assert prompt.count(script.original_text) == 1
+    assert cache[2]["frames"]["field_completion"]["paths"] == [
+        "story_map.relationship_arcs", "story_map.story_threads"]
+    assert json.loads(cache[2]["frames"]["raw_response"]) == partial
+    processor.llm.chat.reset_mock(side_effect=True)
+    processor.llm.chat.side_effect = AssertionError("must reuse nested completion")
+    assert generate(pipeline, cached=cache)["profile"] == result["profile"]
+    processor.llm.chat.assert_not_called()
+
+
+@pytest.mark.parametrize("replacement", [{"story_threads": []}, {"relationship_arcs": [], "story_threads": [], "phases": []}])
+def test_nested_completion_rejects_missing_fields_and_attempted_phase_overwrite(replacement):
+    pipeline, _, processor = setup_pipeline()
+    partial = copy.deepcopy(responses()[1])
+    for key in ("relationship_arcs", "story_threads"):
+        partial["story_map"].pop(key)
+    processor.llm.chat.side_effect = [json.dumps(step) for step in
+                                    (responses()[0], partial, {"story_map": replacement})]
+    cache = {}
+    with pytest.raises(ValueError):
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert list(cache) == [0, 1] and processor.llm.chat.call_count == 3
+
+
+def test_top_level_and_nested_missing_fields_share_one_completion_request():
+    pipeline, _, processor = setup_pipeline()
+    partial = copy.deepcopy(responses()[1])
+    key_events = partial.pop("key_events")
+    threads = partial["story_map"].pop("story_threads")
+    completion = {"key_events": key_events, "story_map": {"story_threads": threads}}
+    processor.llm.chat.side_effect = [json.dumps(step) for step in
+                                    (responses()[0], partial, completion, responses()[2])]
+    cache = {}
+    generate(pipeline, save_step=checkpoint_store(cache))
+    assert processor.llm.chat.call_count == 4 and len(cache) == 4
+    assert cache[2]["frames"]["field_completion"]["paths"] == ["key_events", "story_map.story_threads"]
+
+
 @pytest.mark.parametrize("completion", [{}, {"key_events": []}, {"key_events": [], "story_map": None},
     {**responses()[1], "PRIVATE_EXTRA_FIELD": "not echoed"}])
 def test_invalid_missing_field_completion_stops_after_one_attempt(completion):
