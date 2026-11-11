@@ -211,7 +211,8 @@ function PlaygroundContent() {
 
   const handleGenerate = useCallback(() => {
     if (!prompt.trim() || !activeSessionId) return;
-    const submission = normalizePlaygroundSubmission(mode, inputMedia, prompt);
+    const referenceNames = Object.fromEntries(inputMedia.map(path => [referenceKey(path), referenceName(path, mediaNames, history)]));
+    const submission = normalizePlaygroundSubmission(mode, inputMedia, prompt, referenceNames);
     const durationConfig = getModelDuration(modelId);
     const selectedDuration = typeof parameters.duration === 'number'
       ? parameters.duration
@@ -222,7 +223,7 @@ function PlaygroundContent() {
     enqueueRequest({
       mode: submission.mode,
       modelId,
-      prompt: prompt.trim(),
+      prompt: submission.prompt.trim(),
       negativePrompt: negativePrompt || undefined,
       inputMedia: submission.inputMedia,
       mediaNames: Object.fromEntries(submission.inputMedia.map((path) => [referenceKey(path), referenceName(path, mediaNames, history)])),

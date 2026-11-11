@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { StickyNote, Check, MessageSquare } from 'lucide-react';
 import type { Editor } from '@tiptap/react';
+import { useEditorState } from '@tiptap/react';
 import { useTranslations } from 'next-intl';
 
 export interface NotesPanelProps {
@@ -24,12 +25,12 @@ type FilterMode = 'all' | 'unresolved' | 'resolved';
 export default function NotesPanel({ editor }: NotesPanelProps) {
   const t = useTranslations('scriptEditor');
   const [filter, setFilter] = useState<FilterMode>('all');
+  const doc = useEditorState({ editor, selector: ({ editor }) => editor?.state.doc });
 
   const notes = useMemo<NoteEntry[]>(() => {
-    if (!editor) return [];
+    if (!doc) return [];
 
     const entries: NoteEntry[] = [];
-    const doc = editor.state.doc;
 
     doc.descendants((node, pos) => {
       if (node.type.name === 'note') {
@@ -46,7 +47,7 @@ export default function NotesPanel({ editor }: NotesPanelProps) {
     });
 
     return entries;
-  }, [editor, editor?.state.doc]);
+  }, [doc, t]);
 
   const filteredNotes = useMemo(() => {
     if (filter === 'all') return notes;
@@ -57,8 +58,7 @@ export default function NotesPanel({ editor }: NotesPanelProps) {
   const handleNoteClick = useCallback(
     (pos: number) => {
       if (!editor) return;
-      editor.commands.setTextSelection(pos);
-      editor.commands.scrollIntoView();
+      editor.chain().focus().setTextSelection(pos + 1).scrollIntoView().run();
     },
     [editor]
   );

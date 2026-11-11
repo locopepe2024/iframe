@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, BrainCircuit, Check, CheckCircle2, Loader2, Pencil, RotateCcw, Save, Send, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
+import type { DirectorProfileProgress } from "@/lib/directorProfile";
+import DirectorProfileGenerationProgress from "./DirectorProfileGenerationProgress";
 import { useDirectorSkills } from "@/lib/directorSkills";
 import DirectorSkillsSelector from "@/components/modules/DirectorSkillsSelector";
 import {
@@ -31,6 +33,7 @@ type DirectorStatus = {
     kind: "idle" | "running" | "success" | "error";
     action?: DirectorAction;
     jobStatus?: string;
+    progress?: DirectorProfileProgress | null;
     message?: string;
 };
 
@@ -278,8 +281,8 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, h
         setBusy("analyze");
         setStatus({ kind: "running", action: "analyze", jobStatus: "queued" });
         try {
-            const profile = await api.analyzeDirectorProfile(currentProject.id, jobStatus => {
-                setStatus({ kind: "running", action: "analyze", jobStatus });
+            const profile = await api.analyzeDirectorProfile(currentProject.id, (jobStatus, progress) => {
+                setStatus({ kind: "running", action: "analyze", jobStatus, progress });
             }, creativeSkills.selected);
             applyAiResultToDraft(profile);
             setStatus({ kind: "success", action: "analyze", jobStatus: "completed" });
@@ -521,6 +524,9 @@ export default function DirectorProfilePanel({ mindMapOnly = false, onApplied, h
                     )}
                     <span className="min-w-0">
                         <span className="font-medium">{statusText}</span>
+                        {status.kind === "running" && status.progress && (
+                            <DirectorProfileGenerationProgress progress={status.progress} />
+                        )}
                         {status.kind === "running" && status.jobStatus && (
                             <span className="ml-2 text-text-secondary">
                                 {t(`directorStatus.jobState.${jobStateKey(status.jobStatus)}`)}

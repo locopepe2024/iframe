@@ -91,3 +91,22 @@ it("does not report a submit timeout as a model analysis failure", async () => {
         { timeout: 60000 },
     );
 });
+
+it("reports saved-step progress and waits for the whole profile", async () => {
+    const initial = { completed: 2, total: 4, stage: "story" };
+    const completed = { completed: 4, total: 4, stage: null };
+    vi.mocked(axios.post).mockResolvedValue({ data: {
+        id: "director-job", status: "running", progress: initial,
+        result: { source_audit: { failure_stage: "story" } },
+    } });
+    vi.mocked(axios.get).mockResolvedValue({ data: {
+        id: "director-job", status: "completed", progress: completed, result: { profile },
+    } });
+    const listener = vi.fn();
+    const pending = analyzeDirectorProfile("/api", "film", listener);
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toEqual(profile);
+    expect(listener).toHaveBeenCalledWith("running", initial);
+    expect(listener).toHaveBeenCalledWith("completed", completed);
+    expect(axios.get).toHaveBeenCalledTimes(1);
+});

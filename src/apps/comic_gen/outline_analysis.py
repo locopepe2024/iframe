@@ -50,12 +50,25 @@ class EpisodeBatch(BaseModel):
     suggestions: list[str] = Field(default_factory=list, max_length=100)
 
 
+class EpisodeBatchValidationError(RuntimeError):
+    """Bounded contract diagnostics, containing field paths and codes only."""
+
+    def __init__(self, issues: list[dict[str, str]]):
+        self.issues = issues[:12]
+        detail = '、'.join(f'{item["field"]}: {item["type"]}' for item in self.issues[:3])
+        super().__init__(f'分集规划格式或分集编号无效（{detail}），请重试本批次')
+
+
 def needs_chunked_analysis(text: str) -> bool:
     return len(text) > 4000 or sum(1 for _ in _EPISODE_ANCHOR.finditer(text)) > 4
 
 
 def _stage_failure(stage: str, exc: Exception) -> RuntimeError:
-    return RuntimeError(f'{stage}失败：{str(exc)[:160]}；已保存成功分段，重试会继续')
+    error = RuntimeError(f'{stage}失败：{str(exc)[:160]}；重试会复用已保存结果')
+    diagnostic = getattr(exc, 'llm_diagnostic', None)
+    if isinstance(diagnostic, dict):
+        error.llm_diagnostic = diagnostic
+    return error
 
 
 def source_blocks(text: str) -> list[dict[str, str]]:
@@ -103,10 +116,39 @@ def validate_episode_batch(value: dict, numbers: list[int]) -> list[dict]:
     try:
         result = EpisodeBatch.model_validate(value)
     except ValidationError as exc:
-        raise RuntimeError('分集规划格式或分集编号无效，请重新解析') from exc
+        # Pydantic's default message includes the user's screenplay input.
+        issues = [{'field': '.'.join(map(str, error['loc'])), 'type': error['type']}
+                  for error in exc.errors(include_input=False, include_context=False, include_url=False)]
+        raise EpisodeBatchValidationError(issues) from exc
     if [episode.number for episode in result.episodes] != numbers:
-        raise RuntimeError('分集编号与本批次不一致，请重新解析')
+        raise EpisodeBatchValidationError([{'field': 'episodes.number', 'type': 'episode_sequence'}])
+    for index, episode in enumerate(result.episodes):
+        for field in ('title', 'outline'):
+            if not getattr(episode, field).strip():
+                raise EpisodeBatchValidationError([{'field': f'episodes.{index}.{field}', 'type': 'string_blank'}])
     return [episode.model_dump() for episode in result.episodes]
+
+
+def _compile_episode_batch(llm: Any, system: str, data: dict, model: str | None,
+                           checkpoints: Checkpoints, name: str) -> tuple[dict, list[dict]]:
+    value = checkpoints.get(name) or _chat(llm, system, data, model)
+    try:
+        return value, validate_episode_batch(value, data['episode_numbers'])
+    except EpisodeBatchValidationError as exc:
+        logger.warning('Outline episode contract rejected: numbers=%s issues=%s',
+                       data['episode_numbers'], json.dumps(exc.issues))
+        # One bounded correction of this batch only. Never locally coerce fields,
+        # renumber episodes, or accept a partial plan. Transport/JSON errors are
+        # not contract failures and are left for the existing resumable retry.
+        repair_data = {**data, 'contract_errors': exc.issues}
+    value = _chat(llm, system + '\n上次本批次返回未通过字段校验。根据contract_errors和原文重新整理本批次，'
+                  '修正字段格式，保持episode_numbers中的集数与顺序，不能省略或新增集数。', repair_data, model)
+    try:
+        return value, validate_episode_batch(value, data['episode_numbers'])
+    except EpisodeBatchValidationError as exc:
+        logger.warning('Outline episode correction rejected: numbers=%s issues=%s',
+                       data['episode_numbers'], json.dumps(exc.issues))
+        raise
 
 
 class Checkpoints:
@@ -147,7 +189,8 @@ def _chat(llm: Any, system: str, data: dict, model: str | None) -> dict:
                 {'role': 'user', 'content': json.dumps(data, ensure_ascii=False)}]
     logger.info('Outline analysis stage=%s input_chars=%d', data['stage'], sum(len(m['content']) for m in messages))
     options = {'model': model} if model else {}
-    output = llm.chat(messages=messages, timeout_seconds=900, max_retries=1, stream=True, **options).strip()
+    output = llm.chat(messages=messages, response_format={'type': 'json_object'},
+                      timeout_seconds=900, max_retries=1, stream=True, **options).strip()
     try:
         return parse_model_json_object(output)
     except ValueError as exc:
@@ -258,7 +301,10 @@ def analyze_chunked_outline(llm: Any, text: str, *, model: str | None = None,
         '同一人物涉及两集时要分清归属，不能提前写后续集破局。未确定的信息留空，不发明事实。'
         '本批各集按episode_numbers顺序返回，不能缺集或多集。outline概括本集约200字，opening_state和ending_state各约80字。'
         '不确定的本集设定留空并写入missing_information，补充建议仅写入suggestions，不混入已知事实。'
-        'characters列出本集人物。target_word_count默认使用default_target_word_count，仅原文明确本集字数时覆盖，不按分钟换算。'
+        'title、outline、opening_state、ending_state、characters均为字符串，characters用一段文字列出本集人物，不能返回数组或对象。'
+        '未知的可选文本用空字符串，不能用null；title和outline不能为空。number必须使用episode_numbers中的整数编号。'
+        'missing_information和suggestions为字符串数组，无内容时返回[]。'
+        'target_word_count默认使用default_target_word_count，仅原文明确本集字数时覆盖，不按分钟换算。'
         '不返回source_excerpt，程序会保留引用的原文，不需要抄写原文对白。只返回符合schema的JSON：\n'
         + json.dumps(episode_schema, ensure_ascii=False)
     )
@@ -270,11 +316,10 @@ def analyze_chunked_outline(llm: Any, text: str, *, model: str | None = None,
         selected = numbers[start:start + 2]
         name = 'episodes-' + '-'.join(map(str, selected))
         try:
-            value = checkpoints.get(name) or _chat(llm, compile_system,
+            value, batch_episodes = _compile_episode_batch(llm, compile_system,
                 {'stage': 'compile_episodes', 'episode_numbers': selected,
                  'default_target_word_count': next(iter(word_counts), 2000),
-                 'episode_sources': [{'number': n, 'text': evidence[n]} for n in selected]}, model)
-            batch_episodes = validate_episode_batch(value, selected)
+                 'episode_sources': [{'number': n, 'text': evidence[n]} for n in selected]}, model, checkpoints, name)
             checkpoints.put(name, value)
             missing.extend(value.get("missing_information", []))
             suggestions.extend(value.get("suggestions", []))

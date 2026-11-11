@@ -95,7 +95,8 @@ def test_outline_reports_field_error_separately_from_numbering_error(caplog):
 
 
 @pytest.mark.parametrize('provider', ['greena', 'uniart'])
-def test_model_choice_is_owner_scoped_and_routes_all_writing_operations(client, monkeypatch, provider):
+@pytest.mark.parametrize('selected_model', ['deepseek-v4.1-flash', 'kimi-k3'])
+def test_model_choice_is_owner_scoped_and_routes_all_writing_operations(client, monkeypatch, provider, selected_model):
     from src.apps.comic_gen import api
     from src.apps import user_config
 
@@ -107,24 +108,24 @@ def test_model_choice_is_owner_scoped_and_routes_all_writing_operations(client, 
     calls = []
     monkeypatch.setattr(api.pipeline.script_processor.llm, 'chat', lambda **kwargs:
         calls.append(kwargs) or (json.dumps(plan()) if '规划助手' in kwargs['messages'][0]['content'] else '正文草稿'))
-    assert client.put('/script-writing/settings', json={'model': 'deepseek-v4.1-flash'}).json()['model'] == 'deepseek-v4.1-flash'
-    assert client.get('/script-writing/settings').json()['model'] == 'deepseek-v4.1-flash'
+    assert client.put('/script-writing/settings', json={'model': selected_model}).json()['model'] == selected_model
+    assert client.get('/script-writing/settings').json()['model'] == selected_model
     assert client.get('/script-writing/settings', headers={'Authorization': 'Bearer other'}).json()['model'] == 'llm-nf-all'
     assert client.put('/script-writing/settings', json={'model': 'deepseek-v4.1-flash-peak'}).status_code == 422
-    assert client.get('/script-writing/settings').json()['model'] == 'deepseek-v4.1-flash'
+    assert client.get('/script-writing/settings').json()['model'] == selected_model
 
     response = client.post(f'/script-documents/{root}/outline-analysis')
     assert response.status_code == 202 and len(response.json()['result']['draft']['episodes']) == 24
-    assert calls[-1]['model'] == f'{provider}/deepseek-v4.1-flash'
+    assert calls[-1]['model'] == f'{provider}/{selected_model}'
     payload = {'script_document_id': child, 'mode': 'expand_outline', 'source_text': '客户端文本'}
     assert client.post('/script-writing/generate', json=payload).status_code == 202
-    assert calls[-1]['model'] == f'{provider}/deepseek-v4.1-flash'
+    assert calls[-1]['model'] == f'{provider}/{selected_model}'
     client.put(f'/script-documents/{child}', json={'content': content('已保存正文')})
     response = client.post('/script-writing/generate', json={**payload, 'mode': 'continue', 'model': 'llm-nf-all'})
     assert response.status_code == 202 and response.json()['result']['mode'] == 'continue'
     assert calls[-1]['model'] == f'{provider}/llm-nf-all'
     assert calls[-1]['stream'] is True
-    assert client.get('/script-writing/settings').json()['model'] == 'deepseek-v4.1-flash'
+    assert client.get('/script-writing/settings').json()['model'] == selected_model
     assert api.pipeline.script_processor.llm.default_model == original_default
 
 
@@ -319,7 +320,7 @@ def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_k
         model = processor.llm.chat([{'role': 'user', 'content': 'test'}], model=kwargs.get('model'))
         assert model == studio_script_model().split('/', 1)[1]
         return {'model': model, 'source_cache': processor._director_source_cache_key('source')}
-    engine.preview_director_profile = lambda *args, **kwargs: generate()
+    engine.preview_director_profile_with_audit = lambda *args, **kwargs: {"profile": generate(), "source_audit": {}}
     engine.preview_storyboard_analysis = lambda *args, **kwargs: generate(**kwargs)
     monkeypatch.setattr(api, 'pipeline', engine)
     pending = []
@@ -330,7 +331,7 @@ def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_k
     monkeypatch.setattr(api.extraction_jobs, 'start', queue)
     paths = ['/projects/project/director-profile-jobs', '/projects/project/storyboard-analysis-jobs']
     fingerprints = []
-    for model in ['deepseek-v4.1-flash', 'llm-nf-all']:
+    for model in ['deepseek-v4.1-flash', 'llm-nf-all', 'kimi-k3']:
         assert client.put('/script-writing/settings', json={'model': model}).status_code == 200
         for path in paths:
             response = client.post(path, json={'text': 'source'} if 'storyboard' in path else {})
@@ -338,14 +339,17 @@ def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_k
             fingerprints.append(pending[-1][0])
     assert fingerprints[0] != fingerprints[2]
     assert fingerprints[1] != fingerprints[3]
-    # The preference is now LLM; both earlier queued operations still use DeepSeek.
+    # The preference is now Kimi; earlier queued operations keep their models.
     results = [work() for _, work in pending]
     assert results[0]['profile']['model'] == 'deepseek-v4.1-flash'
     assert results[1]['frames']['model'] == 'deepseek-v4.1-flash'
     assert results[2]['profile']['model'] == 'llm-nf-all'
     assert results[3]['frames']['model'] == 'llm-nf-all'
     assert results[0]['profile']['source_cache'] != results[2]['profile']['source_cache']
-    assert calls == [{'gateway': provider}] * 4
+    assert results[4]['profile']['model'] == 'kimi-k3'
+    assert results[5]['frames']['model'] == 'kimi-k3'
+    assert len(set(fingerprints)) == 6
+    assert calls == [{'gateway': provider}] * 6
     assert source.prompt_config.polish_model == ''
     assert processor.llm.default_model is None
 

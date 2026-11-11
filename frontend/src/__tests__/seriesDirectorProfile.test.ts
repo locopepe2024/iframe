@@ -41,3 +41,17 @@ it("does not discard a profile when the worker exposes it before terminal status
   await expect(analyzeSeriesDirectorProfile("/api", "series-1")).resolves.toEqual({ profile });
   expect(axios.get).not.toHaveBeenCalled();
 });
+
+it("reports resumed series progress until a complete profile is available", async () => {
+  const progress = { completed: 2, total: 4, stage: "story" };
+  vi.mocked(axios.post).mockResolvedValue({ data: { id: "series-job", status: "running", progress } });
+  vi.mocked(axios.get).mockResolvedValue({ data: {
+    id: "series-job", status: "completed", progress: { completed: 4, total: 4, stage: null },
+    result: { profile: { setting: {} } },
+  } });
+  const listener = vi.fn();
+  const pending = analyzeSeriesDirectorProfile("/api", "series-1", listener);
+  await vi.runAllTimersAsync();
+  await expect(pending).resolves.toEqual({ profile: { setting: {} } });
+  expect(listener).toHaveBeenCalledWith("running", progress);
+});

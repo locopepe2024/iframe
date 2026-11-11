@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { BrainCircuit, Check, Loader2, Save, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
+import type { DirectorProfileProgress } from "@/lib/directorProfile";
+import DirectorProfileGenerationProgress from "@/components/modules/DirectorProfileGenerationProgress";
 import { api } from "@/lib/api";
 import { useDirectorSkills } from "@/lib/directorSkills";
 import DirectorSkillsSelector from "@/components/modules/DirectorSkillsSelector";
@@ -53,6 +55,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
   const [styleReviewRequired, setStyleReviewRequired] = useState(false);
   const [busy, setBusy] = useState<"analyze" | "save" | "saveContext" | "confirm" | null>(null);
   const [error, setError] = useState("");
+  const [progress, setProgress] = useState<DirectorProfileProgress | null>(null);
   const dirty = draftText !== savedText;
 
   const load = async () => {
@@ -72,9 +75,9 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
 
   const analyze = async () => {
         if (!creativeSkills.canRun) return;
-    setBusy("analyze"); setError("");
+    setBusy("analyze"); setError(""); setProgress(null);
     try {
-      const result = await api.analyzeSeriesDirectorProfile(seriesId, undefined, creativeSkills.selected);
+      const result = await api.analyzeSeriesDirectorProfile(seriesId, (_status, nextProgress) => setProgress(nextProgress ?? null), creativeSkills.selected);
       setProfile(result.profile as unknown as DirectorProfile);
       setHasDraft(true);
       const text = JSON.stringify(result.profile, null, 2);
@@ -117,6 +120,7 @@ export default function SeriesDirectorProfilePanel({ seriesId, onSaved }: { seri
       <WorkflowActionButton variant="secondary" leftIcon={<RotateCcw />} loading={busy === "analyze"} disabled={busy !== null || !creativeSkills.canRun} onClick={analyze}>{t("seriesDirectorAnalyze")}</WorkflowActionButton>
     </header>
     <div className="px-8 pt-3"><DirectorSkillsSelector state={creativeSkills} disabled={busy !== null} /></div>
+    {busy === "analyze" && progress && <div role="status" aria-live="polite" className="mx-8 mt-4 text-xs"><DirectorProfileGenerationProgress progress={progress} /></div>}
     {error && <p role="alert" className="mx-8 mt-4 rounded border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{error}</p>}
     {styleReviewRequired && <p role="status" className="mx-8 mt-4 rounded border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-100">{t("seriesDirectorStyleReview")}</p>}
     <div className="min-h-0 flex-1 overflow-y-auto p-8">

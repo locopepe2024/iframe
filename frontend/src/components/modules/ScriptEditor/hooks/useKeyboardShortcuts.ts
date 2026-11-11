@@ -12,16 +12,16 @@ import { useEditorStore } from '@/store/editorStore';
  * - Cmd+Enter (Keymap extension)
  * - Cmd+Z/Cmd+Shift+Z (Tiptap History)
  * - Enter (Keymap extension)
+ * - Cmd+/: 插入批注 (Note extension，仅编辑正文时)
  *
  * 本 Hook 新增注册：
  * - Cmd+Shift+E: 切换场景折叠/展开（Phase 1.4 实现，此处占位 console.log）
  * - Cmd+Shift+F: 聚焦到左侧栏搜索面板（dispatch 自定义事件）
- * - Cmd+/: 显示/隐藏快捷键帮助面板
+ * - Cmd+Shift+/: 显示/隐藏快捷键帮助面板
  * - Cmd+B: 加粗切换
  * - Cmd+I: 斜体切换
  * - Cmd+D: 插入 DualDialogue 结构
  * - Escape: 退出 focus 模式（如果在 focus 模式中）
- * - Cmd+?: 打开快捷键帮助面板（备用）
  */
 export function useKeyboardShortcuts(editor: Editor | null) {
   const [showShortcutHelp, setShowShortcutHelp] = useState(false);
@@ -41,6 +41,7 @@ export function useKeyboardShortcuts(editor: Editor | null) {
     if (!editor) return;
 
     const handler = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
       const mod = e.metaKey || e.ctrlKey;
 
       // Cmd+Shift+E: 切换场景折叠/展开
@@ -54,13 +55,6 @@ export function useKeyboardShortcuts(editor: Editor | null) {
       if (mod && e.shiftKey && e.key === 'F') {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('script-editor:focus-search'));
-        return;
-      }
-
-      // Cmd+/: 显示/隐藏快捷键帮助面板
-      if (mod && !e.shiftKey && e.key === '/') {
-        e.preventDefault();
-        toggleShortcutHelp();
         return;
       }
 
@@ -125,7 +119,7 @@ export function useKeyboardShortcuts(editor: Editor | null) {
       }
 
       // Cmd+? (Cmd+Shift+/): 打开快捷键帮助面板
-      if (mod && e.shiftKey && e.key === '?') {
+      if (mod && e.shiftKey && (e.key === '?' || e.key === '/')) {
         e.preventDefault();
         toggleShortcutHelp();
         return;

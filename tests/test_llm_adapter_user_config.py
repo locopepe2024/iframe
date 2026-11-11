@@ -335,3 +335,43 @@ def test_real_sdk_stream_error_stays_failed_and_records_boundary(text, caplog):
     assert 'max_tokens' not in sent and 'max_completion_tokens' not in sent
     assert 'PRIVATE_SCREENPLAY' not in caplog.text
     assert 'failed before close' in caplog.text
+
+
+@pytest.mark.parametrize('stream', [True, False])
+@pytest.mark.parametrize('finish_reason,label', [('content_filter', '拒绝处理'), ('sensitive', '拒绝处理'), ('length', '长度上限')])
+def test_model_termination_rejects_even_parseable_json_without_retry(stream, finish_reason, label, caplog, monkeypatch):
+    import httpx
+    import json
+    from openai import OpenAI
+
+    requests = []
+    body = '{"private_model_prose":"not a valid completed response"}'
+
+    def receive(request):
+        requests.append(json.loads(request.content))
+        common = {'id': 'test', 'created': 0, 'model': 'test-model'}
+        if stream:
+            chunks = [dict(common, object='chat.completion.chunk', choices=[{
+                'index': 0, 'delta': {'content': body}, 'finish_reason': None}]),
+                dict(common, object='chat.completion.chunk', choices=[{
+                    'index': 0, 'delta': {}, 'finish_reason': finish_reason}])]
+            wire = ''.join('data: ' + json.dumps(chunk) + '\n\n' for chunk in chunks) + 'data: [DONE]\n\n'
+            return httpx.Response(200, content=wire, headers={
+                'content-type': 'text/event-stream', 'x-request-id': 'termination-request'})
+        return httpx.Response(200, json=dict(common, object='chat.completion', choices=[{
+            'index': 0, 'message': {'role': 'assistant', 'content': body}, 'finish_reason': finish_reason}]),
+            headers={'x-request-id': 'termination-request'})
+
+    monkeypatch.setenv('LLM_PROVIDER', 'openai')
+    with OpenAI(api_key='test', base_url='https://example.test/v1',
+                http_client=httpx.Client(transport=httpx.MockTransport(receive))) as client:
+        adapter = LLMAdapter()
+        monkeypatch.setattr(adapter, '_get_client', lambda **_: client)
+        with pytest.raises(RuntimeError, match=label) as caught:
+            adapter.chat([{'role': 'user', 'content': 'PRIVATE_SCREENPLAY'}],
+                         model='test-model', response_format={'type': 'json_object'}, stream=stream)
+    assert len(requests) == 1
+    assert caught.value.llm_diagnostic['finish_reason'] == finish_reason
+    assert caught.value.llm_diagnostic['text_chars'] == len(body)
+    assert 'private_model_prose' not in str(caught.value)
+    assert 'private_model_prose' not in caplog.text and 'PRIVATE_SCREENPLAY' not in caplog.text

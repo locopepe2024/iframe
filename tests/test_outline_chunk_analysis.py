@@ -10,6 +10,33 @@ def response(value):
     return json.dumps(value, ensure_ascii=False)
 
 
+def test_model_rejection_is_not_json_failure_and_never_commits_checkpoint(tmp_path, monkeypatch):
+    from src.apps.comic_gen.llm_adapter import LLMAdapter
+    from unittest.mock import Mock
+
+    finish = SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='拒绝文本'),
+                                                     finish_reason='content_filter')])
+    wire = Mock()
+    wire.__iter__ = Mock(return_value=iter([finish]))
+    wire.close = Mock()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=Mock(return_value=wire))))
+    adapter = LLMAdapter()
+    monkeypatch.setattr(adapter, '_get_client', lambda **_: client)
+    parser = Mock(side_effect=AssertionError('Rejected output must not be parsed'))
+    monkeypatch.setattr(analysis, 'parse_model_json_object', parser)
+    with pytest.raises(RuntimeError, match='content_filter') as caught:
+        analysis.analyze_chunked_outline(adapter, '共2集。第1集 开始，第2集 结束。',
+                                         model='greena/deepseek-v4.1-flash', cache_dir=tmp_path)
+    assert 'JSON' not in str(caught.value)
+    assert '已保存成功分段' not in str(caught.value)
+    assert caught.value.llm_diagnostic['finish_reason'] == 'content_filter'
+    parser.assert_not_called()
+    assert not list(tmp_path.rglob('*.json'))
+    assert client.chat.completions.create.call_count == 1
+    assert client.chat.completions.create.call_args.kwargs['response_format'] == {'type': 'json_object'}
+    wire.close.assert_called_once()
+
+
 def test_source_blocks_keep_all_text_and_bound_each_request():
     text = '世界观：' + '梦境。' * 2400 + '\n第1集 起点\n台词：“别走。”\n第2集 破局\n她交出项链。'
     blocks = analysis.source_blocks(text)
@@ -138,3 +165,86 @@ def test_character_range_heading_stays_with_its_name():
     blocks = analysis.source_blocks(text)
     assert blocks[0]['text'] == '纲手（第1—2集）｜赌局牢笼\n'
     assert ''.join(b['text'] for b in blocks) == text
+
+
+def test_episode_validation_identifies_field_without_logging_screenplay(caplog):
+    value = {'episodes': [{'number': 5, 'title': '标题', 'outline': '事件',
+                           'characters': ['不应进入日志的角色原文']}]}
+    with pytest.raises(RuntimeError, match=r'episodes\.0\.characters.*string_type'):
+        analysis.validate_episode_batch(value, [5])
+    assert '不应进入日志的角色原文' not in caplog.text
+
+
+@pytest.mark.parametrize('invalid_field', ['characters', 'opening_state', 'number', 'blank_outline'])
+@pytest.mark.parametrize('invalid_count', [1, 2])
+def test_episode_contract_repair_is_bounded_and_resumable(tmp_path, caplog, invalid_field, invalid_count):
+    text = '共6集。\n' + '\n'.join(f'第{n}集 标题{n}：本集专属素材{n}。' for n in range(1, 7))
+    calls = []
+    invalid_responses = [invalid_count]
+
+    def chat(**kw):
+        import re
+        data = json.loads(kw['messages'][1]['content'])
+        calls.append(data)
+        assert kw['model'] == 'greena/deepseek-v4.1-flash'
+        assert kw['stream'] is True and kw['timeout_seconds'] == 900
+        if data['stage'] == 'map_source':
+            return response({'episodes': [
+                {'number': n, 'source_refs': [b['id'] for b in data['source_blocks']
+                                             if f'第{n}集' in b['text']]}
+                for n in range(1, 7)],
+                'ignored_refs': [b['id'] for b in data['source_blocks']
+                                 if not re.search(r'第\d+集', b['text'])]})
+        numbers = data['episode_numbers']
+        value = {'episodes': [{'number': n, 'title': f'标题{n}', 'outline': f'事件{n}'} for n in numbers]}
+        if numbers == [5, 6]:
+            assert [s['text'] for s in data['episode_sources']] == [
+                '第5集 标题5：本集专属素材5。\n', '第6集 标题6：本集专属素材6。']
+            assert sum(len(s['text']) for s in data['episode_sources']) <= analysis.EPISODE_BATCH_CHARS
+            assert '本集专属素材1' not in kw['messages'][1]['content']
+            if 'contract_errors' in data:
+                assert all(set(e) == {'field', 'type'} for e in data['contract_errors'])
+                assert '不应进入日志的角色原文' not in kw['messages'][1]['content']
+            if invalid_responses[0]:
+                invalid_responses[0] -= 1
+                field, bad = {
+                    'characters': ('characters', ['不应进入日志的角色原文']),
+                    'opening_state': ('opening_state', None),
+                    'number': ('number', 1),
+                    'blank_outline': ('outline', '   '),
+                }[invalid_field]
+                value['episodes'][0][field] = bad
+        return response(value)
+
+    llm = SimpleNamespace(chat=chat)
+    if invalid_count == 2:
+        with pytest.raises(RuntimeError, match='第 5.*6.*已保存'):
+            analysis.analyze_chunked_outline(llm, text, model='greena/deepseek-v4.1-flash', cache_dir=tmp_path)
+    else:
+        result = analysis.analyze_chunked_outline(llm, text, model='greena/deepseek-v4.1-flash', cache_dir=tmp_path)
+    assert [c['episode_numbers'] for c in calls if c['stage'] == 'compile_episodes'] == [[1, 2], [3, 4], [5, 6], [5, 6]]
+    result = analysis.analyze_chunked_outline(llm, text, model='greena/deepseek-v4.1-flash', cache_dir=tmp_path)
+    assert [e['number'] for e in result['draft']['episodes']] == list(range(1, 7))
+    assert result['draft']['episodes'][4]['source_excerpt'] == '第5集 标题5：本集专属素材5。\n'
+    assert [c['episode_numbers'] for c in calls if c['stage'] == 'compile_episodes'] == [[1, 2], [3, 4], [5, 6], [5, 6]] + ([[5, 6]] if invalid_count == 2 else [])
+    assert '不应进入日志的角色原文' not in caplog.text
+    prior_calls = len(calls)
+    assert analysis.analyze_chunked_outline(llm, text, model='greena/deepseek-v4.1-flash', cache_dir=tmp_path) == result
+    assert len(calls) == prior_calls
+
+
+@pytest.mark.parametrize('failure', [RuntimeError('upstream error'), '{"episodes": ['])
+def test_contract_correction_does_not_retry_transport_or_truncated_json(failure):
+    calls = []
+
+    def chat(**kw):
+        calls.append(kw)
+        if isinstance(failure, Exception):
+            raise failure
+        return failure
+
+    with pytest.raises(RuntimeError):
+        analysis._compile_episode_batch(SimpleNamespace(chat=chat), 'schema',
+            {'stage': 'compile_episodes', 'episode_numbers': [5, 6]}, None,
+            analysis.Checkpoints(None, 'source', None), 'episodes-5-6')
+    assert len(calls) == 1

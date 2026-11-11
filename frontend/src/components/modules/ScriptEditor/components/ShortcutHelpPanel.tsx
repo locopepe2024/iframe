@@ -28,6 +28,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Enter', descKey: 'shortcuts.createNextNode' },
       { keys: '⌘+Enter', descKey: 'shortcuts.newScene' },
       { keys: '⌘+D', descKey: 'shortcuts.dualDialogue' },
+      { keys: '⌘+/', descKey: 'shortcuts.insertNote' },
       { keys: '@', descKey: 'shortcuts.mentionCharacter' },
     ],
   },
@@ -50,7 +51,7 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
     titleKey: 'shortcuts.groupView',
     items: [
       { keys: '⌘+S', descKey: 'shortcuts.save' },
-      { keys: '⌘+/', descKey: 'shortcuts.showHelp' },
+      { keys: '⌘+Shift+/', descKey: 'shortcuts.showHelp' },
     ],
   },
 ];

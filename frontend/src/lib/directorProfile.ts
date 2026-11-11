@@ -18,9 +18,15 @@ interface DirectorProfileJob {
     status: string;
     result: { profile: DirectorProfileDraft } | null;
     error?: string;
+    progress?: DirectorProfileProgress | null;
 }
 
-export type DirectorProfileJobStatusListener = (status: string) => void;
+export interface DirectorProfileProgress {
+    completed: number;
+    total: number;
+    stage?: "source" | "foundation" | "story" | "continuity" | null;
+}
+export type DirectorProfileJobStatusListener = (status: string, progress?: DirectorProfileProgress | null) => void;
 
 const pause = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 // Creating a Director job must return a durable job id (202) before model
@@ -69,7 +75,7 @@ async function runJob(
     let job = response.data;
     let failures = 0;
     if (!job?.id) throw new Error("Invalid director analysis task response");
-    onStatus?.(job.status);
+    onStatus?.(job.status, job.progress);
     // A worker can persist the result just before its status update becomes
     // visible to the polling request. The result is the durable completion
     // signal, so stop waiting as soon as it is present.
@@ -82,7 +88,7 @@ async function runJob(
             )).data;
             if (!next || next.id !== job.id) throw new Error("Invalid director analysis task response");
             job = next;
-            onStatus?.(job.status);
+            onStatus?.(job.status, job.progress);
             failures = 0;
         } catch (error) {
             if (!transient(error) || ++failures >= 5) {

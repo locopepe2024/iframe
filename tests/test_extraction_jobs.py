@@ -128,7 +128,60 @@ def test_shooting_plan_unknown_failure_does_not_expose_exception_text(tmp_path):
         done = wait_done(store, job)
         assert done['status'] == 'failed'
         assert 'private screenplay' not in done['error']
-        assert '导演拍摄计划分析失败' in done['error']
+        assert '导演拍摄计划生成失败' in done['error']
+
+
+def test_shooting_contract_diagnostics_survive_owner_scoped_job_failure(tmp_path):
+    store = ExtractionJobs(tmp_path / 'jobs.db')
+    diagnostic = {'scope': 'shots', 'attempts': 2, 'response_chars': 100,
+                  'issues': ['shots.2.visual_intensity: 存在未知字段', 'shots.1.duration_seconds: int_type']}
+    def fail():
+        error = DirectorShootingChunkError('contract_violation', diagnostic['issues'][0])
+        error.shooting_contract_diagnostic = diagnostic
+        raise error
+    done = wait_done(store, store.start('owner', 'project', 'director_shooting_plan:diagnostics', fail))
+    assert done['result']['contract_diagnostic'] == diagnostic
+    with pytest.raises(HTTPException):
+        store.get('other', 'project', done['id'])
+
+
+def test_shooting_finalization_failure_reports_saved_generation_without_inventing_unfinished_steps(tmp_path):
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        store = ExtractionJobs(tmp_path / 'jobs.db', executor=executor)
+        def fail(job_id):
+            store.save_batch('owner', 'project', 'director_shooting_plan:finalize', job_id, 0, 'source', {
+                'checkpoint': {'structure': {'scenes': [{'beats': [{}]}]}, 'details': {'0:0': {}}}})
+            error = ValueError('private screenplay and provider token')
+            error.shooting_plan_failure = {'stage': 'finalize'}
+            raise error
+        job = store.start('owner', 'project', 'director_shooting_plan:finalize', fail,
+                          pass_job_id=True, total_batches=1)
+        done = wait_done(store, job)
+        assert done['progress'] == {'completed': 2, 'total': 2}
+        assert '汇总校验失败' in done['error']
+        assert '已保存 2/2 个生成步骤' in done['error']
+        assert '重试将复用有效结果并重新校验汇总' in done['error']
+        assert '继续未完成' not in done['error']
+        assert 'private' not in done['error']
+        assert done['result']['failure_stage'] == {'stage': 'finalize'}
+
+
+@pytest.mark.parametrize('finish_reason', ['content_filter', 'sensitive', 'length'])
+def test_shooting_model_termination_is_not_labeled_stream_interruption(tmp_path, finish_reason):
+    from src.apps.comic_gen.llm_adapter import LLMResponseTerminationError
+    store = ExtractionJobs(tmp_path / 'jobs.db')
+
+    def fail():
+        exc = LLMResponseTerminationError(finish_reason)
+        exc.llm_diagnostic = {'finish_reason': finish_reason, 'stream': True, 'text_chars': 42}
+        raise exc
+
+    done = wait_done(store, store.start('owner', 'project', 'director_shooting_plan:termination', fail))
+    assert done['status'] == 'failed'
+    assert finish_reason in done['error']
+    assert '流式响应中断' not in done['error']
+    assert '尚无已完成步骤' in done['error']
+    assert done['result']['provider_response']['finish_reason'] == finish_reason
 
 
 def test_interrupted_job_is_failed_and_can_be_retried_after_restart(tmp_path):

@@ -3691,7 +3691,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             return series.director_profile_revisions[-1].profile
         return series.art_direction.director_profile if series.art_direction else None
 
-    def preview_series_director_profile(self, series_id: str, *, skill_snapshot=None) -> Dict[str, Any]:
+    def series_director_analysis_context(self, series_id: str):
         series = self.series_store.get(series_id)
         if not series:
             raise ValueError("Series not found")
@@ -3714,13 +3714,35 @@ class ComicGenPipeline(StudioOwnerMixin):
                     entities[kind].append({field: getattr(item, field, None) for field in fields})
                     known.add(item.id)
         entities["scope"] = "series"
+        style = series.art_direction.style_config if series.art_direction else {}
+        return series, episodes, source, entities, style
+
+    def preview_series_director_profile(self, series_id: str, *, skill_snapshot=None, stage_cache=None, save_step=None) -> Dict[str, Any]:
+        series, episodes, source, entities, style = self.series_director_analysis_context(series_id)
         if skill_snapshot:
             entities["selected_creative_methods"] = skill_snapshot
-        style = series.art_direction.style_config if series.art_direction else {}
         try:
-            analyzed = self.script_processor.analyze_director_profile_with_audit(
-                source, entities, style, "auto"
-            )
+            if stage_cache is not None:
+                from .director_profile_stages import analyze_in_stages
+                def validate_stage(draft):
+                    normalized = normalize_director_profile_draft(draft)
+                    if isinstance(normalized.get("story_map"), dict):
+                        # Series has no Episode ledger. Bind a transient global
+                        # source identity for structural validation, then omit
+                        # the map from the final Series handoff as before.
+                        normalized["story_map"].update(
+                            source_revision=1, source_revision_id="series-source:" + hashlib.sha256(source.encode()).hexdigest(),
+                            people=self._director_story_people(entities["characters"]))
+                    validated = DirectorProfile(**normalized)
+                    if validated.story_map is not None:
+                        normalized["story_map"] = validated.story_map.model_dump()
+                    return normalized
+                analyzed = analyze_in_stages(
+                    self.script_processor, source, entities, style, cached=stage_cache,
+                    save_step=save_step, validate_profile=validate_stage)
+            else:
+                analyzed = self.script_processor.analyze_director_profile_with_audit(
+                    source, entities, style, "auto")
         except Exception as exc:
             audit = getattr(exc, "director_audit", None)
             if not isinstance(audit, dict):
@@ -4257,14 +4279,28 @@ class ComicGenPipeline(StudioOwnerMixin):
         self._last_director_analysis_audit = analyzed.get("source_audit", {})
         return analyzed["profile"]
 
-    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto", *, skill_snapshot=None) -> Dict[str, Any]:
+    def preview_director_profile_with_audit(self, script_id: str, source_mode: str = "auto", *, skill_snapshot=None, stage_cache=None, save_step=None) -> Dict[str, Any]:
         script, entities, style = self.director_analysis_context(script_id)
         if skill_snapshot:
             entities["selected_creative_methods"] = skill_snapshot
         source_audit = {}
         analyzer = getattr(self.script_processor, "analyze_director_profile_with_audit", None)
         try:
-            if callable(analyzer):
+            if stage_cache is not None:
+                from .director_profile_stages import analyze_in_stages
+                def validate_stage(draft):
+                    normalized = normalize_director_profile_draft(draft)
+                    self._bind_director_story_map(script, entities, normalized)
+                    validated = DirectorProfile(**normalized)
+                    self._validate_director_story_map(script, normalized.get("story_map"))
+                    if validated.story_map is not None:
+                        normalized["story_map"] = validated.story_map.model_dump()
+                    return normalized
+                analyzed = analyze_in_stages(
+                    self.script_processor, script.original_text, entities, style, source_mode=source_mode,
+                    cached=stage_cache, save_step=save_step, validate_profile=validate_stage)
+                draft, source_audit = analyzed["profile"], analyzed["source_audit"]
+            elif callable(analyzer):
                 analyzed = analyzer(script.original_text, entities, style, source_mode)
                 if isinstance(analyzed, dict) and isinstance(analyzed.get("profile"), dict):
                     draft = analyzed["profile"]
@@ -4862,6 +4898,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         cached = load_batches() if load_batches else {}
         scenes: List[Dict[str, Any]] = []
         unresolved_questions: List[str] = []
+        from .shooting_plan_stages import shooting_event_reference_error
         for index, chunk in enumerate(chunks):
             if self.director_shooting_plan_lineage(script_id) != lineage:
                 raise ValueError("Shooting plan inputs changed during generation")
@@ -4874,6 +4911,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 # from this implementation have shipped.
                 cached_result = prior["result"]
             else:
+                cached_result = None
+            if cached_result is not None and (
+                    ScriptProcessor._validate_director_shooting_chunk(cached_result)
+                    or shooting_event_reference_error(cached_result, director_execution_payload(profile))):
+                # Re-enter its durable checkpoint so only invalid beat details
+                # are regenerated; a cached envelope is not proof of admission.
                 cached_result = None
             if prior and prior.get("source_ref") == chunk["source_ref"] and cached_result is not None:
                 chunk_result = cached_result
@@ -4910,6 +4953,15 @@ class ComicGenPipeline(StudioOwnerMixin):
                     }
                 if skill_snapshot:
                     entities["selected_creative_methods"] = skill_snapshot
+                checkpoint = cached_payload.get('checkpoint') if isinstance(cached_payload, dict) else None
+
+                def save_checkpoint(value):
+                    nonlocal checkpoint
+                    if self.director_shooting_plan_lineage(script_id) != lineage:
+                        raise ValueError('Shooting plan inputs changed during generation')
+                    checkpoint = value
+                    return not save_batch or save_batch(index, chunk['source_ref'], {'checkpoint': value})
+
                 try:
                     chunk_result = self.script_processor.plan_director_shooting_chunk(
                         chunk["text"],
@@ -4919,24 +4971,43 @@ class ComicGenPipeline(StudioOwnerMixin):
                         previous_scene,
                         source_ref=chunk["source_ref"],
                         **({"model": model} if model else {}),
+                        checkpoint=checkpoint,
+                        save_checkpoint=save_checkpoint,
                     )
                 except DirectorShootingChunkError as exc:
-                    raise DirectorShootingChunkError(
-                        exc.category, f"第 {index + 1}/{len(chunks)} 段：{exc.public_reason}"
-                    ) from exc
+                    stage = getattr(exc, 'shooting_plan_failure', {})
+                    location = f"，场景 {stage['scene']} 节拍 {stage['beat']}" if stage.get('scene') else ''
+                    error = DirectorShootingChunkError(
+                        exc.category, f"第 {index + 1}/{len(chunks)} 段{location}：{exc.public_reason}"
+                    )
+                    if hasattr(exc, 'shooting_contract_diagnostic'):
+                        error.shooting_contract_diagnostic = exc.shooting_contract_diagnostic
+                    error.shooting_plan_failure = {**getattr(exc, 'shooting_plan_failure', {}),
+                                                   'chunk': index + 1, 'chunks': len(chunks)}
+                    raise error from exc
+                except Exception as exc:
+                    exc.shooting_plan_failure = {**getattr(exc, 'shooting_plan_failure', {}),
+                                                 'chunk': index + 1, 'chunks': len(chunks)}
+                    raise
                 chunk_error = ScriptProcessor._validate_director_shooting_chunk(chunk_result)
                 if chunk_error:
-                    raise RuntimeError(
-                        f"拍摄计划分析第 {index + 1}/{len(chunks)} 段未通过镜头契约校验：{chunk_error}"
+                    error = DirectorShootingChunkError(
+                        'aggregate_contract',
+                        f"第 {index + 1}/{len(chunks)} 段汇总未通过校验：{chunk_error}"
                     )
-                if save_batch and not save_batch(index, chunk["source_ref"], {"result": chunk_result}):
+                    error.shooting_plan_failure = {'stage': 'finalize', 'chunk': index + 1, 'chunks': len(chunks)}
+                    raise error
+                batch_result = {'result': chunk_result}
+                if checkpoint:
+                    batch_result['checkpoint'] = checkpoint
+                if save_batch and not save_batch(index, chunk["source_ref"], batch_result):
                     raise RuntimeError("拍摄计划任务已过期，请重试。")
             if ScriptProcessor._validate_director_shooting_chunk(chunk_result):
                 raise RuntimeError(f"拍摄计划缓存段 {index + 1}/{len(chunks)} 已不符合当前镜头契约，请重新生成。")
 
             chunk_questions = chunk_result.get("unresolved_questions", [])
             if isinstance(chunk_questions, list):
-                unresolved_questions.extend(str(item)[:500] for item in chunk_questions[:20] if str(item).strip())
+                unresolved_questions.extend(str(item)[:500] for item in chunk_questions if str(item).strip())
             raw_scenes = chunk_result.get("scenes", [])
             if not raw_scenes:
                 raise RuntimeError(f"拍摄计划分析第 {index + 1}/{len(chunks)} 段没有返回场景。")
@@ -5135,17 +5206,21 @@ class ComicGenPipeline(StudioOwnerMixin):
                 for shot in beat["shots"]:
                     if not shot["lighting_override_selected"] or not shot["lighting_override_reason"].strip():
                         shot["lighting"] = {}
-        plan = DirectorShootingPlan(
-            **lineage,
-            creative_skill_run=director_skill_provenance(skill_snapshot or []),
-            scenes=scenes,
-            lighting_baselines=lighting_baselines,
-            unresolved_questions=list(dict.fromkeys(unresolved_questions))[:80],
-            generated_at=time.time(),
-        )
-        return self.normalize_director_shooting_plan_lighting(
-            self._validate_director_shooting_plan(script, plan)
-        )
+        try:
+            plan = DirectorShootingPlan(
+                **lineage,
+                creative_skill_run=director_skill_provenance(skill_snapshot or []),
+                scenes=scenes,
+                lighting_baselines=lighting_baselines,
+                unresolved_questions=list(dict.fromkeys(unresolved_questions))[:80],
+                generated_at=time.time(),
+            )
+            return self.normalize_director_shooting_plan_lighting(
+                self._validate_director_shooting_plan(script, plan)
+            )
+        except Exception as exc:
+            exc.shooting_plan_failure = {'stage': 'finalize'}
+            raise
 
     @staticmethod
     def normalize_director_shooting_plan_lighting(value: Any) -> DirectorShootingPlan:

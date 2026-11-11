@@ -303,6 +303,53 @@ def test_director_preview_normalizes_structured_text_fields_without_losing_conte
     DirectorProfile(**result)
 
 
+@pytest.mark.parametrize("normalize", [normalize_director_profile_draft, normalize_director_profile_patch])
+@pytest.mark.parametrize("sample", [
+    {"Opening": "开场", "Core_Action": "主要动作", "Transition": "转场", "Climax": "高潮"},
+    {"seconds": "0-8", "scene": "21", "purpose": "离校"},
+    {"scene": {"summary": "离校", "cues": ["雨声", "停顿"]}},
+    {},
+])
+def test_sample_plan_single_object_normalizes_losslessly_at_shared_boundaries(normalize, sample):
+    original = json.dumps(sample, ensure_ascii=False)
+    normalized = normalize({"sample_plan": sample})
+    assert normalized["sample_plan"] == [sample]
+    assert json.dumps(sample, ensure_ascii=False) == original
+    DirectorProfile(**normalized)
+    assert normalize(normalized) == normalized
+
+
+@pytest.mark.parametrize("normalize", [normalize_director_profile_draft, normalize_director_profile_patch])
+def test_sample_plan_normalization_preserves_arrays_and_rejects_scalar_containers(normalize):
+    sample = [{"seconds": "0-8", "purpose": "离校"}, {"purpose": "回望"}]
+    assert normalize({"sample_plan": sample})["sample_plan"] == sample
+    assert normalize({"sample_plan": None})["sample_plan"] == []
+    assert "sample_plan" not in normalize({})
+    for bad in ("not a sample plan object", 42, False):
+        with pytest.raises(ValueError, match="sample_plan"):
+            DirectorProfile(**normalize({"sample_plan": bad}))
+    # This exception is specific to a free-form sample plan, not a blanket
+    # conversion of all structural containers (notably scenes/story maps).
+    with pytest.raises(ValueError, match="timeline"):
+        DirectorProfile(**normalize({"timeline": {"phase": "毕业"}}))
+
+
+def test_legacy_director_preview_normalizes_single_sample_plan_object():
+    pipeline, _ = make_pipeline()
+    payload = profile_payload()
+    payload["sample_plan"] = {"Opening": "开场", "Climax": "高潮"}
+    pipeline.script_processor.analyze_director_profile.return_value = payload
+    assert pipeline.preview_director_profile("film")["sample_plan"] == [payload["sample_plan"]]
+
+
+def test_director_refinement_accepts_single_sample_plan_object_patch():
+    pipeline, _ = make_pipeline()
+    sample = {"Scene_1_Flow": "第一场", "Scene_2_Flow": "第二场"}
+    pipeline.script_processor.refine_director_profile.return_value = {"sample_plan": sample}
+    result = pipeline.refine_director_profile("film", profile_payload(), ["调整样片安排"])
+    assert result["sample_plan"] == [sample]
+
+
 def test_director_preview_moves_unknown_character_refs_to_unresolved_list():
     pipeline, _ = make_pipeline()
     payload = profile_payload()
@@ -1914,7 +1961,7 @@ def test_director_jobs_are_durable_owner_scoped_and_non_mutating(tmp_path, monke
             provider="openai", _get_default_model=lambda: "test",
         )),
         director_analysis_context=lambda project: (source, {"characters": []}, {"name": "style"}),
-        preview_director_profile=lambda project, **kwargs: profile_payload(),
+        preview_director_profile_with_audit=lambda project, **kwargs: {"profile": profile_payload(), "source_audit": {}},
         refine_director_profile=lambda project, draft, instructions: (
             captured.update(draft=draft, instructions=instructions) or profile_payload()
         ),
@@ -2121,6 +2168,150 @@ def test_new_director_generation_rejects_missing_story_map(value):
         payload['story_map'] = value
     processor.llm.chat.return_value = json.dumps(payload)
     with pytest.raises(RuntimeError, match='缺少 story_map 故事结构对象'):
+        processor.analyze_director_profile('原文', {'characters': []}, {})
+    assert processor.llm.chat.call_count == 2
+
+
+def test_director_completes_only_missing_story_map_and_keeps_both_responses_in_audit():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    original = profile_payload()
+    original_raw = json.dumps(original, ensure_ascii=False)
+    completion = {'story_map': valid_story_map(), 'setting': {'era': '不能覆盖已有导演设定'}}
+    completion_raw = json.dumps(completion, ensure_ascii=False)
+    processor.llm.chat.side_effect = [original_raw, completion_raw]
+    source = '沈夏和周涵毕业离校。'
+    result = processor.analyze_director_profile_with_audit(source, {'characters': []}, {})
+
+    assert result['profile'] == {**original, 'story_map': completion['story_map']}
+    assert processor.llm.chat.call_count == 2
+    call = processor.llm.chat.call_args.kwargs
+    assert call['stream'] is True and call['response_format'] == {'type': 'json_object'}
+    assert call['timeout_seconds'] == 1800
+    prompt = call['messages'][0]['content']
+    schema = json.loads(prompt.split('<director_output_contract>', 1)[1].split('</director_output_contract>', 1)[0])
+    assert schema['required'] == ['story_map']
+    assert set(schema['properties']) == {'story_map'}
+    assert source in call['messages'][1]['content']
+    assert original_raw not in call['messages'][1]['content']
+    assert result['source_audit']['raw_response'] == original_raw
+    assert result['source_audit']['raw_response_sha256'] == hashlib.sha256(original_raw.encode()).hexdigest()
+    evidence = result['source_audit']['story_map_completion']
+    assert evidence['raw_response'] == completion_raw
+    assert evidence['raw_response_sha256'] == hashlib.sha256(completion_raw.encode()).hexdigest()
+    assert evidence['applied_fields'] == ['story_map']
+
+
+def test_missing_story_map_completion_failure_keeps_original_response_and_stops():
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    raw = json.dumps(profile_payload())
+    processor.llm.chat.side_effect = [raw, RuntimeError('provider failed')]
+    with pytest.raises(RuntimeError, match='provider failed') as raised:
+        processor.analyze_director_profile_with_audit('原文', {'characters': []}, {})
+    assert processor.llm.chat.call_count == 2
+    audit = raised.value.director_audit
+    assert audit['raw_response'] == raw
+    assert audit['failure_stage'] == 'story_map_completion'
+    assert audit['story_map_completion']['status'] == 'failed'
+
+
+def test_completed_story_map_still_passes_through_pipeline_reference_validation():
+    pipeline, script = make_pipeline()
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    broken = valid_story_map()
+    broken['story_threads'][0]['milestones'][0]['event_id'] = 'unknown-event'
+    processor.llm.chat.side_effect = [json.dumps(profile_payload()), json.dumps({'story_map': broken})]
+    pipeline.script_processor = processor
+    with pytest.raises(ValueError) as raised:
+        pipeline.preview_director_profile_with_audit(script.id)
+    assert processor.llm.chat.call_count == 2
+    assert raised.value.director_audit['admission_status'] == 'blocked'
+    assert raised.value.director_audit['story_map_completion']['raw_response']
+    pipeline._save_data.assert_not_called()
+
+
+def test_story_map_completion_reuses_bounded_source_context_without_remapping(monkeypatch):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    source = '长篇原文不应在补全请求重发。' * 1000
+    monkeypatch.setattr(processor, '_director_source_context', lambda *_: ('有界来源摘要与原文锚点', True))
+    processor.llm.chat.side_effect = [json.dumps(profile_payload()), json.dumps({'story_map': valid_story_map()})]
+    processor.analyze_director_profile(source, {'characters': []}, {})
+    assert processor.llm.chat.call_count == 2
+    completion = processor.llm.chat.call_args.kwargs['messages'][1]['content']
+    assert '有界来源摘要与原文锚点' in completion
+    assert '长篇原文不应在补全请求重发' not in completion
+    assert json.loads(completion)['source_is_digest'] is True
+
+
+def test_director_mixed_relationship_objects_and_prose_preserve_unverified_summaries():
+    from copy import deepcopy
+    payload = profile_payload()
+    payload['story_map'] = valid_story_map()
+    structured = {'relationship_id': 'arc-existing', 'person_refs': ['沈夏', '周涵'],
+                  'states': [{'phase_id': 'phase-campus', 'state': '相识'}]}
+    summary = '沈夏与周涵的关系有所变化，具体阶段待核验。'
+    payload['story_map']['relationship_arcs'] = [structured, summary, summary]
+    original = deepcopy(payload)
+    normalized = normalize_director_profile_draft(payload)
+    profile = DirectorProfile(**normalized)
+    arcs = profile.story_map.relationship_arcs
+    assert len(arcs) == 3
+    assert arcs[0].relationship_id == 'arc-existing'
+    assert arcs[0].states[0].state == '相识'
+    for arc in arcs[1:]:
+        assert arc.legacy_summary == summary
+        assert arc.evidence_status == 'uncertain'
+        assert arc.person_ids == arc.person_refs == arc.states == []
+    assert len({arc.relationship_id for arc in arcs}) == 3
+    assert payload == original
+    assert normalize_director_profile_draft(normalized)['story_map'] == normalized['story_map']
+    assert [arc.relationship_id for arc in DirectorProfile(**original).story_map.relationship_arcs] == [
+        arc.relationship_id for arc in arcs]
+
+
+@pytest.mark.parametrize('invalid', ['', '   ', 7, None, ['关系'], '长' * 1201])
+def test_director_prose_arc_conversion_does_not_accept_empty_or_invalid_items(invalid):
+    payload = profile_payload()
+    payload['story_map'] = valid_story_map()
+    payload['story_map']['relationship_arcs'] = [invalid]
+    with pytest.raises((ValueError, TypeError)):
+        DirectorProfile(**normalize_director_profile_draft(payload))
+
+
+def test_missing_map_completion_with_prose_relationships_admits_without_extra_model_calls():
+    pipeline, script = make_pipeline()
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    completed_map = valid_story_map()
+    completed_map.pop('source_revision_id')
+    completed_map['relationship_arcs'] = [
+        {'relationship_id': 'arc-original', 'states': []},
+        *[f'待核验的人物关系描述 {i}' for i in range(14)],
+    ]
+    raw = json.dumps({'story_map': completed_map}, ensure_ascii=False)
+    processor.llm.chat.side_effect = [json.dumps(profile_payload()), raw]
+    pipeline.script_processor = processor
+    result = pipeline.preview_director_profile_with_audit(script.id)
+    assert processor.llm.chat.call_count == 2
+    arcs = result['profile']['story_map']['relationship_arcs']
+    assert len(arcs) == 15
+    assert arcs[1]['legacy_summary'] == completed_map['relationship_arcs'][1]
+    assert arcs[1]['evidence_status'] == 'uncertain'
+    assert arcs[1]['states'] == arcs[1]['person_ids'] == []
+    assert result['source_audit']['story_map_completion']['raw_response'] == raw
+    assert result['source_audit']['admission_status'] == 'confirmable'
+    pipeline._save_data.assert_not_called()
+
+
+@pytest.mark.parametrize('raw', ['', '{"setting":', '[]'])
+def test_non_object_director_responses_do_not_trigger_story_map_completion(raw):
+    processor = ScriptProcessor.__new__(ScriptProcessor)
+    processor.llm = Mock(is_configured=True)
+    processor.llm.chat.return_value = raw
+    with pytest.raises((RuntimeError, ValueError)):
         processor.analyze_director_profile('原文', {'characters': []}, {})
     assert processor.llm.chat.call_count == 1
 

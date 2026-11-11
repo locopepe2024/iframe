@@ -8,6 +8,7 @@ vi.mock('@/lib/scriptEditorApi', () => ({
   scriptEditorApi: {
     startScriptWriting: vi.fn(),
     getScriptWritingJob: vi.fn(),
+    startScriptRewrite: vi.fn(),
   },
 }));
 
@@ -112,4 +113,31 @@ it('starts an empty episode from its outline even when opened through AI continu
   expect(scriptEditorApi.startScriptWriting).toHaveBeenCalledWith(expect.objectContaining({ mode: 'expand_outline', source_text: '裂缝与破局' }));
   fireEvent.click(screen.getByRole('button', { name: 'replace' }));
   await waitFor(() => expect(onApply).toHaveBeenCalledWith('expand_outline', '从本集开场写起'));
+});
+
+it('rewrites only a selected preview passage and can undo before adopting the episode', async () => {
+  vi.mocked(scriptEditorApi.startScriptWriting).mockResolvedValue({ id: 'job', status: 'completed', result: { draft: '前文。原文。后文。', title: '本集', mode: 'continue' } });
+  vi.mocked(scriptEditorApi.startScriptRewrite).mockResolvedValue({ id: 'rewrite', status: 'completed', result: { draft: '修改。', title: '本集', mode: 'rewrite' } });
+  const apply = vi.fn().mockResolvedValue(undefined);
+  render(<ScriptWritingDialog open onClose={vi.fn()} onApply={apply} mode="continue" scriptDocumentId="child" title="本集" sourceText="已保存正文。" />);
+  fireEvent.click(screen.getByRole('button', { name: 'generate' }));
+  const preview = await screen.findByLabelText('preview') as HTMLTextAreaElement;
+  preview.setSelectionRange(3, 6);
+  fireEvent.click(screen.getByRole('button', { name: 'title' }));
+  const dialogs = screen.getAllByRole('dialog');
+  expect(dialogs).toHaveLength(1); // The parent is hidden from accessibility while rewriting.
+  const instructions = screen.getAllByLabelText('instruction');
+  fireEvent.change(instructions[instructions.length - 1], { target: { value: '加强动作' } });
+  fireEvent.click(screen.getByRole('button', { name: 'generate' }));
+  await waitFor(() => expect(screen.getByLabelText('candidate')).toHaveValue('修改。'));
+  expect(scriptEditorApi.startScriptRewrite).toHaveBeenCalledWith(expect.objectContaining({
+    selected_text: '原文。', before_text: '前文。', after_text: '后文。', script_document_id: 'child',
+  }));
+  fireEvent.click(screen.getByRole('button', { name: 'replace' }));
+  await waitFor(() => expect(preview).toHaveValue('前文。修改。后文。'));
+  expect(apply).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'undo' }));
+  expect(preview).toHaveValue('前文。原文。后文。');
+  fireEvent.click(screen.getByRole('button', { name: 'append' }));
+  await waitFor(() => expect(apply).toHaveBeenCalledWith('continue', '前文。原文。后文。'));
 });

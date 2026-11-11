@@ -9,7 +9,7 @@ from pathlib import Path
 import re
 import shutil
 from threading import RLock
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
@@ -21,7 +21,7 @@ from .models import ScriptWritingPlanDraft
 _LOCK = RLock()
 logger = logging.getLogger(__name__)
 _EMPTY_DOCUMENT = {"type": "doc", "content": [{"type": "action", "content": []}]}
-ScriptWritingModel = Literal["llm-nf-all", "deepseek-v4.1-flash"]
+ScriptWritingModel = Literal["llm-nf-all", "deepseek-v4.1-flash", "kimi-k3"]
 
 
 def document_text(node: dict) -> str:
@@ -61,7 +61,7 @@ class ScriptAuthoringStore:
             if not path.exists():
                 return None
             model = _read(path).get("model")
-            if model not in ("llm-nf-all", "deepseek-v4.1-flash"):
+            if model not in get_args(ScriptWritingModel):
                 raise HTTPException(409, "剧本模型设置无效，请重新选择")
             return model
 

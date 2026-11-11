@@ -15,18 +15,18 @@ vi.mock('@/lib/api', () => ({ api: { getSeriesModelSettings: vi.fn().mockResolve
 
 beforeEach(() => vi.clearAllMocks());
 
-it('project and series generation settings edit the same saved account selection', async () => {
+it.each(['deepseek-v4.1-flash', 'kimi-k3'] as const)('project and series settings share the saved %s selection', async selectedModel => {
   let saved: ScriptWritingModel = 'llm-nf-all';
   vi.mocked(scriptEditorApi.getWritingSettings).mockImplementation(async () => ({ model: saved }));
   vi.mocked(scriptEditorApi.setWritingModel).mockImplementation(async model => { saved = model; return { model }; });
   const project = render(<ModelSettingsModal isOpen onClose={vi.fn()} />);
   await waitFor(() => expect(screen.getByLabelText('label')).toHaveValue('llm-nf-all'));
   expect(screen.getByText('scope')).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('label'), { target: { value: 'deepseek-v4.1-flash' } });
+  fireEvent.change(screen.getByLabelText('label'), { target: { value: selectedModel } });
   await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('saved'));
   project.unmount();
   render(<SeriesModelSettingsModal isOpen seriesId="series" onClose={vi.fn()} />);
-  await waitFor(() => expect(screen.getByLabelText('label')).toHaveValue('deepseek-v4.1-flash'));
+  await waitFor(() => expect(screen.getByLabelText('label')).toHaveValue(selectedModel));
   fireEvent.change(screen.getByLabelText('label'), { target: { value: 'llm-nf-all' } });
   await waitFor(() => expect(saved).toBe('llm-nf-all'));
   expect(scriptEditorApi.setWritingModel).toHaveBeenLastCalledWith('llm-nf-all');

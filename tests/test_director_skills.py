@@ -70,14 +70,14 @@ def test_request_queue_freezes_selection_and_cache_identity(monkeypatch):
     captured = []
     monkeypatch.setattr(api, '_director_profile_fingerprint', lambda project: 'source')
     monkeypatch.setattr(api.extraction_jobs, 'start', lambda *args, **kwargs: captured.append(args) or {})
-    monkeypatch.setattr(api.pipeline, 'preview_director_profile', lambda project, **kwargs: {'creative_skill_run': skills.provenance(kwargs['skill_snapshot'])})
+    monkeypatch.setattr(api.pipeline, 'preview_director_profile_with_audit', lambda project, **kwargs: {'profile': {'creative_skill_run': skills.provenance(kwargs['skill_snapshot'])}})
     owner = UserContext('u', 'o', '', '')
     api.start_director_profile_analysis('x', skills.DirectorSkillsRequest(), owner)
     item = selection('episode', 'people-relations')
     api.start_director_profile_analysis('x', skills.DirectorSkillsRequest(skills=[item]), owner)
     assert captured[0][2] != captured[1][2]
     monkeypatch.setattr(skills, 'catalog', lambda stage: [])
-    result = captured[1][3]()
+    result = captured[1][3]("job")
     assert result['profile']['creative_skill_run'][0]['id'] == item.id
 
 

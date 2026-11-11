@@ -1,4 +1,5 @@
 import { Node, mergeAttributes } from '@tiptap/core'
+import { Plugin } from '@tiptap/pm/state'
 
 export interface NoteOptions {
   HTMLAttributes: Record<string, unknown>
@@ -8,6 +9,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     note: {
       setNote: () => ReturnType
+      insertNote: () => ReturnType
     }
   }
 }
@@ -77,7 +79,31 @@ export const Note = Node.create<NoteOptions>({
         ({ commands }) => {
           return commands.setNode(this.name)
         },
+      insertNote:
+        () =>
+        ({ editor, state, chain }) => {
+          if (!editor.isEditable) return false
+          // Add a separate block after the selection; never replace the script
+          // or turn the selected screenplay paragraph into an annotation.
+          const { $to, to } = state.selection
+          const position = $to.depth > 0 ? $to.after() : to
+          return chain()
+            .insertContentAt(position, { type: this.name, attrs: { timestamp: new Date().toISOString() } }, { updateSelection: false })
+            .setTextSelection(position + 1)
+            .focus()
+            .run()
+        },
     }
+  },
+
+  addProseMirrorPlugins() {
+    return [new Plugin({ props: {
+      handleKeyDown: (_view, event) => {
+        if (event.defaultPrevented || event.isComposing || event.shiftKey || event.altKey) return false
+        if ((event.metaKey || event.ctrlKey) && event.key === '/') return this.editor.commands.insertNote()
+        return false
+      },
+    } })]
   },
 })
 

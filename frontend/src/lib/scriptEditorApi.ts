@@ -59,12 +59,12 @@ export interface ScriptDocumentResponse extends DocumentResponse {
 }
 
 export type ScriptWritingMode = 'expand_outline' | 'continue';
-export type ScriptWritingModel = 'llm-nf-all' | 'deepseek-v4.1-flash';
+export type ScriptWritingModel = 'llm-nf-all' | 'deepseek-v4.1-flash' | 'kimi-k3';
 
 export interface ScriptWritingJob {
   id: string;
   status: 'queued' | 'running' | 'completed' | 'failed';
-  result?: { draft: string; mode: ScriptWritingMode; title: string } | null;
+  result?: { draft: string; mode: ScriptWritingMode | 'rewrite'; title: string } | null;
   error?: string | null;
 }
 
@@ -254,6 +254,19 @@ export const scriptEditorApi = {
     model?: ScriptWritingModel;
   }): Promise<ScriptWritingJob> => {
     const res = await axios.post(`${API_BASE}/script-writing/generate`, data);
+    return res.data;
+  },
+
+  startScriptRewrite: async (data: {
+    project_id?: string;
+    script_document_id?: string;
+    title: string;
+    selected_text: string;
+    before_text: string;
+    after_text: string;
+    instruction: string;
+  }): Promise<ScriptWritingJob> => {
+    const res = await axios.post(`${API_BASE}/script-writing/rewrite`, data);
     return res.data;
   },
 

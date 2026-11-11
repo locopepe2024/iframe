@@ -22,6 +22,7 @@ export default function ScriptModelSelect({ model, onModelChange, modelBusy, mod
         {!model && <option value="">{t('loading')}</option>}
         <option value="llm-nf-all">LLM · llm-nf-all</option>
         <option value="deepseek-v4.1-flash">DeepSeek · deepseek-v4.1-flash</option>
+        <option value="kimi-k3">Kimi K3 · kimi-k3</option>
       </select>
     </label>
     {modelError && <span role="alert" className="text-red-300">{t('failed')}

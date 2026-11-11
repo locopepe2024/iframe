@@ -1355,6 +1355,31 @@ class DirectorStoryThread(_DirectorStoryMapModel):
     evidence_status_raw: Optional[str] = None
 
 
+def _director_relationship_prose_arcs(value: Any) -> Any:
+    """Preserve prose-only model arcs without inventing people or phase states."""
+    if not isinstance(value, list):
+        return value
+    used = {identifier for item in value if isinstance(item, dict)
+            for identifier in (item.get('relationship_id'), item.get('arc_id'))
+            if isinstance(identifier, str)}
+    result = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            result.append(item)
+            continue
+        base = 'arc-prose-' + hashlib.sha256(item.encode('utf-8')).hexdigest()[:20]
+        relationship_id = base
+        suffix = 2
+        while relationship_id in used:
+            relationship_id = f'{base}-{suffix}'
+            suffix += 1
+        used.add(relationship_id)
+        result.append({'relationship_id': relationship_id, 'legacy_summary': item,
+                       'person_ids': [], 'person_refs': [], 'states': [],
+                       'evidence_status': 'uncertain'})
+    return result
+
+
 class DirectorStoryMap(_DirectorStoryMapModel):
     schema_version: Literal[1] = 1
     source_revision: int = Field(..., ge=1)
@@ -1364,6 +1389,13 @@ class DirectorStoryMap(_DirectorStoryMapModel):
     phases: List[DirectorStoryPhase] = Field(default_factory=list, max_length=80)
     relationship_arcs: List[DirectorRelationshipArc] = Field(default_factory=list, max_length=200)
     story_threads: List[DirectorStoryThread] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode='before')
+    @classmethod
+    def preserve_prose_relationship_arcs(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or 'relationship_arcs' not in value:
+            return value
+        return {**value, 'relationship_arcs': _director_relationship_prose_arcs(value['relationship_arcs'])}
 
     @model_validator(mode="after")
     def validate_references(self):
@@ -2563,10 +2595,15 @@ def build_director_story_map_execution(value: Any) -> Dict[str, Any]:
     return result
 
 
-def _normalize_director_object_list(value: Any) -> Any:
+def _normalize_director_object_list(value: Any, *, allow_single_object: bool = False) -> Any:
     """Keep object-list shape while preserving scalar model output as data."""
     if value is None:
         return []
+    if allow_single_object and isinstance(value, dict):
+        # A sample plan may arrive as one object with named sections. Keep the
+        # whole plan, including its keys/order/nesting, as one array item. Do
+        # not guess whether keys are item names or fields, or split its values.
+        return [value]
     if not isinstance(value, list):
         return value
     normalized = []
@@ -2606,7 +2643,9 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
 
     for field in _DIRECTOR_OBJECT_LIST_FIELDS:
         if field in normalized:
-            normalized[field] = _normalize_director_object_list(normalized[field])
+            normalized[field] = _normalize_director_object_list(
+                normalized[field], allow_single_object=field == "sample_plan"
+            )
 
     for field in _DIRECTOR_SCENE_SUMMARY_FIELDS:
         if field in normalized:
@@ -2666,7 +2705,7 @@ def normalize_director_profile_draft(draft: Dict[str, Any]) -> Dict[str, Any]:
         # ``arc_id``.  The canonical contract uses ``relationship_id``;
         # normalize the alias at the profile boundary so a recoverable naming
         # difference does not reject the entire Director result.
-        relationship_arcs = story_map.get("relationship_arcs")
+        relationship_arcs = _director_relationship_prose_arcs(story_map.get("relationship_arcs"))
         if isinstance(relationship_arcs, list):
             normalized_arcs = []
             for arc in relationship_arcs:
@@ -2811,7 +2850,9 @@ def normalize_director_profile_patch(patch: Dict[str, Any]) -> Dict[str, Any]:
         normalized["setting"] = {}
     for field in _DIRECTOR_OBJECT_LIST_FIELDS:
         if field in normalized:
-            normalized[field] = _normalize_director_object_list(normalized[field])
+            normalized[field] = _normalize_director_object_list(
+                normalized[field], allow_single_object=field == "sample_plan"
+            )
     if "scene_summaries" in normalized:
         normalized["scene_summaries"] = _normalize_director_object_list(
             normalized["scene_summaries"]

@@ -45,8 +45,13 @@ class SceneBasisFormatError(ValueError):
     """A field-specific extraction error that permits one model correction."""
 
 
-def _director_profile_output_contract(*, partial: bool = False) -> str:
+def _director_profile_output_contract(*, partial: bool = False, story_map_only: bool = False, fields=None, story_map_fields=None) -> str:
     """Keep the model's nested field contract derived from runtime validation."""
+    sample_plan_contract = (
+        'sample_plan 必须是对象数组；单个计划也放在数组内，例如 '
+        '[{"Opening":"开场安排","Climax":"高潮安排"}]；没有样片安排时返回 []。'
+        if not story_map_only and (fields is None or "sample_plan" in fields) else ""
+    )
     schema = DirectorProfile.model_json_schema()
     for key in ("revision", "content_hash", "confirmed_at", "creative_skill_run"):
         schema["properties"].pop(key, None)
@@ -59,6 +64,12 @@ def _director_profile_output_contract(*, partial: bool = False) -> str:
     for key in server_fields:
         story_map["properties"].pop(key, None)
     story_map["required"] = ["schema_version", "phases", "relationship_arcs", "story_threads"]
+    if story_map_fields is not None:
+        if (fields is None or "story_map" not in fields or not story_map_fields
+                or not set(story_map_fields).issubset(story_map["required"])):
+            raise ValueError("Invalid story-map completion fields")
+        story_map["properties"] = {key: story_map["properties"][key] for key in story_map_fields}
+        story_map["required"] = list(story_map_fields)
     for name in ("DirectorStoryEvent", "DirectorRelationshipState"):
         claim = schema["$defs"][name]
         if partial:
@@ -76,21 +87,53 @@ def _director_profile_output_contract(*, partial: bool = False) -> str:
         "properties": {key: {"type": "array", "items": {"type": "object"}} for key in (
             "characters", "relationships", "world_rules", "timeline", "events", "open_threads", "conflicts", "uncertainties")},
     }
+    if story_map_only:
+        schema["properties"] = {"story_map": schema["properties"]["story_map"]}
+        schema["required"] = ["story_map"]
+        schema["additionalProperties"] = False
+    if fields is not None:
+        schema["properties"] = {key: schema["properties"][key] for key in fields}
+        schema["required"] = list(fields)
+        schema["additionalProperties"] = False
+        # Send only definitions reachable from this step's fields.
+        definitions = schema.pop("$defs", {})
+        needed = set()
+        def visit(value):
+            if isinstance(value, dict):
+                ref = value.get("$ref", "")
+                if ref.startswith("#/$defs/") and ref[8:] not in needed:
+                    needed.add(ref[8:])
+                    visit(definitions[ref[8:]])
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+        visit(schema)
+        if needed:
+            schema["$defs"] = {key: definitions[key] for key in sorted(needed)}
+        return ("只返回符合以下Schema的实际数据对象，不返回Schema本身；字段不能省略，不含其他步骤或服务端字段。\n"
+                "<director_output_contract>" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+                + "</director_output_contract>" + sample_plan_contract)
     requirement = ("仅返回发生变化的顶层字段；若修改 story_map，必须返回完整的 story_map 对象，不能为 null；"
                    if partial else "story_map 为必填对象，不能省略或为 null；")
     return (
         "嵌套字段必须遵守以下 JSON Schema（来源版本、people 和事实账本版本由服务端绑定，不要生成）：\n"
         "<director_output_contract>" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
         + "</director_output_contract>\n"
-        '必须输出实际 Director 数据对象，不能输出 Schema 本身。' + requirement +
+        '必须输出实际 Director 数据对象，不能输出 Schema 本身。' + sample_plan_contract + requirement +
         '必须保留 phases、relationship_arcs、story_threads，不能以 timeline/relationships/key_events 代替 story_map。'
         'relationship_arcs 每项必须含非空 relationship_id；story_threads 每项必须含非空 thread_id。'
+        'relationship_arcs 必须是对象数组，不能夹杂文字字符串。只有关系文字、没有阶段依据时，'
+        '将原文描述放入该关系对象的 legacy_summary，states=[]、evidence_status="uncertain"；不要猜测阶段和人物绑定。'
         'person_refs、character_refs 必须为字符串数组，不是逗号分隔的单个字符串。'
         'milestones 不能是字符串数组；role 位于每个 milestone 对象内，不在 thread 上。'
         '例如：{"thread_id":"thread-main","milestones":[{"event_id":"event-1","role":"setup","note":""}]}。'
         '所有 phase_id/event_id 引用须对应本次 story_map 中的实际条目。'
+        + ('' if story_map_only else
         'canon_state 必须是按分类组织的对象，例如 {"events":[{"subject":"角色","value":"原文支持的事件",'
         '"source_refs":[],"status":"uncertain"}]}，没有事实时用 {}，不能返回平铺事实数组。'
+        )
     )
 
 
@@ -213,6 +256,10 @@ DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS = 1800
 # keep this bounded so a costly analysis cannot loop indefinitely.
 DIRECTOR_PROFILE_MAX_RETRIES = 1
 DIRECTOR_REFINE_INSTRUCTIONS_MAX_CHARS = 4000
+DIRECTOR_STORY_MAP_OUTPUT_BUDGET = (
+    "story_map 最多 24 个 phase、60 个 event、40 条 relationship arc、12 条 story thread；"
+    "phase、event、relationship、thread ID 在本草稿内唯一。"
+)
 DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "输出预算（必须遵守）：setting 最多 6 个键；timeline、relationships、"
     "key_events 各最多 8 项，sample_plan 最多 4 项；这些对象每项最多 4 个键、"
@@ -227,8 +274,7 @@ DIRECTOR_PROFILE_OUTPUT_BUDGET = (
     "按 characters、relationships、world_rules、timeline、events、open_threads、conflicts、"
     "uncertainties 分类；每条尽量包含 fact_id、subject、value、source_refs、status，"
     "不要把没有原文依据的推断写成 active 事实。"
-    "story_map 最多 24 个 phase、60 个 event、40 条 relationship arc、12 条 story thread；"
-    "phase、event、relationship、thread ID 在本草稿内唯一。"
+    + DIRECTOR_STORY_MAP_OUTPUT_BUDGET
 )
 
 # A Director prompt is allowed to carry a complete source only while it is
@@ -1977,13 +2023,54 @@ class ScriptProcessor:
             }
         ]
     
-    def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
-                                 style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
-        """Create a reviewable director draft without mutating project data."""
-        self._last_director_raw_response = ""
-        if not self.is_configured:
-            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
-        source_context, is_source_digest = self._director_source_context(text, source_mode)
+    def _complete_director_story_map(self, source_context: str, is_source_digest: bool,
+                                     entities_json: Dict[str, Any], scope_guidance: str) -> Dict[str, Any]:
+        """Request only a missing map, preserving the original profile and evidence."""
+        prompt = (
+            '上次导演设定已返回，但缺少 story_map。本次只补全 story_map，不重写其他导演字段。'
+            '只返回 {"story_map": {...}} JSON 对象。依据提供的原文或来源摘要整理剧情阶段、事件、人物关系变化与剧情线，'
+            '不能把来源摘要的分块当成剧情阶段，不能发明事件、对白或动机。摘要未提及不代表原文未交代。'
+            '所有人物引用使用已确认实体名称；无法确定的引用保留为 unresolved。'
+            'phases 按剧情顺序排列，events 使用唯一 event_id；关系 states 引用实际 phase_id，'
+            'trigger_event_ids 和 milestones 只能引用本次生成的实际 event_id。'
+            '只要存在事件，至少生成一条主线，milestones 按事件顺序引用。'
+            '没有提供 Fact Ledger ID，source_fact_ids 必须为空数组；evidence_status 使用 interpretation/uncertain/conflicted。'
+            '不生成 people、来源版本或内部人物 UUID，这些由服务端绑定。\n'
+            + scope_guidance + '\n' + director_skill_guidance(entities_json.get('selected_creative_methods', []))
+            + '\n' + _director_profile_output_contract(story_map_only=True)
+            + '\n' + DIRECTOR_STORY_MAP_OUTPUT_BUDGET
+        )
+        data = {'source': source_context, 'source_is_digest': is_source_digest,
+                'entities': {k: v for k, v in entities_json.items() if k != 'selected_creative_methods'}}
+        evidence: Dict[str, Any] = {'status': 'requested', 'applied_fields': []}
+        logger.info('Completing missing Director story_map: source_chars=%s', len(source_context))
+        try:
+            content = (self.llm.chat(
+                messages=[{'role': 'system', 'content': prompt},
+                          {'role': 'user', 'content': _prompt_json(data)}],
+                response_format={'type': 'json_object'}, timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+                max_retries=DIRECTOR_PROFILE_MAX_RETRIES, stream=True,
+            ) or '').strip()
+            evidence.update(raw_response=content[:DIRECTOR_RAW_RESPONSE_MAX_CHARS], raw_response_received=bool(content),
+                            raw_response_sha256=hashlib.sha256(content.encode('utf-8')).hexdigest())
+            result = parse_model_json_object(content)
+            if not isinstance(result.get('story_map'), dict):
+                raise RuntimeError('导演返回缺少 story_map 故事结构对象，补全后仍不完整，请重试。')
+            evidence.update(status='returned', applied_fields=['story_map'])
+            return result['story_map']
+        except Exception:
+            evidence['status'] = 'failed'
+            raise
+        finally:
+            audit = dict(self._last_director_source_audit)
+            audit['story_map_completion'] = evidence
+            self._last_director_source_audit = audit
+
+    def _director_profile_prompt(self, text: str, entities_json: Dict[str, Any],
+                                 style_config: Dict[str, Any], source_mode: str = "auto",
+                                 prepared_source=None, context_only=False):
+        source_context, is_source_digest = (prepared_source if prepared_source is not None
+                                            else self._director_source_context(text, source_mode))
         source_label = (
             "长篇原始剧本的来源摘要（含首尾原文锚点和分块来源区间）"
             if is_source_digest
@@ -1993,8 +2080,8 @@ class ScriptProcessor:
         scope_guidance = (
             "本次是 Series 全剧导演理解。投稿资料与全部分集是不同来源：投稿梗概描述全剧走向，"
             "分集剧本描述该集实际发生的事件。先形成全剧时代、地点、背景、人物关系与变化、主线和支线、"
-            "跨集连续性及视觉基线；不要把梗概中的结局当作第一集事实。story_map 可留空，"
-            "因为分集事件地图由 Episode Director 分别建立。"
+            "跨集连续性及视觉基线；不要把梗概中的结局当作第一集事实。story_map 仍须返回对象，"
+            "其中 phases、relationship_arcs、story_threads 可为空数组，因为分集事件地图由 Episode Director 分别建立。"
             "全剧 unresolved_questions 只收录会影响故事事实、人物关系或因果连续性的真实冲突和歧义；"
             "不得把摘要未提及的内容写成原文未明确。当前来源摘要不足以核验的结论，写成‘来源覆盖待核验’，"
             "不要要求创作者补写剧本中可能已有的事实。逐集事件映射和来源覆盖是分析任务，"
@@ -2042,7 +2129,10 @@ tail_anchor 是原文锚点；source_ref/char_start/char_end 仅用于回指来�
 在 story_map 中保持事件时序，在 scene_summaries 的 state_in/state_out 中保留有依据的跨场变化。
 同名地点或同一时间词不足以证明同一物理地点、同一连续时段；证据不足时保留为待核验关系，
 不要用导演推测填补剧本的时空空白，也不要生成尚未确认的连续性 ID。
-不得发明对白、剧情、文化符号或人物动机。
+不得发明对白、剧情、文化符号或人物动机。"""
+        if context_only:
+            return prompt, source_context, is_source_digest, scope_guidance
+        prompt += f"""
 
 只返回 JSON 对象，字段必须为：setting, timeline, relationships, key_events, story_map,
 emotional_arc, pacing, visual_language, performance_direction, dialogue_direction,
@@ -2082,6 +2172,16 @@ lighting_cues 只记录有依据的自然光、画内光源、方向或阴影，
 canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事实必须尽量带 source_refs，
 人物状态或规则变化要保留旧事实并用 supersedes_fact_id/status 表达关系；不要静默覆盖、
 删除或把未知内容标成 active。"""
+        return prompt, source_context, is_source_digest, scope_guidance
+
+    def analyze_director_profile(self, text: str, entities_json: Dict[str, Any],
+                                 style_config: Dict[str, Any], source_mode: str = "auto") -> Dict[str, Any]:
+        """Create a reviewable director draft without mutating project data."""
+        self._last_director_raw_response = ""
+        if not self.is_configured:
+            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
+        prompt, source_context, is_source_digest, scope_guidance = self._director_profile_prompt(
+            text, entities_json, style_config, source_mode)
         content = (self.llm.chat(
             messages=[{"role": "system", "content": prompt},
                       {"role": "user", "content": "生成完整导演设定草稿。"}],
@@ -2097,7 +2197,8 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
         if not isinstance(result, dict):
             raise RuntimeError("导演设定模型返回格式不正确，请重试。")
         if not isinstance(result.get("story_map"), dict):
-            raise RuntimeError("导演返回缺少 story_map 故事结构对象，请重新分析。")
+            result['story_map'] = self._complete_director_story_map(
+                source_context, is_source_digest, entities_json, scope_guidance)
         return result
 
     def analyze_director_profile_with_audit(self, text: str, entities_json: Dict[str, Any],
@@ -2112,16 +2213,14 @@ canon_state 是跨场景的事实账本，不是长篇剧情摘要。每条事�
             raw = self._last_director_raw_response
             audit = dict(self._last_director_source_audit)
             audit.update(raw_response=raw, raw_response_received=bool(raw),
-                         failure_stage="parse" if raw else "provider_response")
+                         failure_stage="story_map_completion" if audit.get('story_map_completion', {}).get('status') == 'failed'
+                         else "parse" if raw else "provider_response")
             diagnostic = getattr(exc, "llm_diagnostic", None)
             if isinstance(diagnostic, dict):
                 audit["provider_response"] = diagnostic
             exc.director_audit = audit
             raise
-        # The legacy method parses internally, so capture raw JSON by issuing
-        # no second request is not possible. The profile remains auditable;
-        # callers using the adapter can attach raw content through the helper
-        # below when available.
+        source_audit.update(self._last_director_source_audit)
         source_audit["raw_response"] = getattr(self, "_last_director_raw_response", "")
         source_audit["raw_response_received"] = bool(source_audit["raw_response"])
         source_audit["parse_status"] = "parsed"
@@ -2217,135 +2316,20 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
 
     @staticmethod
     def _validate_director_shooting_chunk(payload: Any) -> Optional[str]:
-        if not isinstance(payload, dict):
-            return "返回值必须是 JSON 对象"
-        if set(payload) - {"scenes", "unresolved_questions"}:
-            return "顶层只能包含 scenes 和 unresolved_questions"
-        scenes = payload.get("scenes")
-        if not isinstance(scenes, list) or not scenes:
-            return "必须返回至少一个 scene"
-        if len(scenes) > 160:
-            return "单段 scenes 超过 160 项"
-        root_questions = payload.get("unresolved_questions", [])
-        if not isinstance(root_questions, list) or any(not isinstance(item, str) for item in root_questions):
-            return "unresolved_questions 必须是字符串数组"
-        scene_keys = {
-            "scene_ref", "heading", "location", "time_anchor",
-            "place_continuity_id", "time_continuity_id",
-            "environment_atmosphere", "prop_ids", "unresolved_questions",
-            "continues_previous_scene", "continuity_in", "continuity_out",
-            "duration_seconds", "beats",
-        }
-        beat_keys = {"title", "dramatic_purpose", "emotional_change", "duration_seconds", "keep_with_next", "source_chunk_refs", "story_event_ids", "shots"}
-        shot_keys = {
-            "title", "visual_intent", "director_effect", "performance_action", "action_physics", "information_design",
-            "shot_size", "camera_angle", "composition", "camera_movement",
-            "lighting", "lighting_override_reason", "duration_seconds", "dialogue", "ambient_sound",
-            "character_ids", "prop_ids", "unresolved_entity_refs",
-        }
-        lighting_keys = {"key_source", "color_tone", "contrast", "practical_sources"}
-
-        def nonempty(value: Any) -> bool:
-            return isinstance(value, str) and bool(value.strip())
-
-        for scene_index, scene in enumerate(scenes):
-            if not isinstance(scene, dict) or set(scene) - scene_keys:
-                return f"scene {scene_index + 1} 字段不符合结构"
-            if any(key in scene and not isinstance(scene[key], str) for key in ("heading", "location", "time_anchor")):
-                return f"scene {scene_index + 1} 的场景标记、地点和时间必须是字符串"
-            if any(key in scene and not isinstance(scene[key], str) for key in ("place_continuity_id", "time_continuity_id")):
-                return f"scene {scene_index + 1} 的地点/时间连续性 ID 必须是字符串"
-            if "continues_previous_scene" in scene and not isinstance(scene["continues_previous_scene"], bool):
-                return f"scene {scene_index + 1} continues_previous_scene 必须是布尔值"
-            for key in ("continuity_in", "continuity_out"):
-                if key in scene and not isinstance(scene[key], str):
-                    return f"scene {scene_index + 1} 的 {key} 必须是字符串"
-            if "duration_seconds" in scene and (not isinstance(scene["duration_seconds"], int) or isinstance(scene["duration_seconds"], bool) or not 1 <= scene["duration_seconds"] <= 1800):
-                return f"scene {scene_index + 1} duration_seconds 必须是 1–1800 的整数"
-            for key in ("prop_ids", "unresolved_questions"):
-                values = scene.get(key, [])
-                if not isinstance(values, list) or any(not isinstance(item, str) for item in values):
-                    return f"scene {scene_index + 1} 的 {key} 必须是字符串数组"
-            beats = scene.get("beats")
-            if not isinstance(beats, list) or not beats:
-                return f"scene {scene_index + 1} 必须包含 beat"
-            if len(beats) > 40:
-                return f"scene {scene_index + 1} 的 beats 超过 40 项"
-            for beat_index, beat in enumerate(beats):
-                if not isinstance(beat, dict) or set(beat) - beat_keys:
-                    return f"scene {scene_index + 1} beat {beat_index + 1} 字段不符合结构"
-                if any(key in beat and not isinstance(beat[key], str) for key in ("emotional_change",)):
-                    return f"scene {scene_index + 1} beat {beat_index + 1} 的情绪变化必须是字符串"
-                if "duration_seconds" in beat and (not isinstance(beat["duration_seconds"], int) or isinstance(beat["duration_seconds"], bool) or not 1 <= beat["duration_seconds"] <= 300):
-                    return f"scene {scene_index + 1} beat {beat_index + 1} duration_seconds 必须是 1–300 的整数"
-                if "keep_with_next" in beat and not isinstance(beat["keep_with_next"], bool):
-                    return f"scene {scene_index + 1} beat {beat_index + 1} keep_with_next 必须是布尔值"
-                if "source_chunk_refs" in beat and (not isinstance(beat["source_chunk_refs"], list) or any(not isinstance(item, str) for item in beat["source_chunk_refs"])):
-                    return f"scene {scene_index + 1} beat {beat_index + 1} source_chunk_refs 必须是字符串数组"
-                event_ids = beat.get("story_event_ids", [])
-                if not isinstance(event_ids, list) or any(not isinstance(item, str) for item in event_ids):
-                    return f"scene {scene_index + 1} beat {beat_index + 1} story_event_ids 必须是字符串数组"
-                shots = beat.get("shots")
-                if not isinstance(shots, list) or not shots:
-                    return f"scene {scene_index + 1} beat {beat_index + 1} 必须包含 shot"
-                if len(shots) > 40:
-                    return f"scene {scene_index + 1} beat {beat_index + 1} 的 shots 超过 40 项"
-                for shot_index, shot in enumerate(shots):
-                    if not isinstance(shot, dict):
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 字段不符合结构"
-                    if set(shot) - shot_keys:
-                        unknown = ", ".join(str(k)[:40] for k in sorted(set(shot) - shot_keys)[:3])
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 存在未知字段 {unknown}，请移除额外键"
-                    if "title" in shot and not isinstance(shot["title"], str):
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 标题必须是字符串"
-                    if shot.get("information_design") is not None:
-                        from .models import DirectorInformationDesign
-                        try:
-                            DirectorInformationDesign.model_validate(shot["information_design"])
-                        except ValueError:
-                            return "information_design 不符合信息披露合同"
-                    if "director_effect" in shot and not isinstance(shot["director_effect"], str):
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} director_effect 必须是字符串"
-                    if "lighting_override_reason" in shot and not isinstance(shot["lighting_override_reason"], str):
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} lighting_override_reason 必须是字符串"
-                    # Shot details are editable downstream. Generation validates shape and types;
-                    # missing creative details remain visible as fields to complete later.
-                    for key in ("visual_intent", "performance_action", "action_physics", "shot_size", "camera_angle", "composition", "camera_movement", "ambient_sound"):
-                        if key in shot and not isinstance(shot[key], str):
-                            return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} {key} 必须是字符串"
-                    lighting = shot.get("lighting")
-                    lighting_path = f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} lighting"
-                    if lighting is not None and not isinstance(lighting, dict):
-                        return f"{lighting_path} 必须是 JSON 对象，实际为 {type(lighting).__name__}，不能用字符串或数组"
-                    if isinstance(lighting, dict) and set(lighting) - lighting_keys:
-                        unknown = ", ".join(str(k)[:40] for k in sorted(set(lighting) - lighting_keys)[:3])
-                        return f"{lighting_path} 存在未知字段 {unknown}；仅允许 key_source、color_tone、contrast、practical_sources"
-                    lighting = lighting or {}
-                    for key in ("key_source", "color_tone", "contrast"):
-                        if key in lighting and not isinstance(lighting[key], str):
-                            return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} {key} 必须是字符串"
-                    practical_sources = lighting.get("practical_sources", [])
-                    if not isinstance(practical_sources, list) or any(not isinstance(item, str) for item in practical_sources):
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} practical_sources 必须是字符串数组"
-                    duration = shot.get("duration_seconds")
-                    if duration is not None and (not isinstance(duration, int) or isinstance(duration, bool) or not 1 <= duration <= 30):
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} 时长必须为 1–30 秒"
-                    for key in ("character_ids", "prop_ids"):
-                        value = shot.get(key, [])
-                        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-                            return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} {key} 必须是 ID 数组"
-                    dialogue = shot.get("dialogue", [])
-                    if not isinstance(dialogue, list) or any(
-                        not isinstance(line, dict)
-                        or set(line) - {"speaker", "line"}
-                        or not nonempty(line.get("speaker"))
-                        or not nonempty(line.get("line"))
-                        for line in dialogue
-                    ):
-                        return f"scene {scene_index + 1} beat {beat_index + 1} shot {shot_index + 1} dialogue 格式无效"
-        return None
+        from .shooting_shot_contract import contract_issues
+        issues = contract_issues(payload)
+        return '；'.join(issues) if issues else None
 
     def plan_director_shooting_chunk(
+        self, script_chunk, entities_json, director_profile, style_config,
+        previous_scene=None, source_ref='', model=None, *, checkpoint=None, save_checkpoint=None,
+    ):
+        from .shooting_plan_stages import plan_in_stages
+        return plan_in_stages(
+            self, script_chunk, entities_json, director_profile, style_config, previous_scene,
+            source_ref=source_ref, model=model, checkpoint=checkpoint, save_checkpoint=save_checkpoint)
+
+    def _plan_director_shooting_beat(
         self,
         script_chunk: str,
         entities_json: Dict[str, Any],
@@ -2354,101 +2338,11 @@ fact_id，事实变化时保留 source_refs，并用 status/supersedes_fact_id �
         previous_scene: Optional[Dict[str, Any]] = None,
         source_ref: str = "",
         model: Optional[str] = None,
+        *, beat_plan: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Propose complete scene/beat/shot plans for one bounded source chunk."""
-        if not self.is_configured:
-            raise ValueError("LLM API Key 未配置。请在 API 配置中设置对应的 API Key 后重试。")
-
-        retry_note = ""
-        last_error = ""
-        last_category = "contract_violation"
-        style_summary = build_visual_style_summary(style_config)
-        lighting_schema = _prompt_json(DirectorPlanLighting.model_json_schema())
-        for attempt in range(2):
-            handoff_preset = _load_director_preset("shooting-plan-handoff")
-            prompt = f"""你是电影导演和场记统筹。请根据提供的剧本片段、已确认故事理解、人物/场景/道具实体和视觉风格，提出可供用户审阅的拍摄计划。
-
-<stage_preset name="shooting-plan-handoff">{handoff_preset}</stage_preset>
-{director_skill_guidance(entities_json.get("selected_creative_methods", []))}
-
-事实边界：剧本片段是剧情事实来源；Director story_map 只提供已确认的事件 ID 和叙事组织；实体只提供可引用 ID；视觉风格只决定拍摄表达。不得添加剧本没有的对白、动作或剧情事实。来源片段边界由系统切分，不能把片段边界直接当作场景边界。
-
-规划要求：
-1. 先判断场景，再组织每场戏的戏剧 beat，最后根据叙事目的决定 shots。不要把每个动作或每句对白机械拆成一个 shot；连续动作可以放在同一镜头，只有视线/情绪/空间/信息变化值得剪切时才增加镜头。
-2. 每场 scene 填 scene_ref（优先复用剧本场景标记；未标明时明确写“原文未标明”）、heading、location、time_anchor、place_continuity_id、time_continuity_id、environment_atmosphere、continuity_in、continuity_out、duration_seconds、prop_ids、unresolved_questions 和 beats。若本场从上一场连续动作/连续空间开始，设置 continues_previous_scene=true，并说明入场/出场连续性。环境氛围写可见空间、环境状态和情绪质感，不要把推测写成原文事实。地点与时段 ID 是供用户审阅的关联建议：只有剧本或已确认 Director 理解明确支持同一物理地点、同一连续剧情时段时才复用相同 ID；不同视角可共享地点 ID，但不自动共享时段 ID。证据不足时两个 ID 留空，不按相似地点名或“黄昏”等词猜测关联。
-   对照已确认 Director 的 scene_summaries：原文写明“黄昏”时，本场 time_anchor 和相关镜头光影不得无理由变成白天或夜晚；同一已确认连续时段内的相关场景沿用相容的自然光、光源方向、色调和阴影。Director 的 lighting_cues 是有依据的线索，不等于已确认摄影布光；没有具体光源依据时由本计划提出待审阅光影基线。明确时间跳跃、天气变化或画内新光源须记录改变原因，不静默覆盖前场状态。
-   已确认 Director profile 中的地点、城市、时代或地域要求属于导演视觉约束。它们应影响 location、environment_atmosphere 和相关镜头的 visual_intent；当剧本没有明确写出对应地标、饮食或生活细节时，可以提出“可选导演视觉锚点”（例如城市地标、地方饮食环境或街巷质感）作为可供用户修改的拍摄计划建议。此类建议必须明确是可选导演补充，不得伪装成已发生的剧本事实，不得凭空增加人物行为、对白或剧情事件；没有合适的剧情承载位置时，写入 unresolved_questions 供用户决定是否增加建立镜头。
-3. 每个 beat 填 title、dramatic_purpose、emotional_change、duration_seconds、keep_with_next、story_event_ids 和 shots。keep_with_next 仅在节拍应保持同镜时为 true；story_event_ids 只能使用 Director story_map 里的真实 event_id；无明确关联时用空数组。
-4. 每个 shot 必须填 title、visual_intent、performance_action、action_physics、shot_size、camera_angle、composition、camera_movement、lighting、duration_seconds、dialogue、ambient_sound、character_ids、prop_ids，并返回 director_effect 字段。director_effect 写该镜头希望观众感受到或注意到的导演效果；没有明确效果时返回空字符串。表演写视线/表情/姿态/节奏；动作物理写身体或物体的可观察位移、接触、支撑、速度和结果，两者不要混为动作摘要。构图写人物在画面中的位置、关系和空间留白。
-5. lighting 包含 key_source（主光来源与方向）、color_tone（冷暖倾向）、contrast（明暗关系）、practical_sources（画内实际光源数组）。同一 place_continuity_id 与 time_continuity_id 的镜头默认继承同一光影基线；不要为每个镜头改写同一光影。lighting_override_reason 是用户决定字段，模型必须始终返回空字符串，不得替用户选择独立光影；用户在计划编辑器填写原因后，运行时才保留本镜头独立光影。
-   lighting 必须是对象，不是文字或数组。未知光影细节用空字符串、画内光源不明用 []；不得改用分镜阶段的 direction、quality、color_temp、description 字段，也不得增加额外键。每个 shot 的 lighting 严格遵循以下 JSON Schema：
-<shot_lighting_schema>{lighting_schema}</shot_lighting_schema>
-   结构示例："lighting": {{"key_source":"", "color_tone":"", "contrast":"", "practical_sources":[]}}。
-6. camera_movement 必须说明固定/推拉摇移/跟拍方向与速度；ambient_sound 可选；有明确环境声时填写此镜头能听见的环境底噪/具体声响，没有明确内容时返回空字符串。没有明确对白就 dialogue=[]；不要发明台词。shot 时长为 1–30 整数秒，依据动作和情绪节奏估计。
-如果本次选择开场吸引力、信息差与悬念或节奏与情绪方法，可在相关 shot 返回 information_design 对象：audience_question、audience_knows、character_knows、withhold、presentation（字符串）；source_event_ids、reveal_event_ids、payoff_event_ids（仅用已确认 story_map 的 event_id 数组）；evidence_status（source_linked 或 needs_review）。无依据时数组留空并标 needs_review，不猜测后续事件；无信息编排时省略或 null。source_linked 仅表示有来源引用，不代表建议已核验或采用。暂缓展示的内容不要写入当前镜头可见描述。
-7. character_ids 和 prop_ids 必须使用下方实体 ID，不能用名字代替；如无实体则用空数组。只返回合法 JSON，不要 Markdown、解释或额外键。
-   shot 除上述字段外仅允许 information_design、lighting_override_reason、unresolved_entity_refs；不要增加 performance_change 等自定义字段，情绪变化放 beat.emotional_change，表演变化放 shot.performance_action。
-
-必须返回如下根结构：{{"scenes":[...],"unresolved_questions":[]}}。不要输出 IDs、order 或 source_chunk_refs，这些由系统生成；source_chunk_refs 由系统根据输入片段回填。只有片段开头有明确连续动作/连续场次证据时才设 continues_previous_scene=true，不要仅因地点相同而续接。
-
-<source_chunk ref="{source_ref}">
-{script_chunk}
-</source_chunk>
-<entities>{_prompt_json({k: v for k, v in entities_json.items() if k != "selected_creative_methods"})}</entities>
-<confirmed_director_profile>{_prompt_json(director_profile)}</confirmed_director_profile>
-<visual_style>{_prompt_json(style_config)}</visual_style>
-<visual_style_summary>{style_summary}</visual_style_summary>
-<previous_scene_handoff>{_prompt_json(previous_scene or {})}</previous_scene_handoff>
-上一段 handoff 仅用于连续性：如果当前片段开头确实承接上一场，复用其中的时空、人物/道具状态和 continuity_out；如果没有明确承接证据，必须开始新场景。不要因为地点名称相同而续接，也不要把 handoff 中的 unresolved refs 当作已登记实体。
-{retry_note}"""
-            content = (self.llm.chat(
-                messages=[{"role": "system", "content": prompt},
-                          {"role": "user", "content": "按完整视觉拍摄计划契约返回 JSON。"}],
-                response_format={"type": "json_object"},
-                timeout_seconds=DIRECTOR_SHOOTING_PLAN_TIMEOUT_SECONDS,
-                max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
-                stream=True,
-                **({"model": model} if model else {}),
-            ) or "").strip()
-            try:
-                result = parse_model_json_object(content)
-            except ValueError as exc:
-                last_category = "invalid_json"
-                last_error = (f"JSON 格式错误（第 {exc.lineno} 行，第 {exc.colno} 列）"
-                              if isinstance(exc, json.JSONDecodeError) else "JSON 格式错误：必须返回一个完整对象，不能截断或附加多个结果")
-            else:
-                # Keep the plan usable when creative details are omitted. The
-                # storyboard editor exposes these empty fields for later completion.
-                for scene in result.get("scenes", []) if isinstance(result, dict) else []:
-                    for beat in scene.get("beats", []) if isinstance(scene, dict) else []:
-                        for shot in beat.get("shots", []) if isinstance(beat, dict) else []:
-                            if isinstance(shot, dict):
-                                for key in ("visual_intent", "performance_action", "action_physics", "shot_size", "camera_angle", "composition", "camera_movement", "ambient_sound"):
-                                    shot.setdefault(key, "")
-                                shot.setdefault("lighting", {})
-                                shot.setdefault("duration_seconds", None)
-                                dialogue = shot.get("dialogue")
-                                if not isinstance(dialogue, list):
-                                    shot["dialogue"] = []
-                                else:
-                                    shot["dialogue"] = [
-                                        {"speaker": str(line.get("speaker", "")), "line": str(line.get("line", ""))}
-                                        for line in dialogue
-                                        if isinstance(line, dict) and str(line.get("speaker", "")).strip() and str(line.get("line", "")).strip()
-                                    ]
-                                shot.setdefault("character_ids", [])
-                                shot.setdefault("prop_ids", [])
-                last_error = self._validate_director_shooting_chunk(result) or ""
-                last_category = "contract_violation"
-                if not last_error:
-                    return result
-            if attempt == 0:
-                logger.warning("Shooting plan output rejected: category=%s reason=%s", last_category, last_error)
-                retry_note = (
-                    "上次结果未通过契约校验，请完整重做本段并修正以下问题：" + last_error
-                )
-
-        raise DirectorShootingChunkError(last_category, last_error)
+        from .shooting_shot_contract import generate_shot_details
+        return generate_shot_details(self, script_chunk, entities_json, director_profile, style_config,
+                                     previous_scene, source_ref, model, beat_plan=beat_plan)
 
     @staticmethod
     def _storyboard_visual_style_context(visual_style: Optional[Dict[str, Any]]) -> str:

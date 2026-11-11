@@ -5,6 +5,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Check, Loader2, TextCursorInput, WandSparkles, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { scriptEditorApi, type WritingEpisodeOutline, type ScriptWritingMode } from '@/lib/scriptEditorApi';
+import ScriptRewriteDialog from './ScriptRewriteDialog';
+import { capturePreviewPassage, replacePreviewPassage, type PreviewPassageSelection } from '../utils/passageRewrite';
 
 interface ScriptWritingDialogProps {
   open: boolean;
@@ -32,6 +34,7 @@ export default function ScriptWritingDialog({
   episode,
 }: ScriptWritingDialogProps) {
   const t = useTranslations('scriptEditor.writing');
+  const tr = useTranslations('scriptEditor.rewrite');
   const [mode, setMode] = useState(initialMode);
   const [targetWordCount, setTargetWordCount] = useState(2000);
   const [instruction, setInstruction] = useState('');
@@ -40,6 +43,9 @@ export default function ScriptWritingDialog({
   const [isApplying, setIsApplying] = useState(false);
   const [error, setError] = useState('');
   const runId = useRef(0);
+  const preview = useRef<HTMLTextAreaElement>(null);
+  const [rewritePassage, setRewritePassage] = useState<PreviewPassageSelection | null>(null);
+  const [previewUndo, setPreviewUndo] = useState<{ before: string; after: string } | null>(null);
   const effectiveMode = episode && !sourceText.trim() ? 'expand_outline' : mode;
   const effectiveSource = effectiveMode === 'expand_outline' && episode ? episode.outline : sourceText;
   const validWordCount = Number.isInteger(targetWordCount) && targetWordCount >= 100 && targetWordCount <= 20000;
@@ -52,6 +58,8 @@ export default function ScriptWritingDialog({
     setInstruction('');
     setDraft('');
     setError('');
+    setRewritePassage(null);
+    setPreviewUndo(null);
     runId.current += 1;
   }, [open, initialMode, episode?.target_word_count]);
 
@@ -93,6 +101,7 @@ export default function ScriptWritingDialog({
   };
 
   const close = () => {
+    if (rewritePassage || isApplying) return;
     runId.current += 1;
     setIsGenerating(false);
     setIsApplying(false);
@@ -105,7 +114,8 @@ export default function ScriptWritingDialog({
     setError('');
     try {
       await onApply(effectiveMode, draft);
-      close();
+      runId.current += 1;
+      onClose();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('applyFailed'));
     } finally {
@@ -123,7 +133,7 @@ export default function ScriptWritingDialog({
           }}
         >
           <motion.section
-            role="dialog" aria-modal="true" aria-labelledby="script-writing-title"
+            role="dialog" aria-modal={rewritePassage ? undefined : true} aria-hidden={rewritePassage ? true : undefined} aria-labelledby="script-writing-title"
             className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-white/10 bg-[#101116] shadow-2xl"
             initial={{ y: 12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 8, opacity: 0 }}
           >
@@ -166,11 +176,20 @@ export default function ScriptWritingDialog({
               {error && <p role="alert" className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">{error}</p>}
 
               {draft ? (
-                <label className="block text-sm text-text-secondary">
+                <div className="block text-sm text-text-secondary">
                   <span>{t('preview')}</span>
                   <span className="ml-3 text-xs text-text-muted">{t('draftWordCount', { count: draftWordCount.toLocaleString() })}</span>
-                  <textarea aria-label={t('preview')} value={draft} onChange={event => setDraft(event.target.value)} rows={18} className="mt-2 w-full resize-y rounded-md border border-white/10 bg-black/30 px-3 py-3 font-mono text-sm leading-6 text-foreground focus:border-primary/50 focus:outline-none" />
-                </label>
+                  <textarea ref={preview} aria-label={t('preview')} value={draft} onChange={event => setDraft(event.target.value)} rows={18} className="mt-2 w-full resize-y rounded-md border border-white/10 bg-black/30 px-3 py-3 font-mono text-sm leading-6 text-foreground focus:border-primary/50 focus:outline-none" />
+                  <span className="mt-2 flex flex-wrap items-center gap-3">
+                    <button type="button" onMouseDown={event => event.preventDefault()} disabled={isGenerating || isApplying} onClick={() => {
+                      const passage = preview.current && capturePreviewPassage(draft, preview.current.selectionStart, preview.current.selectionEnd);
+                      if (!passage) { setError(tr('selectHint')); return; }
+                      setError(''); setRewritePassage(passage);
+                    }} className="min-h-11 rounded border border-white/15 px-3 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{tr('title')}</button>
+                    {previewUndo && draft === previewUndo.after && <button type="button" onClick={() => { setDraft(previewUndo.before); setPreviewUndo(null); }} className="min-h-11 rounded border border-white/15 px-3 hover:bg-white/10">{tr('undo')}</button>}
+                    <span className="text-xs text-text-muted">{tr('selectHint')}</span>
+                  </span>
+                </div>
               ) : (
                 <div className="rounded-md border border-white/10 bg-white/[0.025] px-4 py-3 text-sm text-text-secondary">
                   {effectiveMode === 'expand_outline' ? t('sourceOutline', { count: Array.from(effectiveSource.replace(/\s/g, '')).length.toLocaleString() }) : t('sourceScript', { count: Array.from(effectiveSource.replace(/\s/g, '')).length.toLocaleString() })}
@@ -195,6 +214,13 @@ export default function ScriptWritingDialog({
               )}
             </footer>
           </motion.section>
+          {rewritePassage && <ScriptRewriteDialog passage={rewritePassage} title={title} projectId={projectId} scriptDocumentId={scriptDocumentId}
+            onClose={() => setRewritePassage(null)} onApply={async replacement => {
+              const revised = replacePreviewPassage(draft, rewritePassage, replacement);
+              if (revised === null) throw new Error(tr('stale'));
+              setPreviewUndo({ before: draft, after: revised });
+              setDraft(revised);
+            }} />}
         </motion.div>
       )}
     </AnimatePresence>
