@@ -2,7 +2,7 @@
 import hashlib
 import json
 
-VERSION = "director-profile-stages-v1"
+VERSION = "director-profile-stages-v2"
 STAGES = (
     ("source", "来源整理", ()),
     ("foundation", "基础设定", (
@@ -22,6 +22,7 @@ GUIDANCE = {
         "每条最多120字；sample_plan最多4项。只记录影响故事的真实疑问，不为填字段制造问题。"),
     "story": (
         "仅生成 timeline、relationships、key_events、story_map；前三项各最多8项，每项简洁。"
+        "区分剧情发生顺序与剧本呈现顺序，保留回忆、并行事件及明确的时间跳跃。"
         "story_map 必须为对象，含 schema_version=1、phases、relationship_arcs、story_threads。"
         "按叙事因果合并事件，不逐句展开；最多8个phase、16个event、8条relationship arc、4条story thread。"
         "description/dramatic_function/note/关系状态各最多80字。"
@@ -40,6 +41,8 @@ GUIDANCE = {
         "不要把来源分块当作叙事场景，场景候选也不是资产实体或拍摄场次。"
         "仅记录有证据的地点、时段、自然光及画内光源；创意灯光标为导演解释。"
         "state_out与下一场state_in保留原文支持的变化；相同时段名称不能证明连续。"
+        "同名地点不能证明同址；只有空间指代、地标或连续移动等来源证据才支持合并。"
+        "跨场和非相邻场的时空、人物、道具承接须有证据；未知关系保留待核验，不生成连续性ID。"
         "continuity_constraints最多8条，每条120字。canon_state是分类对象，不是事实平铺数组；"
         "分类为characters/relationships/world_rules/timeline/events/open_threads/conflicts/uncertainties，"
         "总共最多20条事实，每条简短，尽量带source_refs；未知事实不可标active。"
@@ -47,14 +50,86 @@ GUIDANCE = {
         "区分剧本事实、导演解释、用户要求，不复制完整事件表或剧本。"),
 }
 
+# Keep user-selected analysis methods in the steps that can emit their findings.
+# Fail closed for new catalog methods until their step assignment is deliberate.
+METHOD_STEPS = {
+    "people-relations": ("story",),
+    "story-causality": ("story",),
+    "episode-beats": ("foundation", "story"),
+    "continuity-review": ("continuity",),
+    "setup-payoff-review": ("story",),
+    "dialogue-review": ("foundation",),
+}
+
+
+def build_step_prompt(key, source_context, is_digest, entities, style, profile):
+    """Build a scoped request without full-profile/extraction preset baggage."""
+    from src.apps.director_skills import guidance
+    from .llm import _director_profile_output_contract, _prompt_json
+    from .models import director_execution_payload
+
+    _, label, fields = next(stage for stage in STAGES[1:] if stage[0] == key)
+    series = entities.get("scope") == "series"
+    scope = ("Series 全剧导演理解：梗概描述全剧走向，分集剧本描述各集实际事件，不把结局当作首集事实。"
+             if series else "Episode 分集导演理解：只分析本集实际发生的事件、人物和地点。")
+    parts = [
+        "你是电影导演和剧本统筹。当前独立步骤：" + label,
+        scope,
+        "原文是事实依据；区分剧本事实、导演解释、用户要求与未决问题。"
+        "不改写剧本，不编造对白、事件、人物动机或文化背景。"
+        "只有影响故事且来源充分覆盖后仍有歧义的问题才列为未决；未提及不等于缺失。",
+        "原始剧本：" if not is_digest else "原始剧本的来源摘要：",
+        "<script>" + source_context + "</script>",
+    ]
+    if is_digest:
+        parts.append("chunk_summaries是全文检索摘要；head_anchor/tail_anchor是原文锚点；"
+                     "source_ref/char_start/char_end用于回指来源。分块边界不是叙事边界，摘要未覆盖不代表原文缺失。")
+
+    context = {name: value for name, value in entities.items()
+               if name not in ("scope", "selected_creative_methods", "series_director_understanding") and value}
+    series_profile = entities.get("series_director_understanding")
+    if series_profile:
+        context["series_director_understanding"] = director_execution_payload(series_profile)
+    if context:
+        parts.append("已提取实体名称与关系不得擅自替换：\n<entities>" + _prompt_json(context) + "</entities>")
+    if context.get("series_context") or series_profile:
+        parts.append("系列上下文仅作背景和连续性约束，不代表本集已发生的事实；不得把全剧事件复制为本集事件。")
+
+    if key in ("foundation", "continuity"):
+        if style:
+            parts.append("用户视觉风格（只约束视听表达，不改变故事事实）：\n<visual_style>"
+                         + _prompt_json(style) + "</visual_style>")
+        else:
+            parts.append("未指定视觉媒介；不要自行假设真人、动漫或3D。")
+    methods = [task for task in entities.get("selected_creative_methods", []) if key in METHOD_STEPS[task["id"]]]
+    if methods:
+        parts.append(guidance(methods) + "只将本步适用的发现写入本步字段，其余由对应步骤处理。")
+        if key != "foundation" and any("unresolved_questions" in task["instructions"] for task in methods):
+            destination = "key_events条目的review_notes" if key == "story" else "canon_state.uncertainties"
+            parts.append("所选方法提到的unresolved_questions在本步记录到" + destination + "；不得新增顶层字段。")
+    parts.extend((GUIDANCE[key],
+                  "本次JSON总长度控制在18000字符内；不展开镜头和对白。",
+                  _director_profile_output_contract(fields=fields)))
+    if profile:
+        # Do not resend the source, raw responses, server metadata or empty
+        # containers. Story needs the foundation summary, continuity the map too.
+        handoff = {name: value for name, value in director_execution_payload(profile).items()
+                   if name in ("execution_summary", "story_map") and value}
+        if handoff:
+            parts.append("前序结果只读，不重新生成：\n<completed_steps_readonly>"
+                         + _prompt_json(handoff) + "</completed_steps_readonly>")
+    return "\n".join(parts)
+
 
 def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                       cached=None, save_step=None, validate_profile):
     """Save only validated steps; a rejected write stops further model calls."""
-    from .models import director_execution_payload
-    from .llm import (_director_profile_output_contract, _strip_markdown_json,
+    from .llm import (_strip_markdown_json,
                       DIRECTOR_PROFILE_TIMEOUT_SECONDS, DIRECTOR_PROFILE_MAX_RETRIES)
 
+    for task in entities.get("selected_creative_methods", []):
+        if task["id"] not in METHOD_STEPS:
+            raise ValueError("创作方法尚未分配导演分析步骤：" + task["id"])
     identity = hashlib.sha256(json.dumps(
         [VERSION, text, entities, style, source_mode, processor.llm.provider,
          processor.llm._get_default_model()], ensure_ascii=False, sort_keys=True, default=str
@@ -92,9 +167,6 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                     if save_step(index, key, saved) is False:
                         raise RuntimeError("导演分析任务已失效，请重新提交。")
                 # Reuse the same source digest on restart; no paid map pass repeats.
-                common, *_ = processor._director_profile_prompt(
-                    text, entities, style, source_mode,
-                    prepared_source=(source_context, is_digest), context_only=True)
                 continue
 
             if reused:
@@ -103,11 +175,7 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
             else:
                 # A later step sees a compact, validated handoff, never prior raw
                 # responses or a second copy of the full screenplay/schema.
-                handoff = json.dumps(director_execution_payload(profile), ensure_ascii=False, separators=(",", ":"))
-                prompt = (common + "\n当前独立步骤：" + label + "\n" + GUIDANCE[key]
-                          + "\n本次JSON总长度控制在18000字符内；不展开镜头和对白。\n"
-                          + _director_profile_output_contract(fields=fields)
-                          + "\n<completed_steps_readonly>" + handoff + "</completed_steps_readonly>")
+                prompt = build_step_prompt(key, source_context, is_digest, entities, style, profile)
                 category = "provider"
                 raw = (processor.llm.chat(
                     messages=[{"role": "system", "content": prompt},

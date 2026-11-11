@@ -101,7 +101,7 @@ def _director_profile_output_contract(*, partial: bool = False, story_map_only: 
         visit(schema)
         if needed:
             schema["$defs"] = {key: definitions[key] for key in sorted(needed)}
-        return ("只返回本步骤的数据对象，字段不能省略；不得返回其他步骤或服务端字段。\n"
+        return ("只返回符合以下Schema的实际数据对象，不返回Schema本身；字段不能省略，不含其他步骤或服务端字段。\n"
                 "<director_output_contract>" + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
                 + "</director_output_contract>")
     requirement = ("仅返回发生变化的顶层字段；若修改 story_map，必须返回完整的 story_map 对象，不能为 null；"

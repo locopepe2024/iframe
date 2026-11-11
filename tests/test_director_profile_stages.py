@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from src.apps.comic_gen.director_profile_stages import STAGES
+from src.apps.comic_gen.director_profile_stages import STAGES, METHOD_STEPS, build_step_prompt
 from src.apps.comic_gen.extraction_jobs import ExtractionJobs
 from src.apps.comic_gen.llm import ScriptProcessor, _director_profile_output_contract
 from src.apps.comic_gen.models import DirectorProfile, Series
@@ -79,6 +79,75 @@ def test_three_bounded_streamed_requests_complete_without_mutating_user_drafts()
         assert set(schema["properties"]) == set(fields)
         assert "生成完整导演设定草稿" not in prompt
     assert result["source_audit"]["admission_status"] == "confirmable"
+
+
+def test_staged_prompts_exclude_other_steps_and_empty_context():
+    pipeline, script, processor = setup_pipeline()
+    generate(pipeline)
+    prompts = [call.kwargs["messages"][0]["content"] for call in processor.llm.chat.call_args_list]
+    for prompt in prompts:
+        assert prompt.count(script.original_text) == 1
+        for unused in ("<stage_preset", "crowd_groups", "群体模板", "chunk_summaries",
+                       "<visual_style_summary>", "series_context", "<visual_style>{}</visual_style>"):
+            assert unused not in prompt
+    foundation, story, continuity = prompts
+    assert "story_map" not in foundation and "scene_summaries" not in foundation
+    assert "completed_steps_readonly" not in foundation
+    assert "scene_summaries" not in story
+    assert "scene_summaries" in continuity
+
+
+def test_selected_methods_and_style_only_reach_relevant_steps():
+    from src.apps.director_skills import catalog
+    pipeline, script, processor = setup_pipeline()
+    script.art_direction.style_config = {"user_constraint": "STYLE_SENTINEL"}
+    methods = [item for item in catalog("episode") if item["id"] in ("people-relations", "continuity-review")]
+    pipeline.preview_director_profile_with_audit("film", stage_cache={}, skill_snapshot=methods)
+    prompts = [call.kwargs["messages"][0]["content"] for call in processor.llm.chat.call_args_list]
+    assert "STYLE_SENTINEL" in prompts[0] and "STYLE_SENTINEL" in prompts[2]
+    assert "STYLE_SENTINEL" not in prompts[1]
+    assert methods[0]["instructions"] in prompts[1]
+    assert methods[0]["instructions"] not in prompts[0] + prompts[2]
+    assert methods[1]["instructions"] in prompts[2]
+    assert methods[1]["instructions"] not in prompts[0] + prompts[1]
+    assert "unresolved_questions在本步记录到canon_state.uncertainties" in prompts[2]
+
+
+def test_unknown_selected_method_fails_before_provider_call():
+    pipeline, _, processor = setup_pipeline()
+    with pytest.raises(ValueError, match="方法.*步骤"):
+        pipeline.preview_director_profile_with_audit("film", stage_cache={},
+            skill_snapshot=[{"id": "future-method", "instructions": "Do not silently ignore"}])
+    processor.llm.chat.assert_not_called()
+
+
+def test_all_available_profile_methods_have_explicit_step_assignments():
+    from src.apps.director_skills import catalog
+    assert {item["id"] for scope in ("episode", "series") for item in catalog(scope)} == set(METHOD_STEPS)
+
+
+def test_digest_and_series_handoff_keep_evidence_boundaries_without_full_profile():
+    series_profile = {**profile_payload(), "sample_plan": [{"private_long_plan": "DO_NOT_RESEND"}],
+                      "execution_summary": "CONFIRMED_SERIES_SENTINEL"}
+    entities = {"characters": [], "series_context": {"preamble": "SERIES_BACKGROUND"},
+                "series_director_understanding": series_profile}
+    for key, _, _ in STAGES[1:]:
+        prompt = build_step_prompt(key, "SOURCE_DIGEST", True, entities, {}, {})
+        assert prompt.count("SOURCE_DIGEST") == 1
+        assert "chunk_summaries" in prompt and "分块边界不是叙事边界" in prompt
+        assert "SERIES_BACKGROUND" in prompt and "CONFIRMED_SERIES_SENTINEL" in prompt
+        assert "不代表本集已发生的事实" in prompt
+        assert "DO_NOT_RESEND" not in prompt
+
+
+def test_completed_handoff_does_not_include_derived_unfinished_continuity():
+    foundation = responses()[0]
+    prompt = build_step_prompt("story", "SOURCE", False, {}, {}, foundation)
+    handoff = json.loads(prompt.split("<completed_steps_readonly>")[1].split("</completed_steps_readonly>")[0])
+    assert set(handoff) == {"execution_summary"}
+    prompt = build_step_prompt("continuity", "SOURCE", False, {}, {}, {**foundation, **responses()[1]})
+    handoff = json.loads(prompt.split("<completed_steps_readonly>")[1].split("</completed_steps_readonly>")[0])
+    assert set(handoff) == {"execution_summary", "story_map"}
 
 
 def test_provider_error_retries_only_unfinished_step_with_saved_source_context():
