@@ -99,6 +99,15 @@ it('shows gateway model groups and does not call legacy custom voice management'
   expect(mocks.listCustomVoices).not.toHaveBeenCalled();
 });
 
+it('clears the legacy voice warning as soon as a compatible replacement is selected', async () => {
+  setup(vi.fn(), 'longcheng_v2');
+  fireEvent.click(screen.getByRole('button', { name: /音色库/ }));
+  expect(await screen.findByText('原音色不兼容当前网关，请重新选择并保存。')).toBeInTheDocument();
+  fireEvent.click(await screen.findByText('沉稳男声'));
+  expect(screen.queryByText('原音色不兼容当前网关，请重新选择并保存。')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '应用' })).toBeEnabled();
+});
+
 it('keeps available voices visible after an audition fails', async () => {
   mocks.previewVoice.mockRejectedValueOnce(new Error('网关请求失败'));
   setup(vi.fn());

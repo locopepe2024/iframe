@@ -186,7 +186,7 @@ export default function VoicePickerModal({
                         </div>
                     )}
 
-                    {!loading && !error && currentVoiceId && !voices.some(v => v.id === currentVoiceId) &&
+                    {!loading && !error && selectedId && !voices.some(v => v.id === selectedId) &&
                         <p className="mb-3 text-sm text-text-secondary">{t("legacyReselect")}</p>}
                     {!loading && !error && !voices.length && <p className="text-sm text-text-secondary">{t("gatewayEmpty")}</p>}
                     {!loading && !error && voices.length > 0 && <>
