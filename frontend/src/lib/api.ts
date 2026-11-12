@@ -458,6 +458,7 @@ export interface VoiceMeta {
     name: string;
     gender: "Male" | "Female" | "Neutral" | "Unknown";
     model: string;                                            // backend model id (cosyvoice-v3-flash / qwen3-tts-flash / ...)
+    provider?: "uniart" | "greena";
     family: "cosyvoice" | "qwen3" | "minimax";
     supports_instruction: boolean;
     dialect?: string | null;                                  // 'shanghai' | 'beijing' | 'sichuan' | 'cantonese' | etc.

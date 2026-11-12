@@ -3,7 +3,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { expect, it, vi } from 'vitest';
 import zh from '../../../../messages/zh.json';
 import CharacterVoiceBinding from './CharacterVoiceBinding';
-import { isUniArtVoiceBinding } from '@/lib/voiceBinding';
+import { isGatewayVoiceBinding, isUniArtVoiceBinding } from '@/lib/voiceBinding';
 
 const mocks = vi.hoisted(() => ({
   getVoices: vi.fn().mockResolvedValue([
@@ -169,5 +169,32 @@ it('recognizes every published system binding while rejecting legacy or malforme
   }
   for (const id of ['longcheng_v2', 'uniart:other:male-qn-qingse', 'uniart:speech-2.8-hd:a:b']) {
     expect(isUniArtVoiceBinding(id)).toBe(false);
+  }
+});
+
+
+it('keeps GreenA bindings usable and saves the selected gateway identity unchanged', async () => {
+  mocks.getVoices.mockResolvedValueOnce([
+    { id: 'greena:speech-2.8-hd:male-qn-jingying', name: 'GreenA沉稳男声', gender: 'Male', family: 'minimax', model: 'speech-2.8-hd', origin: 'system' },
+  ]);
+  const save = vi.fn().mockResolvedValue(undefined);
+  setup(save, 'greena:speech-2.8-hd:male-qn-qingse');
+  expect(screen.getByRole('button', { name: /音色库/ })).toHaveTextContent('清朗男声');
+  expect(screen.queryByText(/旧音色已停用/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /音色库/ }));
+  expect(await screen.findByText(/GreenA · MiniMax HD/)).toBeInTheDocument();
+  fireEvent.click(screen.getByText('GreenA沉稳男声'));
+  fireEvent.click(screen.getByRole('button', { name: '应用' }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith({
+    voice_id: 'greena:speech-2.8-hd:male-qn-jingying', voice_name: 'GreenA沉稳男声',
+  }));
+});
+
+it('accepts both gateway namespaces and rejects unknown models and providers', () => {
+  for (const prefix of ['uniart', 'greena']) {
+    expect(isGatewayVoiceBinding(`${prefix}:speech-2.8-turbo:male-qn-qingse`)).toBe(true);
+  }
+  for (const value of ['other:speech-2.8-hd:voice', 'greena:other:voice', 'greena:speech-2.8-hd:a:b']) {
+    expect(isGatewayVoiceBinding(value)).toBe(false);
   }
 });

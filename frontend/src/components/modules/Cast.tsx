@@ -24,7 +24,7 @@ import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
-import { isUniArtVoiceBinding } from "@/lib/voiceBinding";
+import { isGatewayVoiceBinding } from "@/lib/voiceBinding";
 import { characterImageUrl } from "@/lib/characterImage";
 import { useLightbox } from "@/components/shared/preview/LightboxProvider";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
@@ -161,7 +161,7 @@ export default function Cast() {
                         <StepPill label={t("charactersLabel")} value={characters.length} />
                         <StepPill
                             label={t("voiceBoundLabel")}
-                            value={(currentProject?.characters ?? []).filter((c: any) => isUniArtVoiceBinding(c.voice_id)).length}
+                            value={(currentProject?.characters ?? []).filter((c: any) => isGatewayVoiceBinding(c.voice_id)).length}
                         />
                     </>
                 ) : null}
@@ -670,7 +670,7 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
         : null;
     const voiceId: string | undefined = character?.voice_id;
     const voiceName: string | undefined = character?.voice_name;
-    const usableVoice = isUniArtVoiceBinding(voiceId);
+    const usableVoice = isGatewayVoiceBinding(voiceId);
 
     // PR-3g · Voice bind handler: persist via existing bindVoice API
     const handleApplyVoice = async (newVoiceId: string, newVoiceName: string) => {

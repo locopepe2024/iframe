@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import { api, API_URL } from "@/lib/api";
 import { getMaxReferenceImages } from "@/lib/modelCatalog";
 import { getAssetUrl } from "@/lib/utils";
-import { isUniArtVoiceBinding } from "@/lib/voiceBinding";
+import { isGatewayVoiceBinding } from "@/lib/voiceBinding";
 
 interface PropertiesPanelProps {
     activeStep: string;
@@ -883,7 +883,7 @@ function MotionInspector() {
 
 function AudioInspector({ project }: { project: any }) {
     const tp = useTranslations("properties");
-    const assignedCount = project?.characters?.filter((c: any) => isUniArtVoiceBinding(c.voice_id)).length || 0;
+    const assignedCount = project?.characters?.filter((c: any) => isGatewayVoiceBinding(c.voice_id)).length || 0;
     const totalCount = project?.characters?.length || 0;
 
     return (
