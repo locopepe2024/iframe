@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import tempfile
@@ -60,6 +61,8 @@ class UniArtTTSProcessor:
         except Exception:
             raise UniArtTTSError('无法读取语音模型目录，请检查网关配置和网络后重试。', 502) from None
         models = {m['api_model_id'] for m in catalog if 'audio' in m.get('capabilities', [])}
+        logging.getLogger(__name__).info(
+            'Speech catalog provider=%s models=%s', provider, sorted(models.intersection(MODELS)))
         return provider, config, [model for model in MODELS if model in models]
 
     def list_voices(self):
