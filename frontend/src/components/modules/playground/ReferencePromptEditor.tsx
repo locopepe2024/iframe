@@ -142,7 +142,9 @@ function referenceSuggestion(editor: Editor): ReferenceSuggestion | null {
   const { selection } = editor.state;
   if (!selection.empty) return null;
   const before = selection.$from.parent.textBetween(0, selection.$from.parentOffset, '\n', '\ufffc');
-  const match = before.match(/(?:^|[\s“”"'（(，。！？、\u3400-\u9fff])@([^@\n]*)$/);
+  // Adjacent reference atoms are U+FFFC in textBetween; another @ may follow
+  // them without a space, including after opening the character quick panel.
+  const match = before.match(/(?:^|[\s\ufffc“”"'（(，。！？、\u3400-\u9fff])@([^@\n]*)$/);
   if (!match) return null;
   const prefix = editor.state.doc.textBetween(0, selection.from, '\n', '\ufffc');
   if (isInsidePromptQuote(prefix, prefix.length - match[1].length - 1)) return null;

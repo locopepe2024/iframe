@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { AudioLines } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import VoicePickerModal from './VoicePickerModal';
-import { isUniArtVoiceBinding } from '@/lib/voiceBinding';
+import { isGatewayVoiceBinding } from '@/lib/voiceBinding';
 
 type CharacterVoice = {
   id: string; name: string; gender?: string; description?: string;
@@ -20,7 +20,7 @@ export default function CharacterVoiceBinding({ character, seriesId, onSave }: {
   const t = useTranslations('voicePicker');
   const [open, setOpen] = useState(false);
   const [voice, setVoice] = useState({ id: character.voice_id, name: character.voice_name });
-  const legacyVoice = !!voice.id && !isUniArtVoiceBinding(voice.id);
+  const legacyVoice = !!voice.id && !isGatewayVoiceBinding(voice.id);
   const displayVoice = legacyVoice ? t('legacyStopped') : voice.name || voice.id || t('noSelection');
   useEffect(() => {
     setVoice({ id: character.voice_id, name: character.voice_name });

@@ -1,6 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { act, render, waitFor } from "@testing-library/react";
-import ReferencePromptEditor, { referencePromptDocument, type PromptSlashSuggestion } from "./ReferencePromptEditor";
+import ReferencePromptEditor, { referencePromptDocument, type PromptSlashSuggestion, type ReferenceSuggestion } from "./ReferencePromptEditor";
+
+it("opens another mention directly after four reference tokens", () => {
+  let suggestion: ReferenceSuggestion | null = null;
+  const view = render(<ReferencePromptEditor value="" placeholder="Prompt" onChange={vi.fn()}
+    onMentionChange={next => { suggestion = next; }} />);
+  const editor = (view.getByRole("textbox") as any).editor;
+  act(() => editor.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content: [
+    ...Array.from({ length: 4 }, (_, index) => ({ type: 'referenceToken', attrs: { label: `角色${index}` } })),
+    { type: 'text', text: '@' },
+  ] }] }));
+  act(() => editor.commands.setTextSelection(editor.state.doc.content.size - 1));
+  expect(suggestion).toMatchObject({ query: '' });
+});
 
 describe("reference prompt restoration", () => {
   it.each(['“@长街”', '"@长街"', '「@长街」', '『@长街』', "'@长街'"])("keeps quoted reference text literal: %s", (value) => {

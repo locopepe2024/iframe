@@ -71,6 +71,12 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
     if (audio.get("supports_generation") or audio.get("supports_tts") or audio.get("supports_speech")
             or "audio-speech" in (item.get("supported_endpoint_types") or [])):
         capabilities.append("audio")
+    # New One's OpenAI-compatible /models response lists these MiniMax TTS
+    # SKUs as ordinary OpenAI models without endpoint capability metadata.
+    # Their IDs are narrowly allowlisted by the voice adapter; do not infer
+    # audio support from an arbitrary model name or channel.
+    if model_id in {"speech-2.8-hd", "speech-2.8-turbo"}:
+        capabilities.append("audio")
     # Older UniArt payloads identify these MiniMax audio SKUs only by ID.
     if model_id.lower().startswith("minimax") and any(token in model_id.lower() for token in ("speed-hd", "speed_hd", "-turbo", "_turbo")):
         capabilities.append("audio")

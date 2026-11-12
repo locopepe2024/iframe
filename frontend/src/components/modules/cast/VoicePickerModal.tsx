@@ -1,5 +1,5 @@
 "use client";
-// UniArt gateway voice library; legacy bindings are retained until explicitly replaced.
+// Active gateway voice library; bindings retain their provider/model identity.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Play, Pause, Check, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -186,7 +186,7 @@ export default function VoicePickerModal({
                         </div>
                     )}
 
-                    {!loading && !error && currentVoiceId && !voices.some(v => v.id === currentVoiceId) &&
+                    {!loading && !error && selectedId && !voices.some(v => v.id === selectedId) &&
                         <p className="mb-3 text-sm text-text-secondary">{t("legacyReselect")}</p>}
                     {!loading && !error && !voices.length && <p className="text-sm text-text-secondary">{t("gatewayEmpty")}</p>}
                     {!loading && !error && voices.length > 0 && <>
@@ -204,7 +204,7 @@ export default function VoicePickerModal({
                         {!filtered.length && <p className="text-sm text-text-secondary">{t("noMatches")}</p>}
                         <div className="space-y-5">
                             {groups.map(group => <VoiceGroup key={group.model}
-                                label={`UniArt · MiniMax ${group.model.endsWith('-hd') ? 'HD' : 'Turbo'} · ${group.voices.length}`}
+                                label={`${group.voices[0]?.id.startsWith('greena:') ? 'GreenA' : 'UniArt'} · MiniMax ${group.model.endsWith('-hd') ? 'HD' : 'Turbo'} · ${group.voices.length}`}
                                 voices={group.voices.slice(0, visibleLimit)} selectedId={selectedId} playingId={playingId} previewingId={previewingId}
                                 onSelect={setSelectedId} onPreview={handlePreview} />)}
                         </div>

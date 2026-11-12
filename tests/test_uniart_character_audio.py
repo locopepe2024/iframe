@@ -77,6 +77,7 @@ def gateway(monkeypatch):
     import src.audio.uniart_tts as module
     config = {'api_key': 'owner-a-key', 'base_url': 'https://gateway.test/v1', 'catalog_name': 'uniart'}
     monkeypatch.setattr(module, 'studio_uniart_config', lambda: dict(config))
+    monkeypatch.setattr(module, 'studio_gateway_config', lambda provider: dict(config))
     monkeypatch.setattr(module, 'fetch_selected_catalog', lambda config: [
         {'api_model_id': 'speech-2.8-hd', 'capabilities': ['audio']},
     ])
@@ -141,7 +142,7 @@ def test_wrong_gateway_and_unknown_instructions_fail_explicitly(gateway, tmp_pat
     config, post = gateway
     with pytest.raises(UniArtTTSError):
         UniArtTTSProcessor().synthesize('你好', str(tmp_path/'x.mp3'), voice=VOICE, instructions='make it magical')
-    config['catalog_name'] = 'greena'
+    config['catalog_name'] = 'unsupported'
     with pytest.raises(UniArtTTSError):
         UniArtTTSProcessor().list_voices()
     post.assert_not_called()
@@ -254,6 +255,9 @@ def test_request_context_resolves_correct_owner_without_global_sdk_state(gateway
     from src.apps.identity import UserContext
     _, post = gateway
     monkeypatch.setattr(module, 'studio_uniart_config', access.studio_uniart_config)
+    monkeypatch.setattr(module, 'studio_gateway_config', access.studio_gateway_config)
+    monkeypatch.setattr(access, 'runtime_gateway_for_owner', lambda user_id, profile_id, provider: {
+        'api_key': f'{user_id}-{profile_id}', 'base_url': 'https://gateway.test/v1', 'catalog_name': provider})
     monkeypatch.setattr(access, 'runtime_uniart_for_owner', lambda user_id, profile_id: {
         'api_key': f'{user_id}-{profile_id}', 'base_url': 'https://gateway.test/v1', 'catalog_name': 'uniart'})
     monkeypatch.setenv('DASHSCOPE_API_KEY', 'unused-shared-key')
@@ -309,3 +313,45 @@ def test_official_extended_ids_are_forwarded_unchanged(gateway, tmp_path, voice_
     UniArtTTSProcessor().synthesize('你好', str(tmp_path / 'new.mp3'),
                                   voice='uniart:speech-2.8-hd:' + voice_id)
     assert post.call_args.kwargs['json']['voice'] == voice_id
+
+
+@pytest.mark.parametrize('provider', ['greena', 'nsfw'])
+def test_greena_voices_use_current_owner_and_preserve_gateway_binding(gateway, tmp_path, provider):
+    config, post = gateway
+    config.update(catalog_name=provider, base_url='https://greena.test/v1')
+    processor = UniArtTTSProcessor()
+    voices = processor.list_voices()
+    assert len(voices) == 327
+    assert all(v['provider'] == 'greena' and v['id'].startswith('greena:') for v in voices)
+    for owner in ['a', 'b']:
+        config['api_key'] = f'owner-{owner}-key'
+        processor.synthesize('你好', tmp_path / f'{owner}.mp3', voice=voices[0]['id'])
+        assert post.call_args.args[0] == 'https://greena.test/v1/audio/speech'
+        assert post.call_args.kwargs['headers']['Authorization'] == f'Bearer owner-{owner}-key'
+        assert post.call_args.kwargs['json']['model'] == 'speech-2.8-hd'
+
+
+def test_explicit_binding_resolves_its_own_profile_without_active_gateway(gateway, tmp_path, monkeypatch):
+    import src.audio.uniart_tts as module
+    config, post = gateway
+    monkeypatch.setattr(module, 'studio_uniart_config', Mock(side_effect=RuntimeError('no active gateway')))
+    resolver = Mock(return_value=dict(config))
+    monkeypatch.setattr(module, 'studio_gateway_config', resolver)
+    UniArtTTSProcessor().synthesize('你好', tmp_path / 'x.mp3', voice=VOICE)
+    resolver.assert_called_once_with('uniart')
+    assert post.call_args.kwargs['headers']['Authorization'] == 'Bearer owner-a-key'
+
+
+def test_greena_rejects_unregistered_clone_before_sending(gateway, tmp_path):
+    config, post = gateway
+    config['catalog_name'] = 'greena'
+    with pytest.raises(UniArtTTSError):
+        UniArtTTSProcessor().synthesize('你好', tmp_path / 'x.mp3',
+                                      voice='greena:speech-2.8-hd:unregistered_clone')
+    post.assert_not_called()
+
+
+@pytest.mark.parametrize('model', ['speech-2.8-hd', 'speech-2.8-turbo'])
+def test_bare_new_one_speech_model_is_audio(model):
+    assert normalize_uniart_model({'id': model})['capabilities'] == ['audio']
+    assert normalize_uniart_model({'id': 'llm-nf-all'})['capabilities'] == ['chat']

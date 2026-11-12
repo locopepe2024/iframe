@@ -3,3 +3,8 @@ export function isUniArtVoiceBinding(value: unknown): value is string {
     return typeof value === "string"
         && /^uniart:speech-2\.8-(hd|turbo):[A-Za-z0-9_ ()（）-]{1,128}$/.test(value);
 }
+
+export function isGatewayVoiceBinding(value: unknown): value is string {
+    return typeof value === "string"
+        && /^(uniart|greena):speech-2\.8-(hd|turbo):[A-Za-z0-9_ ()（）-]{1,128}$/.test(value);
+}
