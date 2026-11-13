@@ -17,6 +17,7 @@ const apiMocks = vi.hoisted(() => ({
     authenticatedFetch: vi.fn().mockResolvedValue({ ok: false }),
     getVoices: vi.fn().mockResolvedValue([{ id: 'uniart:speech-2.8-hd:male-qn-qingse', name: '清朗男声', gender: 'Male', family: 'minimax', model: 'speech-2.8-hd', origin: 'system' }]),
     listCustomVoices: vi.fn().mockResolvedValue([]),
+    resolveReferenceMaterial: vi.fn((reference: any, _projectId: string, label: string) => Promise.resolve({ reference, label, path: '/studio/owned-media/owner/pose.png' })),
     getAssetReferenceIndex: vi.fn(),
     getPlatformReferenceLibrary: vi.fn().mockResolvedValue({ scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [] }),
     getCharacterAssetPack: vi.fn().mockResolvedValue({
@@ -529,7 +530,7 @@ it("does not search the asset index through @ before a reference is selected", (
     expect(within(suggestions).queryByRole("option")).not.toBeInTheDocument();
 });
 
-it("provides a searchable reference picker without requiring an @ prefix", () => {
+it("provides a searchable reference picker without requiring an @ prefix", async () => {
     const onPickerReferencesChange = vi.fn();
     const onImageGenerationModeChange = vi.fn();
     const candidate = {
@@ -547,16 +548,18 @@ it("provides a searchable reference picker without requiring an @ prefix", () =>
     />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
-    fireEvent.change(screen.getByLabelText("搜索角色参考素材"), { target: { value: "pocket" } });
-    const option = screen.getByRole("option", { name: /Pocket watch/ });
+    fireEvent.change(screen.getByLabelText("快速搜索参考素材"), { target: { value: "pocket" } });
+    const option = await screen.findByRole("button", { name: /Pocket watch/ });
     expect(option).toHaveTextContent("front");
     fireEvent.click(option);
+    fireEvent.click(screen.getByRole("button", { name: "使用参考素材" }));
+    await waitFor(() => expect(onPickerReferencesChange).toHaveBeenCalled());
 
     expect(onPickerReferencesChange).toHaveBeenCalledWith([candidate.reference]);
     expect(onImageGenerationModeChange).toHaveBeenCalledWith("reference");
 });
 
-it("supports selecting a searched reference with the keyboard", () => {
+it("supports selecting a searched reference with the keyboard", async () => {
     const onPickerReferencesChange = vi.fn();
     const candidate = {
         label: "Pocket watch · front",
@@ -572,12 +575,14 @@ it("supports selecting a searched reference with the keyboard", () => {
     />);
 
     fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
-    const search = screen.getByRole("textbox", { name: "搜索角色参考素材" });
+    const search = screen.getByRole("textbox", { name: "快速搜索参考素材" });
     fireEvent.change(search, { target: { value: "pocket" } });
+    const option = await screen.findByRole("button", { name: /Pocket watch/ });
     fireEvent.keyDown(search, { key: "ArrowDown" });
-    const option = screen.getByRole("option", { name: /Pocket watch/ });
     expect(document.activeElement).toBe(option);
     fireEvent.keyDown(option, { key: "Enter" });
+    fireEvent.click(screen.getByRole("button", { name: "使用参考素材" }));
+    await waitFor(() => expect(onPickerReferencesChange).toHaveBeenCalled());
 
     expect(onPickerReferencesChange).toHaveBeenCalledWith([candidate.reference]);
 });
@@ -637,7 +642,9 @@ it("loads the project reference index for the character workbench", async () => 
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledWith("project-1"));
     openImagePrompt();
     fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
-    fireEvent.click(await screen.findByRole("option", { name: /Pocket watch/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Pocket watch/ }));
+    fireEvent.click(screen.getByRole("button", { name: "使用参考素材" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "参考素材" })).not.toBeInTheDocument());
     const editors = screen.getAllByRole("textbox") as Array<HTMLElement & { editor?: import("@tiptap/core").Editor }>;
     const promptEditor = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
     expect(promptEditor?.editor).toBeDefined();
@@ -687,7 +694,9 @@ it.each([
         onClose={vi.fn()} onUpdateDescription={vi.fn()} onGenerate={onGenerate} generatingTypes={[]} />);
     openImagePrompt();
     fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
-    fireEvent.click(await screen.findByRole("option", { name: /坐姿参考/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /坐姿参考/ }));
+    fireEvent.click(screen.getByRole("button", { name: "使用参考素材" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "参考素材" })).not.toBeInTheDocument());
     fireEvent.click(screen.getAllByTestId("variant-generate")[0]);
     const confirm = await screen.findByRole("button", { name: "确认并生成" });
     await waitFor(() => expect(confirm).not.toBeDisabled());
@@ -714,10 +723,10 @@ it("removes a deleted shared asset when the reference picker opens again", async
     const picker = screen.getAllByRole("button", { name: "选择参考素材" })[0];
     fireEvent.click(picker);
     expect(await screen.findByText("Deleted actor")).toBeInTheDocument();
-    fireEvent.click(picker);
+    fireEvent.click(screen.getByRole("button", { name: "关闭参考素材" }));
     fireEvent.click(picker);
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(3));
-    await waitFor(() => expect(screen.getAllByText("暂无可用参考素材").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("没有匹配的参考素材").length).toBeGreaterThan(0));
     expect(screen.queryByText("Deleted actor")).not.toBeInTheDocument();
 });
 
@@ -843,7 +852,9 @@ it("refreshes the reference index when a generated project snapshot arrives", as
 
     openImagePrompt();
     fireEvent.click(screen.getByRole("button", { name: "选择参考素材" }));
-    fireEvent.click(await screen.findByRole("option", { name: /Hero/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Hero/ }));
+    fireEvent.click(screen.getByRole("button", { name: "使用参考素材" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "参考素材" })).not.toBeInTheDocument());
     const editor = imagePromptInput() as HTMLElement & { editor: import("@tiptap/core").Editor };
     expect(editor?.editor).toBeDefined();
     act(() => { editor!.editor!.chain().setContent("<p>@Hero</p>").focus("end").run(); });
@@ -2021,7 +2032,9 @@ it('exposes full-body reference controls before generation and carries the selec
     fireEvent.click(screen.getByRole('button', { name: 'Reference image' }));
     expect(screen.getByRole('button', { name: 'Reference image' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: '选择参考素材' }));
-    fireEvent.click(await screen.findByRole('option', { name: /Pocket watch/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Pocket watch/ }));
+    fireEvent.click(screen.getByRole("button", { name: "使用参考素材" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "参考素材" })).not.toBeInTheDocument());
     fireEvent.click(screen.getByTestId('variant-generate'));
     const confirm = await screen.findByRole('button', { name: '确认并生成' });
     await waitFor(() => expect(confirm).toBeEnabled());
