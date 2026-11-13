@@ -65,6 +65,9 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
     const search = useRef<HTMLInputElement>(null);
     const upload = useRef<HTMLInputElement>(null);
     const generation = useRef(0);
+    const candidateSnapshot = useRef(candidates); candidateSnapshot.current = candidates;
+    const candidateSignature = JSON.stringify(candidates?.filter(item => item.reference?.asset_type !== 'platform_reference' && item.reference?.asset_type !== 'media')
+        .map(item => [materialKey(item.reference), item.label, item.description]));
     const props = useRef({ onSelect, onClose });
     props.current = { onSelect, onClose };
 
@@ -79,7 +82,7 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
     useEffect(() => {
         if (!open) return;
         const version = ++generation.current;
-        setLoading(true); setItems([]); setErrors([]); setSelected(null);
+        setLoading(true); setItems([]); setErrors([]);
         const timer = window.setTimeout(async () => {
             const pools: MaterialCandidate[] = [];
             const issues: string[] = [];
@@ -93,7 +96,7 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
             if (source === 'all' || source === 'project') tasks.push((async () => {
                 const projectItems: MaterialCandidate[] = [];
                 try {
-                    if (candidates) projectItems.push(...candidates.filter(item => item.reference?.asset_type !== 'platform_reference' && item.reference?.asset_type !== 'media' && matches(item)));
+                    if (candidateSnapshot.current) projectItems.push(...candidateSnapshot.current.filter(item => item.reference?.asset_type !== 'platform_reference' && item.reference?.asset_type !== 'media' && matches(item)));
                     else {
                         const index = projectId ? await api.getAssetReferenceIndex(projectId) : await api.getAssetLibraryIndex();
                         for (const entry of index.assets) for (const variant of entry.variants || []) {
@@ -148,7 +151,9 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
             setErrors(issues); setLoading(false);
         }, query ? 250 : 0);
         return () => { window.clearTimeout(timer); generation.current++; };
-    }, [open, source, query, page, retry, projectId, candidates, accept, allowRecentPaths, recentCandidates]);
+    }, [open, source, query, page, retry, projectId, candidateSignature, accept, allowRecentPaths, recentCandidates]);
+
+    useEffect(() => { setSelected(null); }, [open, source, query, page]);
 
     if (!open || typeof document === 'undefined') return null;
     const choose = async () => {

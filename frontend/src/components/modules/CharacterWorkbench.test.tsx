@@ -680,9 +680,6 @@ it.each([
     apiMocks.getAssetReferenceIndex.mockResolvedValue({ project_id: "project-1", assets: [] });
     apiMocks.getPlatformReferenceLibrary.mockReset();
     apiMocks.getPlatformReferenceLibrary.mockResolvedValue({
-        scope: "platform_shared", schema_version: 1, catalog_revision: "test", resources: [],
-    });
-    apiMocks.getPlatformReferenceLibrary.mockResolvedValueOnce({
         scope: "platform_shared", schema_version: 1, catalog_revision: "test",
         resources: [{ platform_resource_id: "platform.pose.seated", revision: 3,
             kind: "image", category_path: "reference/pose", title: "坐姿参考",
