@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import time
 from uuid import uuid4
+from PIL import Image, UnidentifiedImageError
 
 from fastapi import HTTPException
 from ..comic_gen.models import AssemblyEditPlan
@@ -21,6 +22,11 @@ from ...audio.uniart_tts import UniArtTTSProcessor, UniArtTTSError
 
 
 class EditingService:
+    IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp')
+    VIDEO_EXTENSIONS = ('.mp4', '.mov', '.mkv', '.webm')
+    AUDIO_EXTENSIONS = ('.wav', '.mp3', '.m4a', '.aac', '.ogg')
+    STILL_DEFAULT_DURATION_MS = 5000
+
     def __init__(self, user, output_root=None):
         self.user = user
         self.output_root = Path(output_root or media_root()).resolve()
@@ -176,8 +182,10 @@ class EditingService:
         # Never probe all historic videos on a directory read. New uploads carry
         # verified metadata; legacy cards show an unknown duration until opened.
         metadata = item.get('metadata') or {}
-        video = Path(item.get('storage_key') or item.get('storage_path') or '').suffix.lower() in ('.mp4', '.mov', '.mkv', '.webm')
-        return dict(video=metadata.get('video', video), audio=metadata.get('audio', not video),
+        suffix = Path(item.get('storage_key') or item.get('storage_path') or '').suffix.lower()
+        video = suffix in EditingService.VIDEO_EXTENSIONS
+        image = suffix in EditingService.IMAGE_EXTENSIONS
+        return dict(video=metadata.get('video', video), image=metadata.get('image', image), audio=metadata.get('audio', not (video or image)),
                     duration_ms=metadata.get('duration_ms', 0))
 
     def materials_page(self, query='', cursor=0, folder_id=None):
@@ -188,7 +196,7 @@ class EditingService:
             folder_names = {row[0]: row[1] for row in db.execute('SELECT id, name FROM editing_folders WHERE owner=?', (self.user.owner_profile_id,))}
         assignments = dict(folder_rows)
         for item in list_media(self.user.owner_profile_id, output_root=str(self.output_root)):
-            if Path(item['storage_key']).suffix.lower() not in ('.mp4', '.mov', '.mkv', '.webm', '.wav', '.mp3', '.m4a', '.aac', '.ogg'):
+            if Path(item['storage_key']).suffix.lower() not in self.VIDEO_EXTENSIONS + self.AUDIO_EXTENSIONS + self.IMAGE_EXTENSIONS:
                 continue
             key = 'core:'+item['media_id']
             assigned = assignments.get(key)
@@ -259,13 +267,31 @@ class EditingService:
         actual = fingerprint(path)
         if digest and actual != digest:
             raise HTTPException(409, 'Material checksum changed')
+        if path.suffix.lower() in self.IMAGE_EXTENSIONS:
+            width, height = self._validate_still(path)
+            return dict(id=key, name=name, url=stored, sha256=actual, duration_ms=self.STILL_DEFAULT_DURATION_MS,
+                        video=False, audio=False, image=True, width=width, height=height), str(path)
         data = self._probe(path)
         kinds = {s['codec_type'] for s in data['streams']}
         durations = [float(s['duration']) for s in data['streams'] if s['codec_type'] == 'video' and s.get('duration') not in (None, 'N/A')]
         duration_ms = round((min(durations) if durations else float(data['format']['duration'])) * 1000)
         if duration_ms < 1:
             raise HTTPException(422, 'Material duration is empty')
-        return dict(id=key, name=name, url=stored, sha256=actual, duration_ms=duration_ms, video='video' in kinds, audio='audio' in kinds), str(path)
+        return dict(id=key, name=name, url=stored, sha256=actual, duration_ms=duration_ms, video='video' in kinds, audio='audio' in kinds, image=False), str(path)
+
+    @staticmethod
+    def _validate_still(path):
+        try:
+            with Image.open(path) as image:
+                if image.format not in ('PNG', 'JPEG', 'WEBP') or getattr(image, 'n_frames', 1) != 1:
+                    raise ValueError('Unsupported or animated image')
+                width, height = image.size
+                if width < 1 or height < 1 or width * height > 100_000_000:
+                    raise ValueError('Image dimensions are invalid or too large')
+                image.verify()
+                return width, height
+        except (OSError, ValueError, UnidentifiedImageError) as exc:
+            raise HTTPException(422, 'Image is unreadable, animated, or unsupported') from exc
 
     def transcription_audio(self, key, start_ms, end_ms):
         material, path = self.resolve(key)
@@ -314,8 +340,8 @@ class EditingService:
                 if not db.execute('SELECT 1 FROM editing_folders WHERE id=? AND owner=?', (folder_id, self.user.owner_profile_id)).fetchone():
                     raise HTTPException(404, 'Folder not found')
         suffix = Path(filename).suffix.lower()
-        if suffix not in ('.mp4', '.mov', '.mkv', '.webm', '.wav', '.mp3', '.m4a', '.aac', '.ogg'):
-            raise HTTPException(422, 'Unsupported video or audio file')
+        if suffix not in self.VIDEO_EXTENSIONS + self.AUDIO_EXTENSIONS + self.IMAGE_EXTENSIONS:
+            raise HTTPException(422, 'Unsupported video, audio, or image file')
         path = self.root / (uuid4().hex + suffix)
         try:
             with path.open('xb') as target:
@@ -325,14 +351,19 @@ class EditingService:
                     if size > MAX_BYTES:
                         raise HTTPException(413, 'Material exceeds 256 MiB')
                     target.write(chunk)
-            # Validate duration and streams before making the immutable file visible.
-            data = self._probe(path)
-            if float(data['format']['duration']) <= 0:
-                raise HTTPException(422, 'Material duration is empty')
+            # Validate media before making the immutable file visible.
+            if suffix in self.IMAGE_EXTENSIONS:
+                width, height = self._validate_still(path)
+                metadata = dict(duration_ms=self.STILL_DEFAULT_DURATION_MS, video=False, audio=False, image=True, width=width, height=height)
+            else:
+                data = self._probe(path)
+                if float(data['format']['duration']) <= 0:
+                    raise HTTPException(422, 'Material duration is empty')
+                metadata = dict(duration_ms=round(float(data['format']['duration']) * 1000), video=any(s['codec_type'] == 'video' for s in data['streams']), audio=any(s['codec_type'] == 'audio' for s in data['streams']), image=False)
             with self.db() as db:
                 if folder_id and not db.execute('SELECT 1 FROM editing_folders WHERE id=? AND owner=?', (folder_id, self.user.owner_profile_id)).fetchone():
                     raise HTTPException(404, 'Folder not found')
-                media_id = register_media(self.user.owner_profile_id, path.relative_to(self.output_root).as_posix(), kind='editing_upload', display_name=Path(filename).name, sha256=fingerprint(path), metadata=dict(duration_ms=round(float(data['format']['duration']) * 1000), video=any(s['codec_type'] == 'video' for s in data['streams']), audio=any(s['codec_type'] == 'audio' for s in data['streams'])), output_root=str(self.output_root))
+                media_id = register_media(self.user.owner_profile_id, path.relative_to(self.output_root).as_posix(), kind='editing_upload', display_name=Path(filename).name, sha256=fingerprint(path), metadata=metadata, output_root=str(self.output_root))
                 self._assign_folder(db, 'core:'+media_id, folder_id)
             return self.resolve('core:'+media_id)[0]
         except BaseException:
@@ -374,11 +405,16 @@ class EditingService:
                 old = (expected_sources or {}).get(key)
                 if old and source['sha256'] != old['sha256']:
                     raise HTTPException(409, 'Material changed after saving')
-                if not source['video' if lane.kind == 'video' else 'audio']:
+                is_visual_lane = lane.kind == 'video'
+                stream_matches_lane = (source['video'] or source.get('image')) if is_visual_lane else source['audio']
+                if not stream_matches_lane:
                     raise HTTPException(422, 'Material stream does not match lane')
                 duration = clip.timeline_end_ms - clip.timeline_start_ms
                 end = clip.source_end_ms if clip.source_end_ms is not None else clip.source_start_ms + duration
-                if end > source['duration_ms'] + 1 or end - clip.source_start_ms != duration:
+                if source.get('image'):
+                    if not is_visual_lane or end <= clip.source_start_ms or end > 3_600_000:
+                        raise HTTPException(422, 'Still image clip has an invalid virtual source range')
+                elif end > source['duration_ms'] + 1 or end - clip.source_start_ms != duration:
                     raise HTTPException(422, 'Clip range exceeds source or changes original speed')
         videos = sorted((c for l in plan.lanes if l.kind == 'video' and not l.muted for c in l.clips if c.enabled), key=lambda c: (c.timeline_start_ms, c.timeline_end_ms, c.id))
         if not videos:

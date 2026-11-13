@@ -101,13 +101,14 @@ export default function EditingPage() {
   };
   const add = (item: EditMaterial, laneOverride?: 'bgm' | 'dialogue' | 'sfx', placement?: { startMs: number; trimTail: boolean }) => {
     if (!project) return false;
-    if (!item.video && !plan) { setError(t('请先添加视频。', 'Add a video first.')); return false; }
+    if (!item.video && !item.image && !plan) { setError(t('请先添加视频。', 'Add a video first.')); return false; }
     const current: AssemblyEditPlan = plan || { id: `assembly-${project.id}`, scope: 'project', revision: 1, target_duration_ms: item.duration_ms, lanes: [], markers: [], provenance: {} };
-    const kind: 'video' | 'bgm' | 'dialogue' | 'sfx' = item.video ? 'video' : laneOverride || audioLane;
+    const isVisual = item.video || item.image;
+    const kind: 'video' | 'bgm' | 'dialogue' | 'sfx' = isVisual ? 'video' : laneOverride || audioLane;
     const lane = current.lanes.find(l => l.kind === kind);
     const hasVideo = current.lanes.some(l => l.kind === 'video' && l.clips.length > 0);
-    const start = placement?.startMs ?? (item.video && hasVideo ? current.target_duration_ms : 0);
-    const duration = item.video ? item.duration_ms : Math.min(item.duration_ms, Math.max(0, current.target_duration_ms - start));
+    const start = placement?.startMs ?? (isVisual && hasVideo ? current.target_duration_ms : 0);
+    const duration = isVisual ? item.duration_ms : Math.min(item.duration_ms, Math.max(0, current.target_duration_ms - start));
     if (duration <= 0 || (placement && item.duration_ms > duration && !placement.trimTail)) {
       setError(t('配音时长超出可用范围。', 'Voiceover duration exceeds the available range.'));
       return false;
@@ -116,7 +117,7 @@ export default function EditingPage() {
     const lanes = lane ? current.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, clip] } : l) : [...current.lanes, { id: createRenderRequestId(), kind, label: kind, allow_overlap: kind !== 'video', clips: [clip] }];
     if (lanes.length > 8) { setError(t('最多支持 8 条泳道。', 'At most 8 lanes.')); return false; }
     setSources(old => ({ ...old, [item.id]: item }));
-    change({ ...current, lanes, target_duration_ms: item.video ? start + duration : current.target_duration_ms });
+    change({ ...current, lanes, target_duration_ms: isVisual ? start + duration : current.target_duration_ms });
     return true;
   };
   const importToWorkspace = async (item: EditMaterial) => {

@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 /** Decode bounded, evenly spaced source frames only when the clip is visible. */
-export default function TimelineFilmstrip({ url, poster, startMs, endMs, width }: {
-    url: string; poster?: string; startMs: number; endMs: number; width: number;
+export default function TimelineFilmstrip({ url, poster, still = false, startMs, endMs, width }: {
+    url: string; poster?: string; still?: boolean; startMs: number; endMs: number; width: number;
 }) {
     const host = useRef<HTMLDivElement>(null);
     const [visible, setVisible] = useState(false);
@@ -21,7 +21,7 @@ export default function TimelineFilmstrip({ url, poster, startMs, endMs, width }
     }, []);
     useEffect(() => {
         setFrames([]);
-        if (!visible) return;
+        if (!visible || still) return;
         const video = document.createElement('video');
         video.muted = true; video.preload = 'auto'; video.playsInline = true;
         let cancelled = false;
@@ -51,7 +51,7 @@ export default function TimelineFilmstrip({ url, poster, startMs, endMs, width }
         };
         void decode().catch(() => { /* The existing poster remains visible if decoding is unavailable. */ });
         return () => { cancelled = true; abortWait?.(); video.removeAttribute('src'); video.load(); };
-    }, [url, startMs, endMs, count, visible]);
+    }, [url, startMs, endMs, count, visible, still]);
     return <div ref={host} className="pointer-events-none flex h-14 w-full overflow-hidden" aria-hidden="true">
         {frames.length ? frames.map((src, index) => <img key={index} src={src} alt="" draggable={false} className="h-full min-w-0 flex-1 object-cover" />) : poster ? <img src={poster} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" /> : <span className="h-full w-full animate-pulse bg-foreground/10" />}
     </div>;

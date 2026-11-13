@@ -16,7 +16,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange: comm
     materialPanel?: ReactNode;
     disabled?: boolean;
     onImport?: () => void;
-    materials?: Record<string, { url: string; audio?: boolean }>;
+    materials?: Record<string, { url: string; audio?: boolean; image?: boolean }>;
     onUploadAudio?: (file: File) => Promise<{ media_id: string; url: string; duration_ms: number }>;
     onExportSubtitles?: (lane: string) => Promise<Blob>;
     onTranscribe?: (clip: AssemblyClip) => void;
@@ -80,14 +80,15 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange: comm
     const mediaFor = (clip: typeof videos[number]) => {
         if (materials && clip.source_media_id) {
             const url = materials[clip.source_media_id]?.url;
-            return url ? { url: getAssetUrl(url), poster: getVideoPosterUrl(url) } : null;
+            const material = materials[clip.source_media_id];
+            return url ? { url: getAssetUrl(url), poster: material?.image ? getAssetUrl(url) : getVideoPosterUrl(url), image: material?.image || false } : null;
         }
         if (clip.source_project_id && clip.source_project_id !== project.id) return null;
         const frame = project.frames.find(f => f.id === clip.source_frame_id);
         const task = project.video_tasks?.find(task => task.id === clip.source_task_id);
         const url = clip.source_task_id ? task?.video_url : frame?.video_url;
         const still = frame?.rendered_image_url || frame?.image_url;
-        return url ? { url: getAssetUrl(url), poster: getVideoPosterUrl(url) || getAssetUrl(still) } : null;
+        return url ? { url: getAssetUrl(url), poster: getVideoPosterUrl(url) || getAssetUrl(still), image: false } : null;
     };
     const currentMedia = currentVideo ? mediaFor(currentVideo) : null;
     const sourceTime = currentVideo ? ((currentVideo.source_start_ms ?? 0) + (position - currentVideo.timeline_start_ms) * ((currentVideo.source_end_ms ?? (currentVideo.source_start_ms ?? 0) + currentVideo.timeline_end_ms - currentVideo.timeline_start_ms) - (currentVideo.source_start_ms ?? 0)) / (currentVideo.timeline_end_ms - currentVideo.timeline_start_ms)) / 1000 : 0;
@@ -101,6 +102,16 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange: comm
         else video.pause();
     };
     useEffect(() => { syncVideo(); }, [position, currentVideo?.id, currentMedia?.url, currentVideo?.source_start_ms, currentVideo?.source_end_ms, currentVideo?.timeline_start_ms, currentVideo?.timeline_end_ms, playing]);
+    useEffect(() => {
+        if (!playing || !currentMedia?.image || !currentVideo) return;
+        const timer = window.setInterval(() => {
+            setPosition(value => Math.min(plan.target_duration_ms, value + 50));
+        }, 50);
+        return () => window.clearInterval(timer);
+    }, [playing, currentMedia?.image, currentVideo?.id, plan.target_duration_ms]);
+    useEffect(() => {
+        if (playing && currentMedia?.image && position >= plan.target_duration_ms) setPlaying(false);
+    }, [playing, currentMedia?.image, position, plan.target_duration_ms]);
     useEffect(() => { if (!currentMedia) setPlaying(false); }, [currentMedia?.url]);
     useEffect(() => { setPlaying(false); setPosition(0); setSelected(null); setMediaError(null); }, [project.id]);
     useEffect(() => { setMediaError(null); }, [currentMedia?.url]);
@@ -231,7 +242,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange: comm
             <button type="button" className={`${control} px-2`} aria-label={t("切换片段属性", "Toggle clip properties")} title={t("片段属性", "Clip properties")} aria-expanded={showInspector} onClick={() => setShowInspector(value => !value)}>{showInspector ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}</button>
         </div>
         <div className="relative mx-auto aspect-video max-h-[24dvh] lg:max-h-[45dvh] w-full overflow-hidden rounded-lg bg-black">
-            {currentMedia ? <video ref={videoRef} key={currentMedia.url} src={currentMedia.url} poster={currentMedia.poster || undefined} preload="metadata" playsInline className="h-full w-full object-contain" aria-label={t("剪辑画面预览", "Timeline video preview")}
+            {currentMedia ? currentMedia.image ? <img key={currentMedia.url} src={currentMedia.url} className="h-full w-full object-contain" alt={currentVideo?.label || t("静态图片预览", "Still image preview")} /> : <video ref={videoRef} key={currentMedia.url} src={currentMedia.url} poster={currentMedia.poster || undefined} preload="metadata" playsInline className="h-full w-full object-contain" aria-label={t("剪辑画面预览", "Timeline video preview")}
                 onLoadedMetadata={syncVideo} onWaiting={() => setBuffering(true)} onPlaying={() => setBuffering(false)} onError={() => { setPlaying(false); setMediaError(t("视频无法加载，请检查该镜头素材。", "Video unavailable. Check this shot's media.")); }}
                 onTimeUpdate={e => {
                     if (!playing || !currentVideo) return;
@@ -389,7 +400,7 @@ export function AssemblyTracks({ plan: committedPlan, resourceId, onChange: comm
                         if (next !== plan) onChange(next);
                         videoDrag.current = null; setDropTarget(null);
                     }}
-                    onDragEnd={() => { videoDrag.current = null; setDropTarget(null); }} aria-label={lane.kind === "video" ? `${t("编辑片段", "Edit clip")} ${sequence.findIndex(item => item.clip.id === c.id) + 1}: ${c.label || c.id}` : (c.text || c.label || c.id)} title={c.text || c.label || c.id} onPointerDown={e => { selectClip(lane.id, c); beginDrag(e, lane.id, c.id, c.timeline_start_ms); }} onClick={() => selectClip(lane.id, c)} aria-pressed={selected?.laneId === lane.id && selected?.clipId === c.id} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{lane.kind === "video" && mediaFor(c) && <TimelineFilmstrip url={mediaFor(c)!.url} poster={mediaFor(c)!.poster} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} width={timelineWidth * (c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms} />}{dropTarget?.id === c.id && <span aria-hidden="true" className={`pointer-events-none absolute inset-y-0 z-20 w-1 bg-primary ${dropTarget.after ? "right-0" : "left-0"}`} />}
+                    onDragEnd={() => { videoDrag.current = null; setDropTarget(null); }} aria-label={lane.kind === "video" ? `${t("编辑片段", "Edit clip")} ${sequence.findIndex(item => item.clip.id === c.id) + 1}: ${c.label || c.id}` : (c.text || c.label || c.id)} title={c.text || c.label || c.id} onPointerDown={e => { selectClip(lane.id, c); beginDrag(e, lane.id, c.id, c.timeline_start_ms); }} onClick={() => selectClip(lane.id, c)} aria-pressed={selected?.laneId === lane.id && selected?.clipId === c.id} className="absolute inset-y-1 min-w-1 truncate rounded bg-primary/40 px-1 text-left text-xs text-foreground aria-pressed:ring-2 aria-pressed:ring-inset aria-pressed:ring-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" style={{ left: `${c.timeline_start_ms / plan.target_duration_ms * 100}%`, width: `${(c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms * 100}%`, opacity: c.enabled && !lane.muted ? 1 : 0.3 }}>{lane.kind === "video" && mediaFor(c) && <TimelineFilmstrip url={mediaFor(c)!.url} poster={mediaFor(c)!.poster} still={mediaFor(c)!.image} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} width={timelineWidth * (c.timeline_end_ms - c.timeline_start_ms) / plan.target_duration_ms} />}{dropTarget?.id === c.id && <span aria-hidden="true" className={`pointer-events-none absolute inset-y-0 z-20 w-1 bg-primary ${dropTarget.after ? "right-0" : "left-0"}`} />}
                     {["dialogue", "bgm", "sfx"].includes(lane.kind) && audioUrlFor(c, lane.kind) && <TimelineWaveform url={audioUrlFor(c, lane.kind)} startMs={c.source_start_ms ?? 0} endMs={c.source_end_ms ?? (c.source_start_ms ?? 0) + c.timeline_end_ms - c.timeline_start_ms} />}
                     <span className="pointer-events-none block truncate">{c.text || c.label || c.id}</span>{selected?.laneId === lane.id && selected?.clipId === c.id && <><span role="button" aria-label={`${c.label || c.id} start handle`} className="absolute inset-y-0 left-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); if (disabled) return; dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_start_ms, base: committedPlan, mode: "resize", edge: "start" }; e.currentTarget.setPointerCapture(e.pointerId); }} /><span role="button" aria-label={`${c.label || c.id} end handle`} className="absolute inset-y-0 right-0 z-10 w-3 cursor-ew-resize bg-foreground/30" onPointerDown={e => { e.stopPropagation(); if (disabled) return; dragRef.current = { laneId: lane.id, clipId: c.id, startX: e.clientX, origin: c.timeline_end_ms, base: committedPlan, mode: "resize", edge: "end" }; e.currentTarget.setPointerCapture(e.pointerId); }} /></>}</button>)}
                 <span className="pointer-events-none absolute inset-y-0 w-px bg-foreground" style={{ left: `${position / plan.target_duration_ms * 100}%` }} />

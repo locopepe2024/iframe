@@ -35,15 +35,16 @@ def compile_assembly(plan, source_paths, audio_clips, audio_paths, output_path, 
             f"[v{index}]"
         )
 
+        is_still = os.path.splitext(source_paths[index])[1].lower() in (".png", ".jpg", ".jpeg", ".webp")
         try:
-            probe = subprocess.run(
+            probe = None if is_still else subprocess.run(
                 [ffprobe_path, "-v", "error", "-select_streams", "a:0",
                  "-show_entries", "stream=index", "-of", "csv=p=0", source_paths[index]],
                 check=True, capture_output=True, timeout=20,
             )
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
             raise RuntimeError(f"Assembly source audio probe failed for clip {clip.id}") from exc
-        if probe.stdout.strip():
+        if probe is not None and probe.stdout.strip():
             # Match the source crop and any existing timeline retiming.
             tempo = source_duration / timeline_duration
             tempos = []
@@ -91,8 +92,13 @@ def compile_assembly(plan, source_paths, audio_clips, audio_paths, output_path, 
     source_paths.extend(audio_paths)
 
     command = [ffmpeg_path, "-y"]
-    for source_path in source_paths:
-        command.extend(["-i", source_path])
+    for index, source_path in enumerate(source_paths):
+        if index < len(clips) and os.path.splitext(source_path)[1].lower() in (".png", ".jpg", ".jpeg", ".webp"):
+            clip = clips[index]
+            source_end_ms = clip.source_end_ms if clip.source_end_ms is not None else clip.source_start_ms + clip.timeline_end_ms - clip.timeline_start_ms
+            command.extend(["-loop", "1", "-framerate", "24", "-t", f"{source_end_ms / 1000:.6f}", "-i", source_path])
+        else:
+            command.extend(["-i", source_path])
     command.extend([
         "-filter_complex",
         ";".join(filter_steps),
