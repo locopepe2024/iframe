@@ -231,14 +231,15 @@ class ResolveReferenceMaterialRequest(BaseModel):
 @app.post("/reference-materials/resolve")
 def resolve_reference_material(request: ResolveReferenceMaterialRequest,
                                user: UserContext = Depends(require_studio_user)):
-    from ..reference_materials import materialize_image
+    from ..reference_materials import materialize_image, reference_context
     try:
         container = (pipeline.get_script(request.project_id, user.owner_profile_id)
                      if request.project_id else Script(id="reference-browser", owner_profile_id=user.owner_profile_id, title="References", original_text="", created_at=0, updated_at=0))
         if container is None:
             raise HTTPException(status_code=404, detail="Project not found")
         source, _ = pipeline._resolve_asset_library_reference(container, request.reference)
-        label = request.label
+        context = reference_context(request.reference, user.owner_profile_id, output_root=pipeline.output_root)
+        label = context["title"] if context else request.label
         if not label and request.reference.asset_type == "platform_reference":
             from ..platform_reference_catalog import platform_resource_by_id
             label = (platform_resource_by_id(request.reference.asset_id) or {}).get("title", "")
@@ -252,7 +253,8 @@ def resolve_reference_material(request: ResolveReferenceMaterialRequest,
                 raise ValueError("External reference image is not managed")
             result = {"path": uploader.sign_url_for_api(key), "label": label or request.reference.asset_id}
         else:
-            result = materialize_image(user.owner_profile_id, source, label=label or request.reference.asset_id, output_root=pipeline.output_root)
+            result = materialize_image(user.owner_profile_id, source, label=label or request.reference.asset_id, output_root=pipeline.output_root, context=context)
+        result["context"] = context
         # Keep platform revision and semantic identity; URLs are display/transport projections.
         if request.reference.asset_type != "media":
             result["reference"] = request.reference.model_dump(mode="json")

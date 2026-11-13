@@ -8,7 +8,7 @@ from PIL import Image
 
 from src.apps.comic_gen.models import AssetLibraryReference, Script, StoryboardFrame
 from src.apps.comic_gen.pipeline import ComicGenPipeline, InvalidAssetReference
-from src.apps.media_registry import register_media
+from src.apps.media_registry import register_media, get_media
 from src.apps.reference_materials import materialize_image, resolve_owned_image
 from src.utils.managed_media_root import ManagedMediaRoot
 
@@ -162,11 +162,20 @@ def test_character_design_preview_accepts_image_evidence_from_all_sources(tmp_pa
         assert "/users/" in path and Path(path).read_bytes() == source.read_bytes()
         return "https://media.example/reference.png"
     monkeypatch.setattr(uniart, "_image_reference_url", delivery)
-    reference = {"asset_type": kind, "asset_id": "image", "variant_id": "1"}
-    if kind == "platform_reference": reference.update(source_scope="platform", revision=1)
+    if kind == "platform_reference":
+        from src.apps import platform_reference_catalog
+        monkeypatch.setattr(platform_reference_catalog, "platform_resource_by_id", lambda *args: {
+            "platform_resource_id": "image", "revision": 1, "status": "active", "kind": "image",
+            "title": "举臂交叉", "tags": ["舞蹈"], "summary": "俯视姿态", "payload": {"angle": "high"},
+        })
+        reference = {"asset_type": kind, "asset_id": "image", "variant_id": "1", "source_scope": "platform", "revision": 1}
+    else:
+        reference = materialize_image("owner", str(source), output_root=str(tmp_path))["reference"]
     body = agent_api.CharacterDesignRequest(model="nsfw/llm-nf-all", character_name="舞者", profile="成年女性", project_id=project_id, reference_assets=[reference])
     preview = agent_api.preview_character_design_draft(body, UserContext("user", "owner", "name", "token"))
     assert len(preview["media"]) == 1 and preview["media"][0]["url"] == "https://media.example/reference.png"
+    if kind == "platform_reference":
+        assert "舞蹈" in preview["messages"]["user"] and "high" in preview["messages"]["user"]
 
 
 def test_material_resolver_http_sets_owner_context_and_rejects_foreign_media(tmp_path, monkeypatch):
@@ -186,3 +195,111 @@ def test_material_resolver_http_sets_owner_context_and_rejects_foreign_media(tmp
         assert result.json()['path'] == own['path']
         result = client.post('/reference-materials/resolve', json={'reference': foreign['reference']})
         assert result.status_code == 422
+
+
+@pytest.fixture
+def platform_pose(monkeypatch, tmp_path):
+    from src.apps import platform_reference_catalog
+    resource = {'platform_resource_id': 'pose', 'revision': 1, 'kind': 'image', 'status': 'active',
+                'title': '举臂交叉 · 俯视 · 深度参考', 'summary': '举臂交叉，展示肢体空间关系',
+                'category_path': 'reference/pose', 'tags': ['舞蹈', '深度视觉参考'],
+                'payload': {'angle': 'high', 'representation': 'depth_reference'}}
+    monkeypatch.setattr(platform_reference_catalog, 'platform_resource_by_id', lambda resource_id: resource if resource_id == 'pose' else None)
+    monkeypatch.setattr(platform_reference_catalog, 'resolve_active_visual_reference', lambda *args: image_file(tmp_path))
+    return {'asset_type': 'platform_reference', 'asset_id': 'pose', 'variant_id': '1', 'revision': 1, 'source_scope': 'platform'}
+
+
+def test_platform_resolve_preserves_catalog_context_and_ignores_display_label(tmp_path, monkeypatch, platform_pose):
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api
+    from src.apps.identity import UserContext
+    from src.apps.reference_materials import media_path_context
+    monkeypatch.setattr(api, 'pipeline', pipeline_for(tmp_path))
+    monkeypatch.setattr(api, '_resolve_request_context', lambda *args: (UserContext('u', 'owner', 'n', ''), False))
+    with TestClient(api.app) as client:
+        response = client.post('/reference-materials/resolve', json={'reference': platform_pose, 'label': '伪造名称'})
+        assert response.status_code == 200, response.text
+        result = response.json()
+        assert result['label'] == '举臂交叉 · 俯视 · 深度参考'
+        context = result['context']
+        assert context['tags'] == ['舞蹈', '深度视觉参考']
+        assert context['semantics'] == {'angle': 'high', 'representation': 'depth_reference'}
+        record = get_media('owner', result['media_id'], output_root=str(tmp_path))
+        assert media_path_context('owner', record['storage_key'], output_root=str(tmp_path)) == context
+        assert media_path_context('other', record['storage_key'], output_root=str(tmp_path)) is None
+
+
+def test_same_pixels_keep_distinct_platform_meanings_and_raw_uploads(tmp_path, platform_pose):
+    from src.apps.reference_materials import reference_context, media_path_context
+    source = str(image_file(tmp_path))
+    context = reference_context(platform_pose, 'owner', output_root=str(tmp_path))
+    pose = materialize_image('owner', source, context=context, output_root=str(tmp_path))
+    other = materialize_image('owner', source, context={**context, 'title': '仅参考光线'}, output_root=str(tmp_path))
+    raw = materialize_image('owner', source, output_root=str(tmp_path))
+    assert len({pose['media_id'], other['media_id'], raw['media_id']}) == 3
+    assert media_path_context('owner', raw['storage_key'], output_root=str(tmp_path)) is None
+    assert reference_context(pose['reference'], 'owner', output_root=str(tmp_path)) == context
+    with pytest.raises(ValueError, match='revision'):
+        reference_context({**platform_pose, 'revision': 2}, 'owner', output_root=str(tmp_path))
+
+
+def test_playground_sends_only_selected_semantics_and_restores_after_reload(tmp_path, platform_pose, monkeypatch):
+    from src.apps.reference_materials import reference_context
+    from src.apps.playground.models import GenerateRequest, PlaygroundMode
+    from src.apps.playground.service import PlaygroundService
+    from src.apps.playground.storage import PlaygroundStorage
+    context = reference_context(platform_pose, 'owner', output_root=str(tmp_path))
+    pose = materialize_image('owner', str(image_file(tmp_path)), context=context, output_root=str(tmp_path))
+    unused = materialize_image('owner', str(image_file(tmp_path)), context={**context, 'title': '不应提交的参考'}, output_root=str(tmp_path))
+    storage = PlaygroundStorage(owner_user_id='user', owner_profile_id='owner', output_root=str(tmp_path))
+    service = PlaygroundService(storage, nsfw_config_loader=lambda: {'api_key': 'test'})
+    gen = service.create_generation(GenerateRequest(mode='i2i', model_id='nsfw/seedream_5.0Pro_nsfw',
+        prompt='@姿态 保持人物服装，参考动作', input_media=[pose['path'], unused['path']],
+        media_names={pose['path']: '姿态', unused['path']: '其他'}))
+    assert len(gen.input_media) == len(gen.reference_contexts) == 1
+    restored = PlaygroundStorage(owner_user_id='user', owner_profile_id='owner', output_root=str(tmp_path)).get_generation(gen.id)
+    adapter = Mock()
+    monkeypatch.setattr('src.models.nsfw_new_one.NSFWNewOneImageModel', lambda config: adapter)
+    service._generate_image_mulerouter(restored, str(tmp_path / 'result.png'), 0)
+    submitted = adapter.generate.call_args.kwargs['prompt']
+    assert '深度视觉参考' in submitted and 'depth_reference' in submitted and 'high' in submitted
+    assert '不应提交的参考' not in submitted
+    assert '<platform_reference' not in restored.prompt  # Editable user text remains intact.
+    from src.apps.reference_materials import append_reference_context
+    assert append_reference_context(submitted, gen.reference_contexts) == submitted
+    video = restored.model_copy(update={'model_id': 'nsfw/wan3.0', 'mode': PlaygroundMode.I2V, 'parameters': {'duration': 4, 'resolution': '480p'}})
+    monkeypatch.setattr('src.models.nsfw_new_one.NSFWNewOneVideoModel', lambda config: adapter)
+    adapter.reset_mock()
+    service._generate_video_nsfw(video, str(tmp_path / 'result.mp4'))
+    assert '深度视觉参考' in adapter.generate.call_args.args[0]
+
+
+def test_storyboard_candidate_carries_semantics_to_model_and_saved_media(tmp_path, platform_pose):
+    from src.apps.reference_materials import media_path_context
+    pipeline = pipeline_for(tmp_path)
+    frame = pipeline.scripts['project'].frames[0]
+    frame.workbench_material_references = [AssetLibraryReference.model_validate(platform_pose)]
+    pipeline.storyboard_candidate_preview_token = lambda *args: 'reviewed'
+    pipeline._owner_output_dir = lambda *args: str(tmp_path)
+    pipeline._register_storyboard_frame_media = Mock()
+    pipeline.storyboard_generator = Mock()
+    def generate(candidate, *args, **kwargs):
+        assert '深度视觉参考' in kwargs['prompt'] and 'depth_reference' in kwargs['prompt']
+        context = media_path_context('owner', kwargs['supplemental_ref_image_paths'][0], output_root=str(tmp_path))
+        assert context['semantics']['angle'] == 'high'
+        candidate.rendered_image_asset = ImageAsset(selected_id='new', variants=[ImageVariant(id='new', url='candidate.png')])
+    from src.apps.comic_gen.models import ImageAsset, ImageVariant
+    pipeline.storyboard_generator.generate_frame.side_effect = generate
+    assert pipeline.generate_storyboard_candidate('project', 'shot', '保持角色，参考姿态', context_token='reviewed') == 'candidate.png'
+
+
+def test_reference_evidence_replaces_stale_selection_and_preserves_authored_text():
+    from src.apps.reference_materials import append_reference_context
+    authored = '保持用户人物与服装'
+    first = {'title': '旧的姿态', 'tags': ['坐姿']}
+    second = {'title': '新的姿态', 'tags': ['举臂']}
+    prompt = append_reference_context(authored, [None, first])
+    assert 'index="2"' in prompt
+    changed = append_reference_context(prompt, [second])
+    assert '旧的姿态' not in changed and 'index="1"' in changed
+    assert append_reference_context(changed, []) == authored

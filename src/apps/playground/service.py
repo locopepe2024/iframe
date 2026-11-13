@@ -83,7 +83,11 @@ class PlaygroundService:
             batch_size=request.batch_size or 1,
             parent_generation_id=request.parent_generation_id,
         )
+        from ..reference_materials import media_path_context
+        reference_contexts = [media_path_context(self.storage.owner_profile_id, path, output_root=self.storage.media_root)
+                              for path in input_media]
         gen = PlaygroundGeneration(
+            reference_contexts=reference_contexts,
             media_names=media_names,
             id=str(uuid.uuid4()),
             mode=request.mode,
@@ -244,7 +248,7 @@ class PlaygroundService:
             kwargs["ref_image_paths"] = ref_paths
 
         self._wanx_image_model.generate(
-            prompt=gen.prompt,
+            prompt=self._model_prompt(gen),
             output_path=out_path,
             **kwargs,
         )
@@ -281,11 +285,16 @@ class PlaygroundService:
             kwargs["ref_image_paths"] = list(gen.input_media)
 
         model.generate(
-            prompt=bind_reference_names(gen.prompt, [gen.media_names.get(ref, "") for ref in gen.input_media]) if use_uniart else gen.prompt,
+            prompt=bind_reference_names(self._model_prompt(gen), [gen.media_names.get(ref, "") for ref in gen.input_media]) if use_uniart else self._model_prompt(gen),
             output_path=out_path,
             model_name=gen.model_id,
             **kwargs,
         )
+
+    @staticmethod
+    def _model_prompt(gen: PlaygroundGeneration) -> str:
+        from ..reference_materials import append_reference_context
+        return append_reference_context(gen.prompt, gen.reference_contexts)
 
     # ------------------------------------------------------------------
     # Video generation (t2v / i2v / r2v / v2v)
@@ -356,7 +365,7 @@ class PlaygroundService:
         saved_task = gen.provider_tasks.get(str(batch_index))
         model = NSFWNewOneVideoModel(self._load_nsfw_config())
         if saved_task:
-            model.generate(gen.prompt, out_path, model=gen.model_id, resume_task_id=saved_task)
+            model.generate(self._model_prompt(gen), out_path, model=gen.model_id, resume_task_id=saved_task)
             return
 
         references = list(gen.input_media)
@@ -395,7 +404,7 @@ class PlaygroundService:
             if params.get("seed") is not None:
                 media_kwargs["seed"] = params["seed"]
         model.generate(
-            video_reference_prompt(gen.prompt, references, references, gen.media_names),
+            video_reference_prompt(self._model_prompt(gen), references, references, gen.media_names),
             out_path,
             model=gen.model_id,
             duration=params["duration"],
@@ -436,7 +445,7 @@ class PlaygroundService:
             kwargs["video_url"] = gen.input_media[0]
 
         self._wanx_model.generate(
-            prompt=gen.prompt,
+            prompt=self._model_prompt(gen),
             output_path=out_path,
             img_path=img_path,
             img_url=img_url,
@@ -456,7 +465,7 @@ class PlaygroundService:
         model = UniArtVideoModel(runtime_config) if use_uniart else MuleRouterVideoModel({})
         saved_task = gen.provider_tasks.get(str(batch_index))
         if use_uniart and saved_task:
-            model.generate(prompt=gen.prompt, output_path=out_path, model=gen.model_id, resume_task_id=saved_task,
+            model.generate(prompt=self._model_prompt(gen), output_path=out_path, model=gen.model_id, resume_task_id=saved_task,
                            h3_api_version=gen.provider_task_api_versions.get(str(batch_index), "v1"))
             return
 
@@ -513,11 +522,11 @@ class PlaygroundService:
                 raise ValueError("First/last-frame mode requires images")
             if "h3" in model_lower:
                 kwargs["reference_prompt"] = bind_h3_canonical_prompt(
-                    gen.prompt, gen.input_media, references, gen.media_names,
+                    self._model_prompt(gen), gen.input_media, references, gen.media_names,
                 )
             else:
                 kwargs["reference_prompt"] = video_reference_prompt(
-                    gen.prompt, gen.input_media, references, gen.media_names,
+                    self._model_prompt(gen), gen.input_media, references, gen.media_names,
                 )
             kwargs["generate_audio"] = params.get("audio")
             kwargs["mode"] = {
@@ -542,7 +551,7 @@ class PlaygroundService:
             raise ValueError("Video duration is required; refresh the model controls and select a duration before submitting")
 
         model.generate(
-            prompt=kwargs.pop("reference_prompt", gen.prompt),
+            prompt=kwargs.pop("reference_prompt", self._model_prompt(gen)),
             output_path=out_path,
             img_url=img_url,
             img_path=img_path,
@@ -560,7 +569,7 @@ class PlaygroundService:
         img_path, img_url = self._resolve_first_input_media(gen)
 
         self._kling_model.generate(
-            prompt=gen.prompt,
+            prompt=self._model_prompt(gen),
             output_path=out_path,
             img_url=img_url,
             img_path=img_path,
@@ -584,7 +593,7 @@ class PlaygroundService:
         img_path, img_url = self._resolve_first_input_media(gen)
 
         self._vidu_model.generate(
-            prompt=gen.prompt,
+            prompt=self._model_prompt(gen),
             output_path=out_path,
             img_url=img_url,
             img_path=img_path,

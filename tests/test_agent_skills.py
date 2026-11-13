@@ -578,6 +578,8 @@ def test_character_design_draft_sends_owner_resolved_images_as_visual_evidence(c
 
     calls = {}
     class Pipeline:
+        output_root = 'output'
+
         def get_script(self, project_id, owner_profile_id):
             calls['scope'] = (project_id, owner_profile_id)
             return SimpleNamespace(id=project_id)

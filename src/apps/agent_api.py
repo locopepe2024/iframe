@@ -661,16 +661,19 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
         if not script:
             raise HTTPException(404, "项目不存在或当前用户无权访问")
         labels = []
+        reference_contexts = []
         for index, reference in enumerate(body.reference_assets):
             try:
                 media_path, stable_reference = studio_pipeline._resolve_asset_library_reference(
                     script,
                     reference.model_dump(exclude_none=True, exclude_defaults=True),
                 )
+                from .reference_materials import reference_context, append_reference_context
+                context = reference_context(reference, ctx.owner_profile_id, output_root=studio_pipeline.output_root)
                 if reference.asset_type in ("media", "platform_reference") and not media_path.startswith(("http://", "https://")):
                     from .reference_materials import materialize_image
                     from ..utils.managed_media_root import ManagedMediaRoot
-                    material = materialize_image(ctx.owner_profile_id, media_path, output_root=studio_pipeline.output_root)
+                    material = materialize_image(ctx.owner_profile_id, media_path, output_root=studio_pipeline.output_root, context=context)
                     media_path = str(ManagedMediaRoot(studio_pipeline.output_root).resolve(material["storage_key"]))
                 media_url = _image_reference_url(media_path)
             except InvalidAssetReference as exc:
@@ -682,11 +685,13 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
                 reference.asset_id,
                 reference.asset_type,
             )
-            label = getattr(asset, "name", None) or f"{reference.asset_type}素材"
+            label = (context or {}).get("title") or getattr(asset, "name", None) or f"{reference.asset_type}素材"
             labels.append(f"角色参考图 @{index + 1}：{label}（只读视觉证据）")
+            reference_contexts.append(context)
             media.append({"label": labels[-1], "url": media_url})
-            resolved_references.append({"path": media_path, "identity": stable_reference})
+            resolved_references.append({"path": media_path, "identity": stable_reference, "context": context})
         user_content += "\n" + "\n".join(labels)
+        user_content = append_reference_context(user_content, reference_contexts)
     messages = {"system": system, "user": user_content}
     token = hashlib.sha256(json.dumps({"owner": ctx.owner_profile_id, "source": source,
                                       "references": resolved_references, "compiled": messages},
