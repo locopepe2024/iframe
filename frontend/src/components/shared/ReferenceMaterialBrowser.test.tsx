@@ -6,7 +6,7 @@ vi.mock('@/lib/api', () => ({ api: { getAssetLibraryIndex: mocks.library, getAss
 vi.mock('@/lib/utils', () => ({ getAssetUrl: (path: string) => path }));
 vi.mock('./AssetIndexPreview', () => ({ AssetIndexPreview: () => <span /> }));
 const title = '模特舞蹈 · 举臂交叉 · 俯视 · 深度参考';
-const resource = { platform_resource_id: 'pose.high.depth', revision: 1, title, payload: { remote_url: 'https://example/pose.png', thumbnail_url: 'https://example/pose.webp' } };
+const resource = { platform_resource_id: 'pose.high.depth', revision: 1, title, summary: '参考上肢交叉及俯视构图', tags: ['舞蹈', '深度视觉参考'], category_path: 'reference/pose', payload: { remote_url: 'https://example/pose.png', thumbnail_url: 'https://example/pose.webp' } };
 beforeEach(() => {
     vi.clearAllMocks(); mocks.library.mockResolvedValue({ assets: [] }); mocks.catalog.mockResolvedValue({ resources: [resource], total: 1 }); mocks.history.mockResolvedValue([]);
     mocks.resolve.mockImplementation((reference, _projectId, label) => Promise.resolve({ reference, label, path: '/studio/owned-media/owner/uploads/pose.png' }));
@@ -17,6 +17,8 @@ it('searches 举臂交叉 and submits its stable revision only after confirmatio
     fireEvent.change(screen.getByLabelText('快速搜索参考素材'), { target: { value: '举臂交叉' } });
     expect(screen.getByRole('dialog', { name: '参考素材' }).closest('[data-agent-asset-picker]')).not.toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: title })); expect(select).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('已选素材说明')).toHaveTextContent('参考上肢交叉及俯视构图');
+    expect(screen.getByLabelText('已选素材说明')).toHaveTextContent('深度视觉参考');
     fireEvent.click(screen.getByRole('button', { name: '使用参考素材' }));
     await waitFor(() => expect(select).toHaveBeenCalledWith(expect.objectContaining({ reference: { asset_type: 'platform_reference', asset_id: 'pose.high.depth', variant_id: '1', revision: 1, source_scope: 'platform' } }), expect.objectContaining({ label: title })));
     expect(mocks.catalog).toHaveBeenCalledWith('举臂交叉', 'image', undefined, undefined, undefined, undefined, { limit: 36, offset: 0, visual_only: true });

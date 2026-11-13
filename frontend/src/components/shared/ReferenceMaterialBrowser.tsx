@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Image as ImageIcon, Loader2, Search, Upload, X } from 'lucide-react';
-import { API_URL, authenticatedFetch, api, playgroundApi, type AssetLibraryReference, type ReferenceMaterial } from '@/lib/api';
+import { API_URL, authenticatedFetch, api, playgroundApi, type AssetLibraryReference, type ReferenceMaterial, type PlatformReferenceContext } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
 import { AssetIndexPreview, type AssetPreviewRef } from './AssetIndexPreview';
 
 type Source = 'all' | 'upload' | 'project' | 'platform' | 'recent';
 export interface MaterialCandidate {
+    context?: PlatformReferenceContext | null;
     label: string;
     reference?: AssetLibraryReference;
     path?: string;
@@ -118,6 +119,7 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
                         { limit: 36, offset: page * 36, visual_only: true });
                     platformTotal = catalog.total ?? catalog.resources.length;
                     pools.push(...catalog.resources.map(resource => ({ label: resource.title, description: [resource.summary, ...(resource.tags || [])].join(' '),
+                        context: { platform_resource_id: resource.platform_resource_id, revision: resource.revision, title: resource.title, summary: resource.summary || '', tags: resource.tags || [], category_path: resource.category_path || '', semantics: { angle: resource.payload?.angle, representation: resource.payload?.representation } },
                         sourceLabel: '平台参考库', previewUrl: typeof resource.payload?.thumbnail_url === 'string' ? resource.payload.thumbnail_url : undefined,
                         reference: { asset_type: 'platform_reference' as const, asset_id: resource.platform_resource_id,
                             variant_id: String(resource.revision), revision: resource.revision, source_scope: 'platform' as const } })));
@@ -214,6 +216,12 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
                         <span className="block truncate px-2 pt-2 text-xs" title={item.label}>{item.label}</span><span className="block truncate px-2 pb-2 text-[11px] text-text-muted">{item.sourceLabel || '项目资产'}</span>
                     </button>;
                 })}</div>{items.length === 0 && !errors.length && <p className="py-12 text-center text-xs text-text-muted">没有匹配的参考素材</p>}</>}
+                {selected?.context && <div aria-label="已选素材说明" className="mt-3 rounded-lg border border-glass-border p-3 text-xs text-text-secondary">
+                    <p className="font-medium text-foreground">{selected.context.title}</p>
+                    {selected.context.summary && <p className="mt-1 leading-5">{selected.context.summary}</p>}
+                    <div className="mt-2 flex flex-wrap gap-1">{selected.context.tags.map(tag => <span key={tag} className="rounded bg-primary/10 px-2 py-1 text-primary">{tag}</span>)}</div>
+                    <p className="mt-2 text-text-muted">图片、标签和语义说明将一同作为参考。</p>
+                </div>}
             </div>
             <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-glass-border p-3">
                 <div className="flex items-center gap-2 text-xs text-text-muted"><button type="button" disabled={page === 0 || loading} onClick={() => setPage(value => value - 1)} className="min-h-11 px-2 disabled:opacity-40">上一页</button><span>第 {page + 1} 页</span><button type="button" disabled={(page + 1) * 36 >= total || loading} onClick={() => setPage(value => value + 1)} className="min-h-11 px-2 disabled:opacity-40">下一页</button></div>

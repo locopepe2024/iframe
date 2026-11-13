@@ -246,7 +246,18 @@ export interface AssetLibraryReference {
     applied_fields?: string[];
 }
 
+export interface PlatformReferenceContext {
+    platform_resource_id: string;
+    revision: number;
+    title: string;
+    summary: string;
+    tags: string[];
+    category_path: string;
+    semantics: Record<string, unknown>;
+}
+
 export interface ReferenceMaterial {
+    context?: PlatformReferenceContext | null;
     reference: AssetLibraryReference;
     path: string;
     label: string;
