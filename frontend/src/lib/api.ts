@@ -434,12 +434,18 @@ export interface PlatformReferenceResource {
     [key: string]: unknown;
 }
 
+export interface PlatformReferenceFacets {
+    categories: { id: string; label: string; count: number }[];
+    tags: { id: string; label: string; count: number }[];
+}
+
 export interface PlatformReferenceCatalog {
     scope: "platform_shared";
     schema_version: number;
     catalog_revision: string;
     resources: PlatformReferenceResource[];
     total?: number;
+    facets?: PlatformReferenceFacets;
 }
 
 export interface PlatformReferenceReviewer {

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Image as ImageIcon, Loader2, Search, Upload, X } from 'lucide-react';
-import { API_URL, authenticatedFetch, api, playgroundApi, type AssetLibraryReference, type ReferenceMaterial, type PlatformReferenceContext } from '@/lib/api';
+import { API_URL, authenticatedFetch, api, playgroundApi, type AssetLibraryReference, type ReferenceMaterial, type PlatformReferenceContext, type PlatformReferenceFacets } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
 import { AssetIndexPreview, type AssetPreviewRef } from './AssetIndexPreview';
 
@@ -62,6 +62,9 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
     const [errors, setErrors] = useState<string[]>([]);
     const [total, setTotal] = useState(0);
     const [retry, setRetry] = useState(0);
+    const [category, setCategory] = useState('');
+    const [tag, setTag] = useState('');
+    const [facets, setFacets] = useState<PlatformReferenceFacets>({ categories: [], tags: [] });
     const dialog = useRef<HTMLDivElement>(null);
     const search = useRef<HTMLInputElement>(null);
     const upload = useRef<HTMLInputElement>(null);
@@ -76,6 +79,7 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
         if (!open) return;
         const previous = document.activeElement as HTMLElement | null;
         setSource('all'); setQuery(''); setPage(0); setSelected(null); setErrors([]);
+        setCategory(''); setTag(''); setFacets({ categories: [], tags: [] });
         search.current?.focus();
         return () => { generation.current++; previous?.focus(); };
     }, [open]);
@@ -115,8 +119,10 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
             })());
             if ((source === 'all' || source === 'platform') && accept !== 'video') tasks.push((async () => {
                 try {
-                    const catalog = await api.getPlatformReferenceLibrary(query, 'image', undefined, undefined, undefined, undefined,
+                    const catalog = await api.getPlatformReferenceLibrary(query, 'image', category || undefined, tag || undefined, undefined, undefined,
                         { limit: 36, offset: page * 36, visual_only: true });
+                    if (generation.current !== version) return;
+                    setFacets(catalog.facets || { categories: [], tags: [] });
                     platformTotal = catalog.total ?? catalog.resources.length;
                     pools.push(...catalog.resources.map(resource => ({ label: resource.title, description: [resource.summary, ...(resource.tags || [])].join(' '),
                         context: { platform_resource_id: resource.platform_resource_id, revision: resource.revision, title: resource.title, summary: resource.summary || '', tags: resource.tags || [], category_path: resource.category_path || '', semantics: { angle: resource.payload?.angle, representation: resource.payload?.representation } },
@@ -153,11 +159,15 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
             setErrors(issues); setLoading(false);
         }, query ? 250 : 0);
         return () => { window.clearTimeout(timer); generation.current++; };
-    }, [open, source, query, page, retry, projectId, candidateSignature, accept, allowRecentPaths, recentCandidates]);
+    }, [open, source, query, page, category, tag, retry, projectId, candidateSignature, accept, allowRecentPaths, recentCandidates]);
 
-    useEffect(() => { setSelected(null); }, [open, source, query, page]);
+    useEffect(() => { setSelected(null); }, [open, source, query, page, category, tag]);
 
     if (!open || typeof document === 'undefined') return null;
+    const categoryLabel = (path: string) => facets.categories.find(item => item.id === path)?.label || path;
+    const filterPlatform = (nextCategory: string, nextTag: string) => {
+        setCategory(nextCategory); setTag(nextTag); setPage(0); setSource('platform');
+    };
     const choose = async () => {
         if (!selected || busy) return;
         setBusy(true); setErrors([]);
@@ -175,11 +185,11 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
         finally { setBusy(false); }
     };
     return createPortal(<div data-agent-asset-picker className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-        <div ref={dialog} role="dialog" aria-modal="true" aria-label="参考素材" className="flex max-h-[85dvh] min-h-[360px] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-glass-border bg-elevated shadow-xl"
+        <div ref={dialog} role="dialog" aria-modal="true" aria-label="参考素材" className="flex max-h-[85dvh] min-h-[min(360px,85dvh)] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-glass-border bg-elevated shadow-xl"
             onKeyDown={event => {
                 if (event.key === 'Escape' && !busy) { event.stopPropagation(); onClose(); }
                 if (event.key === 'Tab') {
-                    const controls = dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])');
+                    const controls = dialog.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled])');
                     const first = controls?.[0], last = controls?.[controls.length - 1];
                     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
                     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -187,12 +197,30 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
             }}>
             <header className="flex shrink-0 items-center justify-between border-b border-glass-border px-4 py-2"><h2 className="text-sm font-medium">参考素材</h2><button type="button" disabled={busy} onClick={onClose} aria-label="关闭参考素材" className="grid h-11 w-11 place-items-center rounded hover:bg-hover-bg"><X size={18} /></button></header>
             <div className="shrink-0 space-y-3 border-b border-glass-border p-3">
-                <div role="tablist" aria-label="素材来源" className="flex flex-wrap gap-1">{sources.filter(([value]) => allowRecentPaths || value !== 'recent').map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={source === value} onClick={() => { setSource(value); setPage(0); }} className={`min-h-11 rounded-md px-3 text-xs ${source === value ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:bg-hover-bg'}`}>{label}</button>)}</div>
+                <div role="tablist" aria-label="素材来源" className="flex flex-wrap gap-1">{sources.filter(([value]) => allowRecentPaths || value !== 'recent').map(([value, label]) => <button key={value} type="button" role="tab" aria-selected={source === value} onClick={() => { setSource(value); setPage(0); setCategory(''); setTag(''); }} className={`min-h-11 rounded-md px-3 text-xs ${source === value ? 'bg-primary/15 text-primary' : 'text-text-secondary hover:bg-hover-bg'}`}>{label}</button>)}</div>
                 <label className="relative block"><Search size={16} className="absolute left-3 top-3.5 text-text-muted" /><input ref={search} aria-label="快速搜索参考素材" placeholder="搜索名称、动作、视角，例如：举臂交叉" value={query} onKeyDown={event => {
                     if (event.key === 'ArrowDown') { event.preventDefault(); dialog.current?.querySelector<HTMLElement>('[data-material-option]')?.focus(); }
                 }} onChange={event => { setQuery(event.target.value); setPage(0); }} className="h-11 w-full rounded-md border border-glass-border bg-input-bg pl-9 pr-3 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" /></label>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto p-3" aria-busy={loading || busy}>
+                {(source === 'all' || source === 'platform') && accept !== 'video' && <section aria-label="平台库分类与标签" className="mb-3 space-y-2 rounded-lg border border-glass-border p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-text-secondary">
+                            <span className="shrink-0">分类</span>
+                            <select aria-label="平台素材分类" value={category} disabled={busy} onChange={event => filterPlatform(event.target.value, '')} className="min-h-11 min-w-0 flex-1 rounded-md border border-glass-border bg-input-bg px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <option value="">全部分类</option>
+                                {facets.categories.map(item => <option key={item.id} value={item.id}>{item.label} · {item.count}</option>)}
+                            </select>
+                        </label>
+                        {(category || tag) && <button type="button" disabled={busy} onClick={() => filterPlatform('', '')} className="min-h-11 rounded px-2 text-xs text-primary hover:bg-hover-bg">清除筛选</button>}
+                    </div>
+                    <div role="group" aria-label="平台素材标签" className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-text-secondary">标签</span>
+                        <button type="button" aria-pressed={!tag} disabled={busy} onClick={() => filterPlatform(category, '')} className={`min-h-11 rounded-md border px-2 text-xs ${!tag ? 'border-primary bg-primary/15 text-primary' : 'border-glass-border text-text-secondary hover:bg-hover-bg'}`}>全部标签</button>
+                        {facets.tags.map(item => <button key={item.id} type="button" aria-pressed={tag === item.id} disabled={busy} onClick={() => filterPlatform(category, tag === item.id ? '' : item.id)} className={`min-h-11 rounded-md border px-2 text-xs ${tag === item.id ? 'border-primary bg-primary/15 text-primary' : 'border-glass-border text-text-secondary hover:bg-hover-bg'}`}>{item.label} · {item.count}</button>)}
+                    </div>
+                    <p className="text-xs text-text-muted">沿用平台库已发布素材的分类和标签，可与搜索组合筛选。</p>
+                </section>}
                 {errors.length > 0 && <div role="alert" className="mb-3 rounded border border-status-failed-fg/30 p-3 text-xs text-status-failed-fg">{errors.map(message => <p key={message}>{message}</p>)}<button type="button" onClick={() => setRetry(value => value + 1)} className="min-h-11 underline">重新加载</button></div>}
                 {source === 'upload' ? <div className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-glass-border p-6"><Upload size={24} className="text-text-muted" /><p className="text-xs text-text-secondary">上传后作为本次参考素材使用</p><input ref={upload} type="file" accept={accept === 'image' ? 'image/*' : accept === 'video' ? 'video/*' : 'image/*,video/*,audio/*,.txt,.md,.csv,.json,.srt,.vtt'} className="hidden" aria-label="上传本地参考素材" disabled={busy} onChange={async event => {
                     const file = event.target.files?.[0]; if (!file) return;
@@ -213,16 +241,18 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
                         if (event.key === 'Enter') { event.preventDefault(); setSelected(item); }
                     }} onClick={() => setSelected(item)} className={`overflow-hidden rounded-lg border text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${chosen ? 'border-primary bg-primary/10' : 'border-glass-border hover:bg-hover-bg'}`}>
                         <span className="relative flex aspect-square items-center justify-center overflow-hidden bg-surface-inset">{item.previewRef ? <AssetIndexPreview asset={item.previewRef} /> : item.previewUrl || (item.type || 'image') === 'image' && item.path ? <img src={getAssetUrl(item.previewUrl || item.path!)} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" /> : item.reference?.asset_type === 'platform_reference' ? <PlatformThumbnail id={item.reference.asset_id} /> : <ImageIcon size={24} className="text-text-muted" />}{chosen && <Check size={18} className="absolute right-2 top-2 rounded bg-primary text-on-accent" />}</span>
-                        <span className="block truncate px-2 pt-2 text-xs" title={item.label}>{item.label}</span><span className="block truncate px-2 pb-2 text-[11px] text-text-muted">{item.sourceLabel || '项目资产'}</span>
+                        <span className="block line-clamp-2 px-2 pt-2 text-xs" title={item.label}>{item.label}</span><span className="block px-2 pb-2 text-xs text-text-muted">{item.context?.category_path ? categoryLabel(item.context.category_path) : item.sourceLabel || '项目资产'}</span>
+                        {!!item.context?.tags.length && <span className="flex flex-wrap gap-1 px-2 pb-2">{item.context.tags.slice(0, 2).map(value => <span key={value} className="rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">{value}</span>)}{item.context.tags.length > 2 && <span className="text-xs text-text-muted">+{item.context.tags.length - 2}</span>}</span>}
                     </button>;
                 })}</div>{items.length === 0 && !errors.length && <p className="py-12 text-center text-xs text-text-muted">没有匹配的参考素材</p>}</>}
-                {selected?.context && <div aria-label="已选素材说明" className="mt-3 rounded-lg border border-glass-border p-3 text-xs text-text-secondary">
+            </div>
+                {selected?.context && <div aria-label="已选素材说明" className="max-h-[22dvh] shrink-0 overflow-y-auto border-t border-glass-border p-3 text-xs text-text-secondary">
                     <p className="font-medium text-foreground">{selected.context.title}</p>
+                    {selected.context.category_path && <p className="mt-1">分类：{categoryLabel(selected.context.category_path)}</p>}
                     {selected.context.summary && <p className="mt-1 leading-5">{selected.context.summary}</p>}
                     <div className="mt-2 flex flex-wrap gap-1">{selected.context.tags.map(tag => <span key={tag} className="rounded bg-primary/10 px-2 py-1 text-primary">{tag}</span>)}</div>
                     <p className="mt-2 text-text-muted">图片、标签和语义说明将一同作为参考。</p>
                 </div>}
-            </div>
             <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-glass-border p-3">
                 <div className="flex items-center gap-2 text-xs text-text-muted"><button type="button" disabled={page === 0 || loading} onClick={() => setPage(value => value - 1)} className="min-h-11 px-2 disabled:opacity-40">上一页</button><span>第 {page + 1} 页</span><button type="button" disabled={(page + 1) * 36 >= total || loading} onClick={() => setPage(value => value + 1)} className="min-h-11 px-2 disabled:opacity-40">下一页</button></div>
                 <div className="flex gap-2"><button type="button" disabled={busy} onClick={onClose} className="min-h-11 rounded px-3 text-xs hover:bg-hover-bg">取消</button><button type="button" disabled={!selected || loading || busy} onClick={() => void choose()} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary px-4 text-xs text-on-accent disabled:opacity-40">{busy && <Loader2 size={14} className="animate-spin" />}使用参考素材</button></div>
