@@ -167,3 +167,22 @@ def test_character_design_preview_accepts_image_evidence_from_all_sources(tmp_pa
     body = agent_api.CharacterDesignRequest(model="nsfw/llm-nf-all", character_name="舞者", profile="成年女性", project_id=project_id, reference_assets=[reference])
     preview = agent_api.preview_character_design_draft(body, UserContext("user", "owner", "name", "token"))
     assert len(preview["media"]) == 1 and preview["media"][0]["url"] == "https://media.example/reference.png"
+
+
+def test_material_resolver_http_sets_owner_context_and_rejects_foreign_media(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api as studio_api
+    from src.apps.identity import UserContext
+
+    pipeline = pipeline_for(tmp_path)
+    own = materialize_image('owner', str(image_file(tmp_path)), output_root=str(tmp_path))
+    foreign = materialize_image('other', str(image_file(tmp_path)), output_root=str(tmp_path))
+    user = UserContext('user', 'owner', 'name', 'token')
+    monkeypatch.setattr(studio_api, 'pipeline', pipeline)
+    monkeypatch.setattr(studio_api, '_resolve_request_context', lambda *args: (user, False))
+    with TestClient(studio_api.app) as client:
+        result = client.post('/reference-materials/resolve', json={'reference': own['reference'], 'label': '本地参考'})
+        assert result.status_code == 200, result.text
+        assert result.json()['path'] == own['path']
+        result = client.post('/reference-materials/resolve', json={'reference': foreign['reference']})
+        assert result.status_code == 422
