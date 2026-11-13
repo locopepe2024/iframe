@@ -601,10 +601,12 @@ def _is_skill_card(resource: dict[str, Any]) -> bool:
     return isinstance(metadata, dict) and bool(metadata.get("skill_type"))
 
 
-def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None, tag: Optional[str] = None, query: str = "", semantic_domain: Optional[str] = None, entry_type: Optional[str] = None, path: Path = MANIFEST_PATH) -> dict[str, Any]:
+def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None, tag: Optional[str] = None, query: str = "", semantic_domain: Optional[str] = None, entry_type: Optional[str] = None, visual_only: bool = False, path: Path = MANIFEST_PATH) -> dict[str, Any]:
     manifest = _read_manifest(path)
     needle = query.strip().casefold()
     resources = []
+    category_counts: dict[str, int] = {}
+    tag_counts: dict[str, int] = {}
     source_resources = dict(_open_pose_resources()) if path == MANIFEST_PATH else {}
     source_resources.update((item["platform_resource_id"], item) for item in manifest.get("resources", []))
     for resource in source_resources.values():
@@ -614,14 +616,25 @@ def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None
             continue
         if kind and resource.get("kind") != kind:
             continue
-        if category and resource.get("category_path") != category:
-            continue
-        if tag and tag not in resource.get("tags", []):
+        if visual_only and not (resource.get("kind") == "image"
+                and resource.get("category_path", "").startswith("reference/")
+                and (resource.get("payload", {}).get("media_file") or resource.get("payload", {}).get("remote_url"))):
             continue
         dictionary = resource.get("dictionary") or {}
         if semantic_domain and dictionary.get("semantic_domain") != semantic_domain:
             continue
         if entry_type and dictionary.get("entry_type") != entry_type:
+            continue
+        # Facets cover the complete eligible catalog, never just one result page.
+        # Keep categories stable; tags narrow by category, independently of search/tag.
+        category_id = resource.get("category_path", "")
+        if category_id:
+            category_counts[category_id] = category_counts.get(category_id, 0) + 1
+        if category and category_id != category:
+            continue
+        for resource_tag in set(resource.get("tags", [])):
+            tag_counts[resource_tag] = tag_counts.get(resource_tag, 0) + 1
+        if tag and tag not in resource.get("tags", []):
             continue
         if needle:
             haystack = " ".join([
@@ -639,6 +652,11 @@ def list_resources(*, kind: Optional[str] = None, category: Optional[str] = None
         "schema_version": manifest.get("schema_version", 1),
         "catalog_revision": manifest.get("catalog_revision", "unknown"),
         "resources": resources,
+        "facets": {
+            "categories": [{"id": key, "label": CHARACTER_CATEGORIES.get(key, key), "count": count}
+                           for key, count in sorted(category_counts.items())],
+            "tags": [{"id": key, "label": key, "count": count} for key, count in sorted(tag_counts.items())],
+        },
     }
 
 

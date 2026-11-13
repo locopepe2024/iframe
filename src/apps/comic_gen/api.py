@@ -209,11 +209,8 @@ def get_platform_reference_library(
         catalog = list_platform_reference_resources(
             kind=kind, category=category, tag=tag, query=query,
             semantic_domain=semantic_domain, entry_type=entry_type,
+            visual_only=visual_only,
         )
-        if visual_only:
-            catalog["resources"] = [item for item in catalog["resources"]
-                if item.get("kind") == "image" and item.get("category_path", "").startswith("reference/")
-                and (item.get("payload", {}).get("media_file") or item.get("payload", {}).get("remote_url"))]
         catalog["total"] = len(catalog["resources"])
         if limit is not None:
             catalog["resources"] = catalog["resources"][offset:offset + limit]
