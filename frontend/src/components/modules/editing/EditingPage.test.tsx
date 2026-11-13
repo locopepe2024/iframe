@@ -1,8 +1,10 @@
-import { fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import EditingPage, { EditingMaterials, EditingMaterialManager } from './EditingPage';
 import { editing, type EditProject, type EditMaterial } from '@/lib/editing';
 import { agentRequest, agentTranscribe } from '@/lib/api';
+import type { AssemblyEditPlan } from '@/lib/api';
+import { requestEditingNavigation } from '@/lib/editingNavigationGuard';
 vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
 vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), agentRequest: vi.fn(), agentTranscribe: vi.fn() }));
 vi.mock('../cast/VoicePickerModal', () => ({ default: ({ isOpen, onApply }: { isOpen: boolean; onApply: (id: string, name: string) => void }) => isOpen ? <button type="button" onClick={() => onApply('uniart:speech-2.8-hd:male-qn-qingse', 'Qingse')}>Pick Qingse</button> : null }));
@@ -25,6 +27,178 @@ beforeEach(() => {
   vi.mocked(editing.render).mockImplementation(async (_id, revision) => ({ ...project, revision, output: { url: '/result.mp4', revision } }));
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); window.location.hash = ''; });
+
+async function openDirtyTimeline() {
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit clip 1: Original.mp4' }));
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Playhead (seconds)' }), { target: { value: '0.5' } });
+}
+
+it('keeps the draft when leaving is canceled, and discards it only after confirmation', async () => {
+  await openDirtyTimeline();
+  expect(requestEditingNavigation('#/library')).toBe(true);
+  expect(await screen.findByRole('dialog', { name: 'Leave editing?' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Stay' }));
+  expect(screen.queryByRole('dialog', { name: 'Leave editing?' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Unsaved/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled();
+
+  expect(requestEditingNavigation('#/library')).toBe(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Discard and leave' }));
+  await waitFor(() => expect(window.location.hash).toBe('#/library'));
+});
+
+it('keeps an unsaved draft when switching to the internal materials tab', async () => {
+  await openDirtyTimeline();
+  fireEvent.click(screen.getByRole('button', { name: 'Materials' }));
+  expect(await screen.findByText(/Manage uploaded materials/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Editing' }));
+  expect(screen.getByText(/Unsaved/)).toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: 'Leave editing?' })).not.toBeInTheDocument();
+});
+
+it('saves before leaving and keeps the dialog and draft available after save failure', async () => {
+  vi.mocked(editing.save).mockRejectedValueOnce(new Error('Save unavailable'));
+  await openDirtyTimeline();
+  expect(requestEditingNavigation('#/settings')).toBe(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Save and leave' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Save unavailable');
+  expect(screen.getByRole('dialog', { name: 'Leave editing?' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Save and leave' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(window.location.hash).toBe('#/settings'));
+});
+
+it('waits for an in-flight save before continuing a requested leave', async () => {
+  let finishSave!: (value: EditProject) => void;
+  vi.mocked(editing.save).mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve; }));
+  await openDirtyTimeline();
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  expect(requestEditingNavigation('#/director')).toBe(true);
+  await screen.findByRole('dialog', { name: 'Leave editing?' });
+  expect(screen.getByRole('button', { name: 'Discard and leave' })).toBeDisabled();
+  const submitted = vi.mocked(editing.save).mock.calls[0][2];
+  await act(async () => finishSave({ ...project, revision: 1, plan: submitted, sources: { [material.id]: material } }));
+  await waitFor(() => expect(window.location.hash).toBe('#/director'));
+  expect(screen.queryByRole('dialog', { name: 'Leave editing?' })).not.toBeInTheDocument();
+});
+
+it('blocks custom shortcuts during save and render, then allows new edits and undo', async () => {
+  let finishSave!: (project: EditProject) => void;
+  vi.mocked(editing.save).mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve; }));
+  await openDirtyTimeline();
+  const workbench = screen.getByRole('region', { name: 'Multitrack editing' });
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  for (const key of ['s', 'Delete', 'Backspace']) fireEvent.keyDown(workbench, { key });
+  expect(screen.getByRole('button', { name: 'Edit clip 1: Original.mp4' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Edit clip 2: Original.mp4' })).not.toBeInTheDocument();
+  const submitted = vi.mocked(editing.save).mock.calls[0][2];
+  const saved = { ...project, revision: 2, plan: submitted, sources: { [material.id]: material } };
+  await act(async () => finishSave(saved));
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  let finishRender!: (project: EditProject) => void;
+  vi.mocked(editing.render).mockImplementationOnce(() => new Promise(resolve => { finishRender = resolve; }));
+  fireEvent.click(screen.getByRole('button', { name: 'Render MP4' }));
+  for (const key of ['s', 'Delete']) fireEvent.keyDown(workbench, { key });
+  expect(screen.getByRole('button', { name: 'Edit clip 1: Original.mp4' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Edit clip 2: Original.mp4' })).not.toBeInTheDocument();
+  await act(async () => finishRender(saved));
+  fireEvent.keyDown(workbench, { key: 's' });
+  expect(screen.getByRole('button', { name: 'Edit clip 2: Original.mp4' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(screen.queryByRole('button', { name: 'Edit clip 2: Original.mp4' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(editing.save).mock.calls[1][1]).toBe(2);
+  expect(vi.mocked(editing.save).mock.calls[1][2].lanes[0].clips).toHaveLength(2);
+});
+
+it('retains the draft and undo history after a failed save, and unlocks for retry', async () => {
+  let failSave!: (error: Error) => void;
+  vi.mocked(editing.save).mockImplementationOnce(() => new Promise((_resolve, reject) => { failSave = reject; }));
+  await openDirtyTimeline();
+  const workbench = screen.getByRole('region', { name: 'Multitrack editing' });
+  fireEvent.keyDown(workbench, { key: 's' });
+  expect(screen.getByRole('button', { name: 'Edit clip 2: Original.mp4' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  for (const key of ['s', 'Delete']) fireEvent.keyDown(workbench, { key });
+  await act(async () => failSave(new Error('Save failed')));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
+  expect(screen.getByRole('button', { name: 'Edit clip 1: Original.mp4' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Edit clip 2: Original.mp4' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(screen.queryByRole('button', { name: 'Edit clip 2: Original.mp4' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(editing.save).mock.calls[1][2]).toEqual(vi.mocked(editing.save).mock.calls[0][2]);
+});
+
+it.each(['start', 'end'] as const)('undoes an audio %s edge gesture and preserves the crop after saving and reopening', async edge => {
+  const audio = { ...material, id: 'audio', name: 'Music.wav', video: false, duration_ms: 10000 };
+  const original: AssemblyEditPlan = { id: 'edit', scope: 'project', revision: 1, target_duration_ms: 6000, markers: [], provenance: {}, lanes: [
+    { id: 'video', kind: 'video', allow_overlap: false, clips: [{ id: 'video', source_media_id: material.id, timeline_start_ms: 0, timeline_end_ms: 6000, source_start_ms: 0, source_end_ms: 6000, source_refs: [], enabled: true }] },
+    { id: 'audio', kind: 'bgm', allow_overlap: true, clips: [{ id: 'music', label: audio.name, source_media_id: audio.id, timeline_start_ms: 1000, timeline_end_ms: 4000, source_start_ms: 5000, source_end_ms: 8000, source_refs: [], enabled: true }] },
+  ] };
+  const sources = { [material.id]: { ...material, duration_ms: 6000 }, [audio.id]: audio };
+  vi.mocked(editing.get).mockResolvedValue({ ...project, plan: original, sources });
+  vi.mocked(editing.save).mockImplementation(async (_id, revision, plan) => ({ ...project, revision: revision + 1, plan, sources }));
+  const view = render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  const clip = await screen.findByRole('button', { name: audio.name });
+  fireEvent.click(clip);
+  const handle = screen.getByRole('button', { name: `${audio.name} ${edge} handle` });
+  handle.setPointerCapture = vi.fn();
+  const track = screen.getByLabelText('bgm timeline');
+  Object.defineProperty(track, 'clientWidth', { value: 600 });
+  const pointer = (target: Element, type: string, x: number) => {
+    const event = new Event(type, { bubbles: true });
+    Object.defineProperties(event, { clientX: { value: x }, pointerId: { value: 1 }, button: { value: 0 } });
+    fireEvent(target, event);
+  };
+  pointer(handle, 'pointerdown', edge === 'start' ? 100 : 400);
+  pointer(track, 'pointermove', 250);
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  pointer(track, 'pointermove', 200);
+  pointer(track, 'pointerup', 200);
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  expect(clip.style.left).toBe(`${1000 / 6000 * 100}%`);
+  expect(clip.style.width).toBe('50%');
+  fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  const saved = vi.mocked(editing.save).mock.calls[0][2];
+  const expected = edge === 'start'
+    ? { timeline_start_ms: 2000, timeline_end_ms: 4000, source_start_ms: 6000, source_end_ms: 8000 }
+    : { timeline_start_ms: 1000, timeline_end_ms: 2000, source_start_ms: 5000, source_end_ms: 6000 };
+  expect(saved.lanes[1].clips[0]).toMatchObject(expected);
+  expect(saved.lanes[0]).toEqual(original.lanes[0]);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Render MP4' })).toBeEnabled());
+  view.unmount();
+  vi.mocked(editing.get).mockResolvedValue({ ...project, revision: 1, plan: saved, sources });
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: audio.name }));
+  expect(screen.getByRole('spinbutton', { name: 'Source in (seconds)' })).toHaveValue(expected.source_start_ms / 1000);
+  expect(screen.getByRole('spinbutton', { name: 'Source out (seconds)' })).toHaveValue(expected.source_end_ms / 1000);
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled();
+});
 
 it('reviews recognized text and estimated times before adding a subtitle lane', async () => {
   vi.mocked(agentRequest).mockResolvedValue({ available: true });
@@ -51,8 +225,37 @@ it('reviews recognized text and estimated times before adding a subtitle lane', 
   expect(lane?.clips.map(item => item.text)).toEqual(['Corrected.', 'Second.']);
 });
 
-it('generates a selected system voice into the dialogue lane', async () => {
-  const voiceover = { ...material, id: 'core:voiceover', name: 'voiceover.mp3', video: false, audio: true };
+it('previews a generated voiceover without changing the draft, then places it at the selected time', async () => {
+  const voiceover = { ...material, id: 'core:voiceover', name: 'voiceover.mp3', video: false, audio: true, duration_ms: 500 };
+  vi.mocked(editing.synthesizeVoice).mockResolvedValue(voiceover);
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Voiceover text' }), { target: { value: 'Hello' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Choose voice' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Pick Qingse' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover preview' }));
+  await waitFor(() => expect(editing.synthesizeVoice).toHaveBeenCalledWith('Hello', 'uniart:speech-2.8-hd:male-qn-qingse', 1));
+  expect(await screen.findByLabelText('Generated voiceover preview')).toBeInTheDocument();
+  expect(screen.getByText('0.50s')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled();
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Placement start (seconds)' }), { target: { value: '0.25' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add to dialogue track' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Generate voiceover' })).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledTimes(2));
+  const lane = vi.mocked(editing.save).mock.calls[1][2].lanes.find(item => item.kind === 'dialogue');
+  expect(lane?.clips[0]).toMatchObject({ source_media_id: voiceover.id, timeline_start_ms: 250, timeline_end_ms: 750, source_start_ms: 0, source_end_ms: 500 });
+});
+
+it('requires explicit confirmation before trimming an overlong generated voiceover', async () => {
+  const voiceover = { ...material, id: 'core:long-voiceover', name: 'long-voiceover.mp3', video: false, audio: true, duration_ms: 1500 };
   vi.mocked(editing.synthesizeVoice).mockResolvedValue(voiceover);
   render(<EditingPage />);
   await screen.findByRole('option', { name: project.title });
@@ -64,13 +267,19 @@ it('generates a selected system voice into the dialogue lane', async () => {
   fireEvent.change(screen.getByRole('textbox', { name: 'Voiceover text' }), { target: { value: 'Hello' } });
   fireEvent.click(screen.getByRole('button', { name: 'Choose voice' }));
   fireEvent.click(screen.getByRole('button', { name: 'Pick Qingse' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Generate and add dialogue' }));
-  await waitFor(() => expect(editing.synthesizeVoice).toHaveBeenCalledWith('Hello', 'uniart:speech-2.8-hd:male-qn-qingse', 1));
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Generate voiceover' })).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover preview' }));
+  await screen.findByLabelText('Generated voiceover preview');
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Placement start (seconds)' }), { target: { value: '0.2' } });
+  expect(screen.getByText(/Only 0.80s remain.*0.70s will be trimmed/)).toBeInTheDocument();
+  const addButton = screen.getByRole('button', { name: 'Trim as confirmed and add to dialogue' });
+  expect(addButton).toBeDisabled();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Confirm trimming the stated voiceover tail' }));
+  expect(addButton).toBeEnabled();
+  fireEvent.click(addButton);
   fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
   await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
   const lane = vi.mocked(editing.save).mock.calls[0][2].lanes.find(item => item.kind === 'dialogue');
-  expect(lane?.clips[0].source_media_id).toBe(voiceover.id);
+  expect(lane?.clips[0]).toMatchObject({ source_media_id: voiceover.id, timeline_start_ms: 200, timeline_end_ms: 1000, source_start_ms: 0, source_end_ms: 800 });
 });
 
 it('creates a cloned voice and uses it for dialogue', async () => {
@@ -92,8 +301,13 @@ it('creates a cloned voice and uses it for dialogue', async () => {
   fireEvent.click(screen.getByRole('checkbox', { name: 'I have permission from the speaker to clone this voice' }));
   fireEvent.click(screen.getByRole('button', { name: 'Create cloned voice' }));
   await waitFor(() => expect(editing.cloneVoice).toHaveBeenCalledWith(sample, clone.name, true));
-  fireEvent.click(screen.getByRole('button', { name: 'Generate and add dialogue' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover preview' }));
   await waitFor(() => expect(editing.synthesizeVoice).toHaveBeenCalledWith('Hello', clone.id, 1));
+  expect(await screen.findByLabelText('Generated voiceover preview')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Voiceover text' }), { target: { value: 'Hello again' } });
+  expect(screen.queryByLabelText('Generated voiceover preview')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover preview' }));
+  await waitFor(() => expect(editing.synthesizeVoice).toHaveBeenLastCalledWith('Hello again', clone.id, 1));
 });
 
 it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', async () => {
@@ -149,7 +363,7 @@ it('guides a revision-zero project through import and timeline insertion', async
   expect(screen.getByRole('slider', { name: 'Timeline ruler' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Import materials' }));
   expect(screen.getByRole('dialog', { name: 'Import from library' })).toBeInTheDocument();
-  expect(screen.queryByLabelText('Upload video or audio')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Upload video, audio, or images')).not.toBeInTheDocument();
   fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
   expect(await screen.findByText('Materials are in your workspace. Click + beside a material to add it to the timeline.')).toBeInTheDocument();
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -166,7 +380,7 @@ it('keeps material management free of workspace import actions even with a proje
   fireEvent.click(screen.getByRole('button', { name: 'Materials' }));
   await screen.findByText(material.name);
   expect(screen.queryByRole('button', { name: /Import to workspace/ })).not.toBeInTheDocument();
-  expect(screen.getByLabelText('Upload video or audio')).toBeInTheDocument();
+  expect(screen.getByLabelText('Upload video, audio, or images')).toBeInTheDocument();
   expect(screen.getByLabelText('Move material Original.mp4')).toBeInTheDocument();
   expect(editing.importMaterial).not.toHaveBeenCalled();
 });
@@ -202,7 +416,7 @@ it('uploads every selected material and keeps per-file failures visible after re
   vi.mocked(editing.upload).mockResolvedValueOnce(material).mockRejectedValueOnce(new Error('Invalid video')).mockResolvedValueOnce({ ...material, id: 'two', name: 'two.mp4' });
   const onSelect = vi.fn();
   render(<EditingMaterialManager onSelect={onSelect} />);
-  const upload = await screen.findByLabelText('Upload video or audio');
+  const upload = await screen.findByLabelText('Upload video, audio, or images');
   await waitFor(() => expect(upload).toBeEnabled());
   expect(upload).toHaveAttribute('multiple');
   fireEvent.change(upload, { target: { files } });
@@ -234,6 +448,25 @@ it('references library media in an independent plan then saves and renders that 
   expect(editing.render).toHaveBeenCalledWith(project.id, 2);
 });
 
+it('places an uploaded still image on the visual lane and previews the saved material', async () => {
+  const still: EditMaterial = { ...material, id: 'core:still', name: 'Portrait.png', url: '/portrait.png', video: false, image: true, audio: false, duration_ms: 5000 };
+  vi.mocked(editing.materials).mockResolvedValue({ items: [still], next_cursor: null });
+  vi.mocked(editing.material).mockResolvedValue(still);
+  vi.mocked(editing.importMaterial).mockResolvedValue({ ...project, revision: 1, sources: { [still.id]: still } });
+  vi.mocked(editing.save).mockImplementation(async (_id, revision, plan) => ({ ...project, revision: revision + 1, plan, sources: { [still.id]: still } }));
+  const { container } = render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Portrait.png' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Portrait.png' }));
+  expect(await screen.findByRole('button', { name: 'Edit clip 1: Portrait.png' })).toBeInTheDocument();
+  expect(container.querySelector('[data-editing-preview] img')).toHaveAttribute('src', 'http://localhost:3000/files/portrait.png');
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  expect(vi.mocked(editing.save).mock.calls[0][2].lanes[0].clips[0]).toMatchObject({ source_media_id: still.id, timeline_start_ms: 0, timeline_end_ms: 5000 });
+});
+
 it('separates material management from the timeline and preserves unsaved edits across tabs', async () => {
   render(<EditingPage />);
   await screen.findByRole('option', { name: project.title });
@@ -242,9 +475,9 @@ it('separates material management from the timeline and preserves unsaved edits 
   fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
-  expect(screen.queryByLabelText('Upload video or audio')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Upload video, audio, or images')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Materials' }));
-  expect(await screen.findByLabelText('Upload video or audio')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Upload video, audio, or images')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Save edit' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Editing' }));
   await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled());
@@ -279,7 +512,7 @@ it('creates a folder, uploads into it, moves a material and reports deletion con
   fireEvent.click(screen.getByRole('button', { name: 'Save folder' }));
   await waitFor(() => expect(editing.createFolder).toHaveBeenCalledWith(folder.name, null));
   expect(screen.getByRole('button', { name: 'Root' })).toBeInTheDocument();
-  const upload = screen.getByLabelText('Upload video or audio');
+  const upload = screen.getByLabelText('Upload video, audio, or images');
   await waitFor(() => expect(upload).toBeEnabled());
   const file = new File(['test'], 'clip.mp4', { type: 'video/mp4' });
   fireEvent.change(upload, { target: { files: [file] } });

@@ -210,6 +210,44 @@ def test_invalid_upload_is_not_registered(service):
     assert not list(service.root.glob('*.mp4'))
 
 
+@pytest.mark.parametrize('implicit_source_end', [False, True])
+def test_uploaded_still_image_saves_restores_and_renders_as_visual_clip(service, tmp_path, implicit_source_end):
+    from PIL import Image
+
+    image_path = tmp_path / 'portrait.png'
+    Image.new('RGB', (96, 64), (35, 120, 210)).save(image_path)
+    with image_path.open('rb') as stream:
+        item = service.upload(stream, image_path.name)
+    assert item['image'] is True and item['video'] is False and item['audio'] is False
+    assert item['duration_ms'] == 5000
+    assert any(card['id'] == item['id'] and card['image'] for card in service.materials()['items'])
+
+    duration_ms = 6000 if implicit_source_end else 5000
+    plan = AssemblyEditPlan.model_validate(dict(scope='project', target_duration_ms=duration_ms, lanes=[dict(id='video', kind='video', clips=[dict(
+        id='still', timeline_start_ms=0, timeline_end_ms=duration_ms,
+        source_start_ms=1000 if implicit_source_end else 0, source_end_ms=None if implicit_source_end else duration_ms,
+        source_media_id=item['id'], source_refs=['media:' + item['id']], label='portrait.png',
+    )])]))
+    project = service.create('Still image cut')
+    saved = service.save(project['id'], 0, plan)
+    assert service.get(project['id'])['sources'][item['id']]['image'] is True
+    restored = service.restore(project['id'], saved['revision'], saved['revision'])
+    rendered = service.render(project['id'], restored['revision'])
+    output = service.output_root / rendered['output']['url']
+    probe = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration:stream=codec_type,duration', '-of', 'json', str(output)]))
+    assert abs(float(probe['format']['duration']) - duration_ms / 1000) < .15
+    assert {stream['codec_type'] for stream in probe['streams']} == {'video', 'audio'}
+    assert abs(float(next(stream['duration'] for stream in probe['streams'] if stream['codec_type'] == 'video')) - duration_ms / 1000) < .15
+
+
+def test_invalid_still_image_is_not_registered_or_left_behind(service):
+    with pytest.raises(HTTPException) as error:
+        service.upload(io.BytesIO(b'not an image'), 'broken.png')
+    assert error.value.status_code == 422
+    assert service.materials()['items'] == []
+    assert not list(service.root.glob('*.png'))
+
+
 def test_audio_captions_and_stale_render(service, video, tmp_path, monkeypatch):
     from src.apps.editing import service as module
     from src.apps.comic_gen.models import AssemblyLane

@@ -31,15 +31,7 @@ export function trimAssemblyClipAtPlayhead(plan: AssemblyEditPlan, laneId: strin
         return trimAssemblyClip(plan, laneId, clipId, side === 'left' ? cut : sourceStart, side === 'right' ? cut : sourceEnd);
     }
     if (!['dialogue', 'bgm', 'sfx', 'subtitle'].includes(lane.kind)) throw new Error('Select a media clip or caption to trim');
-    const resized = resizeAssemblyClipInTimeline(plan, laneId, clipId, side === 'left' ? 'start' : 'end', time);
-    if (lane.kind === 'subtitle') return resized;
-    const sourceStart = clip.source_start_ms ?? 0;
-    const sourceEnd = clip.source_end_ms ?? sourceStart + clip.timeline_end_ms - clip.timeline_start_ms;
-    const cut = sourceStart + Math.round((time - clip.timeline_start_ms) / (clip.timeline_end_ms - clip.timeline_start_ms) * (sourceEnd - sourceStart));
-    if (cut <= sourceStart || cut >= sourceEnd) throw new Error('Trim is too close to the source boundary');
-    return { ...resized, lanes: resized.lanes.map(l => l.id !== laneId ? l : { ...l, clips: l.clips.map(c => c.id !== clipId ? c : {
-        ...c, source_start_ms: side === 'left' ? cut : sourceStart, source_end_ms: side === 'right' ? cut : sourceEnd,
-    }) }) };
+    return resizeAssemblyClipInTimeline(plan, laneId, clipId, side === 'left' ? 'start' : 'end', time);
 }
 
 /** Trim at original speed and ripple only video; independent audio/captions stay anchored. */
@@ -145,7 +137,19 @@ export function resizeAssemblyClipInTimeline(plan: AssemblyEditPlan, laneId: str
     const nextEnd = edge === "end" ? time : clip.timeline_end_ms;
     if (nextEnd - nextStart < 10) throw new Error("Clip must keep at least 10 milliseconds");
     if (nextStart < 0 || nextEnd > plan.target_duration_ms) throw new Error("Clip exceeds the timeline duration");
-    const clips = lane.clips.map(c => c.id === clipId ? { ...c, timeline_start_ms: nextStart, timeline_end_ms: nextEnd } : c);
+    let updated = { ...clip, timeline_start_ms: nextStart, timeline_end_ms: nextEnd };
+    if (['dialogue', 'bgm', 'sfx'].includes(lane.kind)) {
+        const duration = clip.timeline_end_ms - clip.timeline_start_ms;
+        const sourceStart = clip.source_start_ms ?? 0;
+        const sourceEnd = clip.source_end_ms ?? sourceStart + duration;
+        const mapped = sourceStart + Math.round((time - clip.timeline_start_ms) / duration * (sourceEnd - sourceStart));
+        if (time > clip.timeline_start_ms && time < clip.timeline_end_ms && (mapped <= sourceStart || mapped >= sourceEnd)) throw new Error('Trim is too close to the source boundary');
+        const nextSourceStart = edge === 'start' ? mapped : sourceStart;
+        const nextSourceEnd = edge === 'end' ? mapped : sourceEnd;
+        if (!Number.isInteger(nextSourceStart) || !Number.isInteger(nextSourceEnd) || nextSourceStart < 0 || nextSourceEnd <= nextSourceStart) throw new Error('Invalid audio source range');
+        updated = { ...updated, source_start_ms: nextSourceStart, source_end_ms: nextSourceEnd };
+    }
+    const clips = lane.clips.map(c => c.id === clipId ? updated : c);
     if (!lane.allow_overlap && clips.some((a, i) => clips.some((b, j) => i !== j && a.timeline_start_ms < b.timeline_end_ms && b.timeline_start_ms < a.timeline_end_ms))) throw new Error("Clip would overlap another clip");
     return { ...plan, lanes: plan.lanes.map(l => l.id === laneId ? { ...l, clips } : l) };
 }

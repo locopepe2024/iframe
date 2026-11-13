@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { API_URL, type AssemblyEditPlan } from './api';
-export interface EditMaterial { id: string; name: string; url: string; origin?: string; sha256: string; duration_ms: number; video: boolean; audio: boolean; folder_id?: string | null; folder_name?: string | null; deletable?: boolean }
+export interface EditMaterial { id: string; name: string; url: string; origin?: string; sha256: string; duration_ms: number; video: boolean; image?: boolean; audio: boolean; folder_id?: string | null; folder_name?: string | null; deletable?: boolean }
 export interface EditFolder { id: string; name: string; parent_id?: string | null; created_at: number }
 export interface EditVoiceClone { id: string; name: string; model: string; created_at: number; family: 'minimax'; origin: 'clone' }
 export interface EditProject { id: string; title: string; revision: number; plan: AssemblyEditPlan | null; sources: Record<string, EditMaterial>; output: { url: string; revision: number } | null }

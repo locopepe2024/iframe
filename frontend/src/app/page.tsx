@@ -18,6 +18,7 @@ import AppShell from "@/components/layout/AppShell";
 import type { GlobalTab } from "@/components/layout/GlobalSidebar";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
+import { shouldGuardEditingRouteChange } from "@/lib/editingNavigationGuard";
 import { useTranslations } from "next-intl";
 import TauriMenuListener from "@/components/layout/TauriMenuListener";
 
@@ -608,8 +609,36 @@ export default function Home() {
 
   // 监听 hash 变化
   useEffect(() => {
+    let lastHandledHash = window.location.hash || '#/';
+    let routeHistory = [lastHandledHash];
+    let routeHistoryIndex = 0;
+    let historyTraversalPending = false;
+    const markHistoryTraversal = () => { historyTraversalPending = true; };
     const handleHashChange = () => {
       const hash = window.location.hash;
+      let traversalDirection = 0;
+      if (historyTraversalPending) {
+        historyTraversalPending = false;
+        if (routeHistory[routeHistoryIndex - 1] === hash) { traversalDirection = -1; routeHistoryIndex -= 1; }
+        else if (routeHistory[routeHistoryIndex + 1] === hash) { traversalDirection = 1; routeHistoryIndex += 1; }
+      }
+      if (shouldGuardEditingRouteChange(lastHandledHash, hash)) {
+        // hashchange cannot be canceled. Undo history traversal in the opposite
+        // direction; replace a newly pushed hash entry with the current route.
+        // This keeps Back usable after the user cancels an attempted exit.
+        if (traversalDirection) history.go(-traversalDirection);
+        else {
+          history.replaceState(null, '', lastHandledHash);
+          routeHistory = [...routeHistory.slice(0, routeHistoryIndex + 1), lastHandledHash];
+          routeHistoryIndex += 1;
+        }
+        return;
+      }
+      if (!traversalDirection) {
+        routeHistory = [...routeHistory.slice(0, routeHistoryIndex + 1), hash];
+        routeHistoryIndex += 1;
+      }
+      lastHandledHash = hash;
       // Match #/series/{id}/episode/{eid} first (more specific)
       const seriesEpisodeMatch = hash.match(/^#\/series\/([^/]+)\/episode\/([^/?]+)(?:\?.*)?$/);
       if (seriesEpisodeMatch) {
@@ -740,8 +769,9 @@ export default function Home() {
     };
 
     handleHashChange();
+    window.addEventListener('popstate', markHistoryTraversal);
     window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    return () => { window.removeEventListener('popstate', markHistoryTraversal); window.removeEventListener('hashchange', handleHashChange); };
   }, []);
 
   // 项目详情页 — 全屏，无 GlobalSidebar

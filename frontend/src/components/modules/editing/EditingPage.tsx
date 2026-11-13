@@ -8,6 +8,7 @@ import { editing, type EditMaterial, type EditProject } from '@/lib/editing';
 import type { AssemblyClip, AssemblyEditPlan } from '@/lib/api';
 import { AssemblyTracks } from '../AssemblyTracks';
 import { extractErrorDetail, getAssetUrl } from '@/lib/utils';
+import { continueEditingNavigation, registerEditingNavigationGuard } from '@/lib/editingNavigationGuard';
 
 export { EditingMaterials, EditingMaterialManager } from './EditingMaterials';
 import { EditingMaterials, EditingMaterialManager, EditingMaterialPicker } from './EditingMaterials';
@@ -28,6 +29,8 @@ export default function EditingPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [pendingLeave, setPendingLeave] = useState<string | null>(null);
+  const [leaveError, setLeaveError] = useState('');
   const [undo, setUndo] = useState<AssemblyEditPlan[]>([]);
   const [redo, setRedo] = useState<AssemblyEditPlan[]>([]);
   const [versions, setVersions] = useState<{ revision: number }[]>([]);
@@ -39,6 +42,13 @@ export default function EditingPage() {
   useEffect(() => { const read = () => setTab(new URLSearchParams(window.location.hash.split('?')[1] || '').get('tab') === 'materials' ? 'materials' : 'edit'); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const read = () => setPendingMedia(new URLSearchParams(window.location.hash.split('?')[1] || '').get('media') || ''); read(); window.addEventListener('hashchange', read); return () => window.removeEventListener('hashchange', read); }, []);
   useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, [dirty]);
+  useEffect(() => registerEditingNavigationGuard({ isDirty: () => dirty, isBusy: () => busy, onLeaveRequest: target => { setLeaveError(''); setPendingLeave(target); } }), [dirty, busy]);
+  useEffect(() => {
+    if (!pendingLeave || busy || dirty) return;
+    const target = pendingLeave;
+    setPendingLeave(null);
+    continueEditingNavigation(target);
+  }, [pendingLeave, busy, dirty]);
   const [audioLane, setAudioLane] = useState<'bgm' | 'dialogue' | 'sfx'>('bgm');
   const emptyPlan = (id: string): AssemblyEditPlan => ({ id: `assembly-${id}`, scope: 'project', revision: 1, target_duration_ms: 1000, lanes: [], markers: [], provenance: {} });
   const accept = (p: EditProject) => { setProject(p); setPlan(p.plan || emptyPlan(p.id)); setSources(p.sources); setDirty(false); setUndo([]); setRedo([]); setVersions([]); setProjectDialog(null); setTranscriptClip(null); setVoiceoverOpen(false); };
@@ -63,7 +73,24 @@ export default function EditingPage() {
     return () => { active = false; };
   }, [project?.id, plan, sources]);
   const run = async (fn: () => Promise<void>, reportError = setError) => { setBusy(true); reportError(''); try { await fn(); } catch (e) { reportError(extractErrorDetail(e)); } finally { setBusy(false); } };
-  const change = (next: AssemblyEditPlan) => { if (plan) setUndo(old => [...old.slice(-49), plan]); setRedo([]); setPlan(next); setDirty(true); };
+  const saveAndLeave = async () => {
+    if (!pendingLeave || !project || !plan || busy) return;
+    const target = pendingLeave;
+    setBusy(true); setLeaveError('');
+    try {
+      accept(await editing.save(project.id, project.revision, plan));
+      setPendingLeave(null);
+      continueEditingNavigation(target);
+    } catch (e) { setLeaveError(extractErrorDetail(e)); }
+    finally { setBusy(false); }
+  };
+  const discardAndLeave = () => {
+    if (!pendingLeave || busy) return;
+    const target = pendingLeave;
+    setPendingLeave(null);
+    continueEditingNavigation(target);
+  };
+  const change = (next: AssemblyEditPlan) => { if (busy) return; if (plan) setUndo(old => [...old.slice(-49), plan]); setRedo([]); setPlan(next); setDirty(true); };
   const addTranscript = (cues: TranscriptCue[]) => {
     if (!plan || !transcriptClip || plan.lanes.length >= 8 || !plan.lanes.some(lane => lane.kind === 'video' && lane.clips.some(clip => clip.id === transcriptClip.id))) return;
     change({ ...plan, lanes: [...plan.lanes, {
@@ -72,20 +99,26 @@ export default function EditingPage() {
     }] });
     setTranscriptClip(null);
   };
-  const add = (item: EditMaterial, laneOverride?: 'bgm' | 'dialogue' | 'sfx') => {
-    if (!project) return;
-    if (!item.video && !plan) { setError(t('请先添加视频。', 'Add a video first.')); return; }
+  const add = (item: EditMaterial, laneOverride?: 'bgm' | 'dialogue' | 'sfx', placement?: { startMs: number; trimTail: boolean }) => {
+    if (!project) return false;
+    if (!item.video && !item.image && !plan) { setError(t('请先添加视频。', 'Add a video first.')); return false; }
     const current: AssemblyEditPlan = plan || { id: `assembly-${project.id}`, scope: 'project', revision: 1, target_duration_ms: item.duration_ms, lanes: [], markers: [], provenance: {} };
-    const kind: 'video' | 'bgm' | 'dialogue' | 'sfx' = item.video ? 'video' : laneOverride || audioLane;
+    const isVisual = item.video || item.image;
+    const kind: 'video' | 'bgm' | 'dialogue' | 'sfx' = isVisual ? 'video' : laneOverride || audioLane;
     const lane = current.lanes.find(l => l.kind === kind);
     const hasVideo = current.lanes.some(l => l.kind === 'video' && l.clips.length > 0);
-    const start = item.video && hasVideo ? current.target_duration_ms : 0;
-    const duration = item.video ? item.duration_ms : Math.min(item.duration_ms, current.target_duration_ms);
+    const start = placement?.startMs ?? (isVisual && hasVideo ? current.target_duration_ms : 0);
+    const duration = isVisual ? item.duration_ms : Math.min(item.duration_ms, Math.max(0, current.target_duration_ms - start));
+    if (duration <= 0 || (placement && item.duration_ms > duration && !placement.trimTail)) {
+      setError(t('配音时长超出可用范围。', 'Voiceover duration exceeds the available range.'));
+      return false;
+    }
     const clip = { id: createRenderRequestId(), timeline_start_ms: start, timeline_end_ms: start + duration, source_start_ms: 0, source_end_ms: duration, source_media_id: item.id, source_refs: [`media:${item.id}`], label: item.name, enabled: true, gain: 1 };
     const lanes = lane ? current.lanes.map(l => l.id === lane.id ? { ...l, clips: [...l.clips, clip] } : l) : [...current.lanes, { id: createRenderRequestId(), kind, label: kind, allow_overlap: kind !== 'video', clips: [clip] }];
-    if (lanes.length > 8) { setError(t('最多支持 8 条泳道。', 'At most 8 lanes.')); return; }
+    if (lanes.length > 8) { setError(t('最多支持 8 条泳道。', 'At most 8 lanes.')); return false; }
     setSources(old => ({ ...old, [item.id]: item }));
-    change({ ...current, lanes, target_duration_ms: item.video ? start + duration : current.target_duration_ms });
+    change({ ...current, lanes, target_duration_ms: isVisual ? start + duration : current.target_duration_ms });
+    return true;
   };
   const importToWorkspace = async (item: EditMaterial) => {
     if (!project) return;
@@ -111,6 +144,19 @@ export default function EditingPage() {
   const iconButton = 'glass-button flex h-11 w-11 shrink-0 items-center justify-center p-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40';
   const menuButton = 'flex min-h-11 w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40';
   return <div className="h-full space-y-3 overflow-y-auto p-3 md:p-4">
+    {pendingLeave && <div role="dialog" aria-modal="true" aria-labelledby="editing-leave-title" className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4">
+      <div className="w-full max-w-md space-y-4 rounded-xl border border-glass-border bg-background p-5 shadow-2xl">
+        <h2 id="editing-leave-title" className="text-lg font-semibold">{t('离开剪辑？', 'Leave editing?')}</h2>
+        <p className="text-sm text-text-secondary">{busy ? t('当前操作完成后再决定如何离开。', 'Choose how to leave after the current operation finishes.') : t('当前剪辑有未保存的修改。', 'This edit has unsaved changes.')}</p>
+        {busy && <p role="status" className="text-sm text-text-secondary">{t('处理中…', 'Finishing current operation…')}</p>}
+        {leaveError && <p role="alert" className="text-sm text-red-300">{leaveError}</p>}
+        <div className="flex flex-wrap justify-end gap-2">
+          <button type="button" className="glass-button min-h-11 px-3 text-sm" onClick={() => { setPendingLeave(null); setLeaveError(''); }}>{t('留在此页', 'Stay')}</button>
+          <button type="button" className="glass-button min-h-11 px-3 text-sm" disabled={busy} onClick={discardAndLeave}>{t('放弃并离开', 'Discard and leave')}</button>
+          <button type="button" className="min-h-11 rounded-lg bg-primary px-3 text-sm text-white disabled:opacity-40" disabled={busy || !dirty || !project || !plan} onClick={() => void saveAndLeave()}>{busy ? t('处理中…', 'Processing…') : t('保存并离开', 'Save and leave')}</button>
+        </div>
+      </div>
+    </div>}
     <h1 className="sr-only">{t('独立剪辑', 'Independent editing')}</h1>
     <header className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-glass-border bg-white/[0.02] p-2 xl:flex xl:items-center" aria-label={t('剪辑工作区工具栏', 'Editing workspace toolbar')}>
       <nav className="flex shrink-0 items-center gap-1" aria-label={t('剪辑视图', 'Editing views')}>
@@ -143,7 +189,7 @@ export default function EditingPage() {
     </header>
     {importOpen && <EditingMaterialPicker onSelect={importToWorkspace} onClose={() => setImportOpen(false)} />}
     {transcriptClip && <EditingTranscriptionDialog clip={transcriptClip} onClose={() => setTranscriptClip(null)} onApply={addTranscript} />}
-    {voiceoverOpen && <EditingVoiceoverDialog onClose={() => setVoiceoverOpen(false)} onCreated={item => { add(item, 'dialogue'); setVoiceoverOpen(false); }} />}
+    {voiceoverOpen && <EditingVoiceoverDialog targetDurationMs={plan?.target_duration_ms || 0} onClose={() => setVoiceoverOpen(false)} onCreated={(item, startMs, trimTail) => { if (add(item, 'dialogue', { startMs, trimTail })) setVoiceoverOpen(false); }} />}
     {tab === 'materials' ? <><p className="text-sm text-text-secondary">{t('管理上传素材和目录；生成素材仍由来源项目维护。', 'Manage uploaded materials and folders; generated materials remain owned by their source project.')}</p><EditingMaterialManager /></> : <>
     {error && <p role="alert" className="text-red-300">{error}</p>}
     {projectDialog && <EditingProjectDialog title={projectDialog === 'new' ? t('新建剪辑', 'New edit') : t('版本历史', 'Version history')} closeLabel={t('关闭', 'Close')} busy={busy} onClose={() => setProjectDialog(null)}>
@@ -167,13 +213,13 @@ export default function EditingPage() {
     {project && <>
       <fieldset disabled={busy} className="space-y-4 disabled:opacity-60">
         {plan && <>
-          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onImport={importMaterials} materialPanel={<EditingMaterials onSelect={add} materials={sources} disabled={busy} />} onChange={change} onTranscribe={clip => { if (plan.lanes.length >= 8) setError(t('最多支持 8 条泳道。', 'At most 8 lanes.')); else setTranscriptClip(clip); }}
+          <AssemblyTracks plan={plan} resourceId={project.id} disabled={busy} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onImport={importMaterials} materialPanel={<EditingMaterials onSelect={item => { add(item); }} materials={sources} disabled={busy} />} onChange={change} onTranscribe={clip => { if (plan.lanes.length >= 8) setError(t('最多支持 8 条泳道。', 'At most 8 lanes.')); else setTranscriptClip(clip); }}
             audioLane={audioLane} onAudioLaneChange={setAudioLane} canUndo={undo.length > 0} canRedo={redo.length > 0}
             onUndo={() => { setRedo(old => [...old, plan]); setPlan(undo[undo.length - 1]); setUndo(old => old.slice(0, -1)); setDirty(true); }}
             onRedo={() => { setUndo(old => [...old, plan]); setPlan(redo[redo.length - 1]); setRedo(old => old.slice(0, -1)); setDirty(true); }}
             onExportSubtitles={lane => editing.subtitles(project.id, lane)} onUploadAudio={async file => { const item = await editing.upload(file); setSources(old => ({ ...old, [item.id]: item })); return { media_id: item.id, url: item.url, duration_ms: item.duration_ms }; }} />
         </>}
-        {!plan && <EditingMaterials onSelect={add} onImport={importMaterials} materials={sources} disabled={busy} />}
+        {!plan && <EditingMaterials onSelect={item => { add(item); }} onImport={importMaterials} materials={sources} disabled={busy} />}
       </fieldset>
     </>}
     </>}
