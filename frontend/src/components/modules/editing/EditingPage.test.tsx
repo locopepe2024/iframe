@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import EditingPage, { EditingMaterials, EditingMaterialManager } from './EditingPage';
 import { editing, type EditProject, type EditMaterial } from '@/lib/editing';
 import { agentRequest, agentTranscribe } from '@/lib/api';
+import type { AssemblyEditPlan } from '@/lib/api';
 vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
 vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), agentRequest: vi.fn(), agentTranscribe: vi.fn() }));
 vi.mock('../cast/VoicePickerModal', () => ({ default: ({ isOpen, onApply }: { isOpen: boolean; onApply: (id: string, name: string) => void }) => isOpen ? <button type="button" onClick={() => onApply('uniart:speech-2.8-hd:male-qn-qingse', 'Qingse')}>Pick Qingse</button> : null }));
@@ -25,6 +26,60 @@ beforeEach(() => {
   vi.mocked(editing.render).mockImplementation(async (_id, revision) => ({ ...project, revision, output: { url: '/result.mp4', revision } }));
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); window.location.hash = ''; });
+
+it.each(['start', 'end'] as const)('undoes an audio %s edge gesture and preserves the crop after saving and reopening', async edge => {
+  const audio = { ...material, id: 'audio', name: 'Music.wav', video: false, duration_ms: 10000 };
+  const original: AssemblyEditPlan = { id: 'edit', scope: 'project', revision: 1, target_duration_ms: 6000, markers: [], provenance: {}, lanes: [
+    { id: 'video', kind: 'video', allow_overlap: false, clips: [{ id: 'video', source_media_id: material.id, timeline_start_ms: 0, timeline_end_ms: 6000, source_start_ms: 0, source_end_ms: 6000, source_refs: [], enabled: true }] },
+    { id: 'audio', kind: 'bgm', allow_overlap: true, clips: [{ id: 'music', label: audio.name, source_media_id: audio.id, timeline_start_ms: 1000, timeline_end_ms: 4000, source_start_ms: 5000, source_end_ms: 8000, source_refs: [], enabled: true }] },
+  ] };
+  const sources = { [material.id]: { ...material, duration_ms: 6000 }, [audio.id]: audio };
+  vi.mocked(editing.get).mockResolvedValue({ ...project, plan: original, sources });
+  vi.mocked(editing.save).mockImplementation(async (_id, revision, plan) => ({ ...project, revision: revision + 1, plan, sources }));
+  const view = render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  const clip = await screen.findByRole('button', { name: audio.name });
+  fireEvent.click(clip);
+  const handle = screen.getByRole('button', { name: `${audio.name} ${edge} handle` });
+  handle.setPointerCapture = vi.fn();
+  const track = screen.getByLabelText('bgm timeline');
+  Object.defineProperty(track, 'clientWidth', { value: 600 });
+  const pointer = (target: Element, type: string, x: number) => {
+    const event = new Event(type, { bubbles: true });
+    Object.defineProperties(event, { clientX: { value: x }, pointerId: { value: 1 }, button: { value: 0 } });
+    fireEvent(target, event);
+  };
+  pointer(handle, 'pointerdown', edge === 'start' ? 100 : 400);
+  pointer(track, 'pointermove', 250);
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  pointer(track, 'pointermove', 200);
+  pointer(track, 'pointerup', 200);
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  expect(clip.style.left).toBe(`${1000 / 6000 * 100}%`);
+  expect(clip.style.width).toBe('50%');
+  fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  const saved = vi.mocked(editing.save).mock.calls[0][2];
+  const expected = edge === 'start'
+    ? { timeline_start_ms: 2000, timeline_end_ms: 4000, source_start_ms: 6000, source_end_ms: 8000 }
+    : { timeline_start_ms: 1000, timeline_end_ms: 2000, source_start_ms: 5000, source_end_ms: 6000 };
+  expect(saved.lanes[1].clips[0]).toMatchObject(expected);
+  expect(saved.lanes[0]).toEqual(original.lanes[0]);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Render MP4' })).toBeEnabled());
+  view.unmount();
+  vi.mocked(editing.get).mockResolvedValue({ ...project, revision: 1, plan: saved, sources });
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: audio.name }));
+  expect(screen.getByRole('spinbutton', { name: 'Source in (seconds)' })).toHaveValue(expected.source_start_ms / 1000);
+  expect(screen.getByRole('spinbutton', { name: 'Source out (seconds)' })).toHaveValue(expected.source_end_ms / 1000);
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled();
+});
 
 it('reviews recognized text and estimated times before adding a subtitle lane', async () => {
   vi.mocked(agentRequest).mockResolvedValue({ available: true });

@@ -1,10 +1,34 @@
 import { describe, expect, it } from "vitest";
 import type { AssemblyEditPlan } from "@/lib/api";
-import { duplicateAssemblyVideo, insertAssemblyVideo, snapAssemblyTimelineTime, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
+import { duplicateAssemblyVideo, insertAssemblyVideo, snapAssemblyTimelineTime, reorderAssemblyVideo, moveAssemblyClipInTimeline, removeAssemblyClip, resizeAssemblyClipInTimeline, splitAssemblyClip, trimAssemblyClip, trimAssemblyClipAtPlayhead } from "./assemblyEditing";
 function plan(): AssemblyEditPlan { return { id: "p", scope: "project", revision: 1, target_duration_ms: 6000, provenance: {}, markers: [], lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [
     { id: "a", timeline_start_ms: 0, timeline_end_ms: 4000, source_start_ms: 1000, source_end_ms: 5000, source_refs: ["frame:a"], enabled: true },
     { id: "b", timeline_start_ms: 4000, timeline_end_ms: 6000, source_start_ms: 0, source_end_ms: 2000, source_refs: ["frame:b"], enabled: true },
 ] }] }; }
+describe('audio edge source mapping', () => {
+    const audioPlan = (kind: 'bgm' | 'dialogue' | 'sfx' = 'bgm'): AssemblyEditPlan => ({ ...plan(), lanes: [{ id: 'audio', kind, allow_overlap: true, clips: [{ id: 'a', timeline_start_ms: 1000, timeline_end_ms: 4000, source_start_ms: 5000, source_end_ms: 8000, enabled: true, source_refs: [] }] }] });
+    it.each(['bgm', 'dialogue', 'sfx'] as const)('maps both %s edges without moving the opposite edge', kind => {
+        const original = audioPlan(kind);
+        expect(resizeAssemblyClipInTimeline(original, 'audio', 'a', 'start', 2000).lanes[0].clips[0]).toMatchObject({ timeline_start_ms: 2000, timeline_end_ms: 4000, source_start_ms: 6000, source_end_ms: 8000 });
+        expect(resizeAssemblyClipInTimeline(original, 'audio', 'a', 'end', 2000).lanes[0].clips[0]).toMatchObject({ timeline_start_ms: 1000, timeline_end_ms: 2000, source_start_ms: 5000, source_end_ms: 6000 });
+        expect(original.lanes[0].clips[0].source_end_ms).toBe(8000);
+    });
+    it('preserves existing speed mapping and maps an extension', () => {
+        const original = audioPlan(); original.lanes[0].clips[0].source_end_ms = 11000;
+        expect(resizeAssemblyClipInTimeline(original, 'audio', 'a', 'start', 2000).lanes[0].clips[0].source_start_ms).toBe(7000);
+        expect(resizeAssemblyClipInTimeline(original, 'audio', 'a', 'end', 4500).lanes[0].clips[0].source_end_ms).toBe(12000);
+    });
+    it('rejects negative or empty mapped source ranges', () => {
+        const original = audioPlan(); original.lanes[0].clips[0].source_start_ms = 0; original.lanes[0].clips[0].source_end_ms = 1;
+        expect(() => resizeAssemblyClipInTimeline(original, 'audio', 'a', 'end', 2000)).toThrow('source');
+        original.lanes[0].clips[0].source_end_ms = 3000;
+        expect(() => resizeAssemblyClipInTimeline(original, 'audio', 'a', 'start', 0)).toThrow('source');
+    });
+    it('keeps subtitle edges independent of source time', () => {
+        const original = audioPlan(); original.lanes[0].kind = 'subtitle';
+        expect(resizeAssemblyClipInTimeline(original, 'audio', 'a', 'start', 2000).lanes[0].clips[0]).toMatchObject({ timeline_start_ms: 2000, source_start_ms: 5000, source_end_ms: 8000 });
+    });
+});
 describe("Assembly editing", () => {
     it("splits at the mapped source position without changing subsequent shots", () => {
         const source = plan(); const split = splitAssemblyClip(source, "v", "a", 1500, "new");
