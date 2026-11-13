@@ -211,10 +211,11 @@ def test_invalid_upload_is_not_registered(service):
 
 
 @pytest.mark.parametrize('implicit_source_end', [False, True])
-def test_uploaded_still_image_saves_restores_and_renders_as_visual_clip(service, tmp_path, implicit_source_end):
+@pytest.mark.parametrize('extension', ['png', 'jpg', 'webp'])
+def test_uploaded_still_image_saves_restores_and_renders_as_visual_clip(service, tmp_path, implicit_source_end, extension):
     from PIL import Image
 
-    image_path = tmp_path / 'portrait.png'
+    image_path = tmp_path / ('portrait.' + extension)
     Image.new('RGB', (96, 64), (35, 120, 210)).save(image_path)
     with image_path.open('rb') as stream:
         item = service.upload(stream, image_path.name)
@@ -246,6 +247,21 @@ def test_invalid_still_image_is_not_registered_or_left_behind(service):
     assert error.value.status_code == 422
     assert service.materials()['items'] == []
     assert not list(service.root.glob('*.png'))
+
+
+@pytest.mark.parametrize('extension', ['png', 'webp'])
+def test_animated_image_is_not_registered_or_left_behind(service, extension):
+    from PIL import Image
+
+    stream = io.BytesIO()
+    frames = [Image.new('RGB', (32, 32), color) for color in ('red', 'blue')]
+    frames[0].save(stream, format='PNG' if extension == 'png' else 'WEBP', save_all=True, append_images=frames[1:], duration=100, loop=0)
+    stream.seek(0)
+    with pytest.raises(HTTPException) as error:
+        service.upload(stream, 'animated.' + extension)
+    assert error.value.status_code == 422
+    assert service.materials()['items'] == []
+    assert not list(service.root.glob('*.' + extension))
 
 
 def test_audio_captions_and_stale_render(service, video, tmp_path, monkeypatch):
