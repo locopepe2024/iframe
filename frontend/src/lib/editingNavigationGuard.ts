@@ -35,4 +35,3 @@ export function continueEditingNavigation(targetHash: string) {
   allowedTarget = targetHash;
   window.location.hash = targetHash;
 }
-

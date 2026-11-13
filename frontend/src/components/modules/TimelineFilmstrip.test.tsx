@@ -8,7 +8,7 @@ it('captures each interval start from the trimmed source and adds frames on zoom
     vi.stubGlobal('IntersectionObserver', undefined);
     const createElement = document.createElement.bind(document);
     const captures: number[] = [];
-    const requests: string[] = [];
+    const requests: (string | null)[] = [];
     vi.spyOn(document, 'createElement').mockImplementation((tagName: string, options?: ElementCreationOptions) => {
         const element = createElement(tagName, options);
         if (tagName === 'video') {
@@ -26,9 +26,10 @@ it('captures each interval start from the trimmed source and adds frames on zoom
         }
         return element;
     });
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+    const getContext = vi.fn().mockReturnValue({
         drawImage: (video: HTMLVideoElement) => captures.push(video.currentTime),
-    } as unknown as CanvasRenderingContext2D);
+    });
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(getContext);
     vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(() => `data:image/webp;base64,frame${captures.length}`);
 
     const view = render(<TimelineFilmstrip url="https://media.example/clip.mp4" startMs={2000} endMs={5000} width={300} />);
