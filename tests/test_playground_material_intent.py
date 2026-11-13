@@ -37,12 +37,12 @@ def test_explicit_reference_keeps_input_order_and_names(mode):
 
 
 @pytest.mark.parametrize('mode', ['i2i', 'r2v', 'f2v'])
-def test_only_two_named_references_from_seven_reach_storage_and_adapter(mode, monkeypatch):
+def test_only_two_named_references_from_seven_reach_storage_and_adapter(mode, monkeypatch, tmp_path):
     refs = [f'/playground/input-media/{i}.png' for i in range(1, 8)]
     names = {ref: f'reference-{i}.png' for i, ref in enumerate(refs, 1)}
     selected = [refs[1], refs[3]]
     resolve = Mock(side_effect=lambda ref: ref if ref in selected else (_ for _ in ()).throw(AssertionError('Unused media resolved')))
-    storage = SimpleNamespace(resolve_media_reference=resolve,
+    storage = SimpleNamespace(resolve_media_reference=resolve, media_root=str(tmp_path),
         ensure_session=Mock(return_value=SimpleNamespace(id='session')),
         add_generation=Mock(), save_session_draft=Mock(), owner_user_id='user', owner_profile_id='owner')
     prompt = '@reference-2.png 与 @reference-4.png，@reference-2.png 保持外观'
@@ -51,6 +51,7 @@ def test_only_two_named_references_from_seven_reach_storage_and_adapter(mode, mo
     service = PlaygroundService(storage, nsfw_config_loader=lambda: {})
     generation = service.create_generation(request)
     assert generation.input_media == selected
+    assert generation.reference_contexts == [None, None]
     assert generation.media_names == {ref: names[ref] for ref in selected}
     assert generation.prompt == prompt
     assert resolve.call_count == 2
