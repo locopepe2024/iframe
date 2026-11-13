@@ -143,6 +143,7 @@ export function resizeAssemblyClipInTimeline(plan: AssemblyEditPlan, laneId: str
         const sourceStart = clip.source_start_ms ?? 0;
         const sourceEnd = clip.source_end_ms ?? sourceStart + duration;
         const mapped = sourceStart + Math.round((time - clip.timeline_start_ms) / duration * (sourceEnd - sourceStart));
+        if (time > clip.timeline_start_ms && time < clip.timeline_end_ms && (mapped <= sourceStart || mapped >= sourceEnd)) throw new Error('Trim is too close to the source boundary');
         const nextSourceStart = edge === 'start' ? mapped : sourceStart;
         const nextSourceEnd = edge === 'end' ? mapped : sourceEnd;
         if (!Number.isInteger(nextSourceStart) || !Number.isInteger(nextSourceEnd) || nextSourceStart < 0 || nextSourceEnd <= nextSourceStart) throw new Error('Invalid audio source range');

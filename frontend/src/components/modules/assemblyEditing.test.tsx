@@ -24,6 +24,10 @@ describe('audio edge source mapping', () => {
         original.lanes[0].clips[0].source_end_ms = 3000;
         expect(() => resizeAssemblyClipInTimeline(original, 'audio', 'a', 'start', 0)).toThrow('source');
     });
+    it.each(['left', 'right'] as const)('retains source precision checks for a %s directional trim', side => {
+        const original = audioPlan(); original.lanes[0].clips[0].source_end_ms = 5001;
+        expect(() => trimAssemblyClipAtPlayhead(original, 'audio', 'a', side === 'left' ? 1010 : 3990, side)).toThrow('source boundary');
+    });
     it('keeps subtitle edges independent of source time', () => {
         const original = audioPlan(); original.lanes[0].kind = 'subtitle';
         expect(resizeAssemblyClipInTimeline(original, 'audio', 'a', 'start', 2000).lanes[0].clips[0]).toMatchObject({ timeline_start_ms: 2000, source_start_ms: 5000, source_end_ms: 8000 });
