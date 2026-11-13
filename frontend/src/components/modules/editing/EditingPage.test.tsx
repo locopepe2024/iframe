@@ -225,8 +225,37 @@ it('reviews recognized text and estimated times before adding a subtitle lane', 
   expect(lane?.clips.map(item => item.text)).toEqual(['Corrected.', 'Second.']);
 });
 
-it('generates a selected system voice into the dialogue lane', async () => {
-  const voiceover = { ...material, id: 'core:voiceover', name: 'voiceover.mp3', video: false, audio: true };
+it('previews a generated voiceover without changing the draft, then places it at the selected time', async () => {
+  const voiceover = { ...material, id: 'core:voiceover', name: 'voiceover.mp3', video: false, audio: true, duration_ms: 500 };
+  vi.mocked(editing.synthesizeVoice).mockResolvedValue(voiceover);
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled());
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Voiceover text' }), { target: { value: 'Hello' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Choose voice' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Pick Qingse' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover preview' }));
+  await waitFor(() => expect(editing.synthesizeVoice).toHaveBeenCalledWith('Hello', 'uniart:speech-2.8-hd:male-qn-qingse', 1));
+  expect(await screen.findByLabelText('Generated voiceover preview')).toBeInTheDocument();
+  expect(screen.getByText('0.50s')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled();
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Placement start (seconds)' }), { target: { value: '0.25' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add to dialogue track' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Generate voiceover' })).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledTimes(2));
+  const lane = vi.mocked(editing.save).mock.calls[1][2].lanes.find(item => item.kind === 'dialogue');
+  expect(lane?.clips[0]).toMatchObject({ source_media_id: voiceover.id, timeline_start_ms: 250, timeline_end_ms: 750, source_start_ms: 0, source_end_ms: 500 });
+});
+
+it('requires explicit confirmation before trimming an overlong generated voiceover', async () => {
+  const voiceover = { ...material, id: 'core:long-voiceover', name: 'long-voiceover.mp3', video: false, audio: true, duration_ms: 1500 };
   vi.mocked(editing.synthesizeVoice).mockResolvedValue(voiceover);
   render(<EditingPage />);
   await screen.findByRole('option', { name: project.title });
@@ -238,13 +267,19 @@ it('generates a selected system voice into the dialogue lane', async () => {
   fireEvent.change(screen.getByRole('textbox', { name: 'Voiceover text' }), { target: { value: 'Hello' } });
   fireEvent.click(screen.getByRole('button', { name: 'Choose voice' }));
   fireEvent.click(screen.getByRole('button', { name: 'Pick Qingse' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Generate and add dialogue' }));
-  await waitFor(() => expect(editing.synthesizeVoice).toHaveBeenCalledWith('Hello', 'uniart:speech-2.8-hd:male-qn-qingse', 1));
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Generate voiceover' })).not.toBeInTheDocument());
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover preview' }));
+  await screen.findByLabelText('Generated voiceover preview');
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Placement start (seconds)' }), { target: { value: '0.2' } });
+  expect(screen.getByText(/Only 0.80s remain.*0.70s will be trimmed/)).toBeInTheDocument();
+  const addButton = screen.getByRole('button', { name: 'Trim as confirmed and add to dialogue' });
+  expect(addButton).toBeDisabled();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Confirm trimming the stated voiceover tail' }));
+  expect(addButton).toBeEnabled();
+  fireEvent.click(addButton);
   fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
   await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
   const lane = vi.mocked(editing.save).mock.calls[0][2].lanes.find(item => item.kind === 'dialogue');
-  expect(lane?.clips[0].source_media_id).toBe(voiceover.id);
+  expect(lane?.clips[0]).toMatchObject({ source_media_id: voiceover.id, timeline_start_ms: 200, timeline_end_ms: 1000, source_start_ms: 0, source_end_ms: 800 });
 });
 
 it('creates a cloned voice and uses it for dialogue', async () => {
@@ -266,8 +301,13 @@ it('creates a cloned voice and uses it for dialogue', async () => {
   fireEvent.click(screen.getByRole('checkbox', { name: 'I have permission from the speaker to clone this voice' }));
   fireEvent.click(screen.getByRole('button', { name: 'Create cloned voice' }));
   await waitFor(() => expect(editing.cloneVoice).toHaveBeenCalledWith(sample, clone.name, true));
-  fireEvent.click(screen.getByRole('button', { name: 'Generate and add dialogue' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover preview' }));
   await waitFor(() => expect(editing.synthesizeVoice).toHaveBeenCalledWith('Hello', clone.id, 1));
+  expect(await screen.findByLabelText('Generated voiceover preview')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Voiceover text' }), { target: { value: 'Hello again' } });
+  expect(screen.queryByLabelText('Generated voiceover preview')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover preview' }));
+  await waitFor(() => expect(editing.synthesizeVoice).toHaveBeenLastCalledWith('Hello again', clone.id, 1));
 });
 
 it('adds multiple clips and an audio lane over HTTP without crypto.randomUUID', async () => {
