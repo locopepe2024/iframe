@@ -6,6 +6,7 @@ import { agentRequest, agentTranscribe, type AssemblyClip } from '@/lib/api';
 import { editing } from '@/lib/editing';
 import { extractErrorDetail } from '@/lib/utils';
 import { transcriptDraft, type TranscriptCue } from './transcriptDraft';
+import { EditingProjectDialog } from './EditingProjectControls';
 
 export default function EditingTranscriptionDialog({ clip, onClose, onApply }: {
   clip: AssemblyClip; onClose: () => void; onApply: (cues: TranscriptCue[]) => void;
@@ -44,9 +45,7 @@ export default function EditingTranscriptionDialog({ clip, onClose, onApply }: {
     && Number.isInteger(cue.start_ms) && Number.isInteger(cue.end_ms)
     && cue.start_ms >= clip.timeline_start_ms && cue.end_ms <= clip.timeline_end_ms
     && cue.end_ms > cue.start_ms && (index === 0 || cue.start_ms >= cues[index - 1].end_ms));
-  return <div role="dialog" aria-modal="true" aria-label={t('原声转字幕', 'Source audio to captions')} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-    <div className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-lg border border-glass-border bg-surface p-4 text-foreground">
-      <div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-base font-semibold">{t('原声转字幕', 'Source audio to captions')}</h2><button type="button" onClick={onClose} disabled={busy} aria-label={t('关闭', 'Close')}>×</button></div>
+  return <EditingProjectDialog title={t('原声转字幕', 'Source audio to captions')} closeLabel={t('关闭', 'Close')} busy={busy} size="xl" onClose={onClose}>
       <p className="mb-3 text-xs text-text-secondary">{t('识别结果的分段时间是估计值。请逐条校对文字和时间，再加入新字幕轨。', 'Segment times are estimates. Review every line and time before adding a new caption track.')}</p>
       <button type="button" className="glass-button px-3 py-2" disabled={checking || !available || busy || sourceEnd - sourceStart > 60_000} onClick={() => void transcribe()}>{busy ? t('正在识别…', 'Transcribing…') : t('识别所选片段原声', 'Transcribe selected clip')}</button>
       {!checking && !available && <p role="status" className="mt-2 text-xs text-text-secondary">{t('当前用户未开放语音识别服务。', 'Speech recognition is unavailable for this account.')}</p>}
@@ -59,6 +58,5 @@ export default function EditingTranscriptionDialog({ clip, onClose, onApply }: {
         <button type="button" aria-label={`${t('删除字幕', 'Remove caption')} ${index + 1}`} onClick={() => setCues(items => items.filter((_, i) => i !== index))}>×</button>
       </div>)}</div>
       <div className="mt-4 flex justify-end gap-2"><button type="button" className="glass-button px-3 py-2" disabled={busy} onClick={onClose}>{t('取消', 'Cancel')}</button><button type="button" className="glass-button px-3 py-2" disabled={!valid || busy} onClick={() => onApply(cues)}>{t('加入字幕轨', 'Add caption track')}</button></div>
-    </div>
-  </div>;
+  </EditingProjectDialog>;
 }
