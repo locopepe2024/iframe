@@ -665,7 +665,10 @@ it("loads the project reference index for the character workbench", async () => 
     ));
 });
 
-it("submits a published platform image by resource ID and revision", async () => {
+it.each([
+    { media_file: "pose.png" },
+    { remote_url: "https://raw.githubusercontent.com/locopepe2024/open-pose-costume/revision/pose_depth.png", representation: "depth_reference" },
+])("submits a published platform image by resource ID and revision: %j", async (payload) => {
     apiMocks.getAssetReferenceIndex.mockReset();
     apiMocks.getAssetReferenceIndex.mockResolvedValue({ project_id: "project-1", assets: [] });
     apiMocks.getPlatformReferenceLibrary.mockReset();
@@ -676,7 +679,7 @@ it("submits a published platform image by resource ID and revision", async () =>
         scope: "platform_shared", schema_version: 1, catalog_revision: "test",
         resources: [{ platform_resource_id: "platform.pose.seated", revision: 3,
             kind: "image", category_path: "reference/pose", title: "坐姿参考",
-            status: "active", payload: { media_file: "pose.png" },
+            status: "active", payload,
             provenance: { license: "test", content_sha256: "digest" } }],
     });
     const onGenerate = vi.fn();

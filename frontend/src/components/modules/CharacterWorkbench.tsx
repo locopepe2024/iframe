@@ -680,7 +680,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             .then((catalog) => {
                 if (requestId !== platformRequest.current) return;
                 const resources = catalog.resources.filter((resource) =>
-                    resource.status === "active" && resource.category_path?.startsWith("reference/") && !!resource.payload?.media_file);
+                    resource.status === "active" && resource.category_path?.startsWith("reference/")
+                    && !!(resource.payload?.media_file || resource.payload?.remote_url));
                 setPlatformReferences(resources);
                 const available = new Set(resources.map((resource) =>
                     `platform_reference:${resource.platform_resource_id}:${resource.revision}`));
