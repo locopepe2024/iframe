@@ -47,7 +47,7 @@ export default function TimelineFilmstrip({ url, poster, still = false, startMs,
             if (!context) return;
             const decoded: string[] = [];
             for (let i = 0; i < count && !cancelled; i += 1) {
-                const time = Math.max(0, Math.min(video.duration - 0.01, (startMs + (endMs - startMs) * (i + 0.5) / count) / 1000));
+                const time = Math.max(0, Math.min(video.duration - 0.01, (startMs + (endMs - startMs) * i / count) / 1000));
                 if (Math.abs(video.currentTime - time) > 0.001) { const seeked = wait('seeked'); video.currentTime = time; await seeked; }
                 if (cancelled) return;
                 context.drawImage(video, 0, 0, 160, 90);
