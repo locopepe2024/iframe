@@ -63,7 +63,7 @@ export default function EditingPage() {
     return () => { active = false; };
   }, [project?.id, plan, sources]);
   const run = async (fn: () => Promise<void>, reportError = setError) => { setBusy(true); reportError(''); try { await fn(); } catch (e) { reportError(extractErrorDetail(e)); } finally { setBusy(false); } };
-  const change = (next: AssemblyEditPlan) => { if (plan) setUndo(old => [...old.slice(-49), plan]); setRedo([]); setPlan(next); setDirty(true); };
+  const change = (next: AssemblyEditPlan) => { if (busy) return; if (plan) setUndo(old => [...old.slice(-49), plan]); setRedo([]); setPlan(next); setDirty(true); };
   const addTranscript = (cues: TranscriptCue[]) => {
     if (!plan || !transcriptClip || plan.lanes.length >= 8 || !plan.lanes.some(lane => lane.kind === 'video' && lane.clips.some(clip => clip.id === transcriptClip.id))) return;
     change({ ...plan, lanes: [...plan.lanes, {
@@ -167,7 +167,7 @@ export default function EditingPage() {
     {project && <>
       <fieldset disabled={busy} className="space-y-4 disabled:opacity-60">
         {plan && <>
-          <AssemblyTracks plan={plan} resourceId={project.id} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onImport={importMaterials} materialPanel={<EditingMaterials onSelect={add} materials={sources} disabled={busy} />} onChange={change} onTranscribe={clip => { if (plan.lanes.length >= 8) setError(t('最多支持 8 条泳道。', 'At most 8 lanes.')); else setTranscriptClip(clip); }}
+          <AssemblyTracks plan={plan} resourceId={project.id} disabled={busy} saved={!dirty} project={{ id: project.id, frames: [], video_tasks: [] }} materials={sources} onImport={importMaterials} materialPanel={<EditingMaterials onSelect={add} materials={sources} disabled={busy} />} onChange={change} onTranscribe={clip => { if (plan.lanes.length >= 8) setError(t('最多支持 8 条泳道。', 'At most 8 lanes.')); else setTranscriptClip(clip); }}
             audioLane={audioLane} onAudioLaneChange={setAudioLane} canUndo={undo.length > 0} canRedo={redo.length > 0}
             onUndo={() => { setRedo(old => [...old, plan]); setPlan(undo[undo.length - 1]); setUndo(old => old.slice(0, -1)); setDirty(true); }}
             onRedo={() => { setUndo(old => [...old, plan]); setPlan(redo[redo.length - 1]); setRedo(old => old.slice(0, -1)); setDirty(true); }}

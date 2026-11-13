@@ -330,6 +330,71 @@ it('commits a video edge trim once and restores the entire gesture with undo', (
     expect(screen.getByRole('slider', { name: 'Timeline playhead' })).toHaveAttribute('max', '5000');
 });
 
+it('cancels a pending audio gesture when locked and never commits it after unlocking', () => {
+    const initial: AssemblyEditPlan = { ...plan, lanes: [{ id: 'a', kind: 'bgm', allow_overlap: true, clips: [{ id: 'audio', label: 'Music', timeline_start_ms: 0, timeline_end_ms: 2000, source_start_ms: 0, source_end_ms: 2000, enabled: true, source_refs: [] }] }] };
+    const onChange = vi.fn();
+    const props = { plan: initial, project, resourceId: 'p', saved: true, onChange };
+    const view = render(<AssemblyTracks {...props} />);
+    const clip = screen.getByRole('button', { name: 'Music' });
+    fireEvent.click(clip);
+    const handle = screen.getByRole('button', { name: 'Music end handle' });
+    handle.setPointerCapture = vi.fn();
+    const track = screen.getByLabelText('bgm timeline');
+    Object.defineProperty(track, 'clientWidth', { value: 500 });
+    const pointer = (target: Element, type: string, x: number) => {
+        const event = new Event(type, { bubbles: true });
+        Object.defineProperties(event, { clientX: { value: x }, pointerId: { value: 1 }, button: { value: 0 } });
+        fireEvent(target, event);
+    };
+    pointer(handle, 'pointerdown', 200);
+    pointer(track, 'pointermove', 100);
+    expect(clip.style.width).toBe('20%');
+    view.rerender(<AssemblyTracks {...props} disabled />);
+    expect(clip.style.width).toBe('40%');
+    expect(screen.getByRole('button', { name: 'Apply trim at original speed' })).toBeDisabled();
+    expect(screen.getByRole('region', { name: 'Multitrack editing' })).toHaveAttribute('aria-disabled', 'true');
+    pointer(handle, 'pointerdown', 200);
+    pointer(track, 'pointermove', 100);
+    expect(handle.setPointerCapture).toHaveBeenCalledOnce();
+    view.rerender(<AssemblyTracks {...props} />);
+    pointer(track, 'pointerup', 100);
+    expect(onChange).not.toHaveBeenCalled();
+    pointer(handle, 'pointerdown', 200);
+    pointer(track, 'pointermove', 100);
+    pointer(track, 'pointerup', 100);
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange.mock.calls[0][0].lanes[0].clips[0]).toMatchObject({ timeline_end_ms: 1000, source_end_ms: 1000 });
+});
+
+it('discards a video drag across locking and rejects new drags until unlocked', () => {
+    const initial: AssemblyEditPlan = { ...plan, lanes: [{ id: 'v', kind: 'video', allow_overlap: false, clips: ['One', 'Two'].map((label, i) => ({ id: label, label, timeline_start_ms: i * 2500, timeline_end_ms: (i + 1) * 2500, enabled: true, source_refs: [] })) }] };
+    const onChange = vi.fn();
+    const props = { plan: initial, project, resourceId: 'p', saved: true, onChange };
+    const view = render(<AssemblyTracks {...props} />);
+    const one = screen.getByRole('button', { name: 'Edit clip 1: One' });
+    const two = screen.getByRole('button', { name: 'Edit clip 2: Two' });
+    const dataTransfer = { setData: vi.fn(), effectAllowed: '', dropEffect: '' };
+    const dropAfterTwo = () => {
+        const event = new Event('drop', { bubbles: true, cancelable: true });
+        Object.defineProperties(event, { dataTransfer: { value: dataTransfer }, clientX: { value: 100 } });
+        fireEvent(two, event);
+    };
+    fireEvent.dragStart(one, { dataTransfer });
+    view.rerender(<AssemblyTracks {...props} disabled />);
+    expect(one).toHaveAttribute('draggable', 'false');
+    fireEvent.dragStart(one, { dataTransfer });
+    dropAfterTwo();
+    expect(dataTransfer.setData).toHaveBeenCalledOnce();
+    view.rerender(<AssemblyTracks {...props} />);
+    dropAfterTwo();
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.dragStart(one, { dataTransfer });
+    dropAfterTwo();
+    expect(onChange).toHaveBeenCalledOnce();
+    const ordered = onChange.mock.calls[0][0].lanes[0].clips.slice().sort((a: { timeline_start_ms: number }, b: { timeline_start_ms: number }) => a.timeline_start_ms - b.timeline_start_ms);
+    expect(ordered.map((c: { id: string }) => c.id)).toEqual(['Two', 'One']);
+});
+
 it('synchronizes overlapping audio lanes and removes muted or disabled players', () => {
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);

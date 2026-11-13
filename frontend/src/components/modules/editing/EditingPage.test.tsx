@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import EditingPage, { EditingMaterials, EditingMaterialManager } from './EditingPage';
 import { editing, type EditProject, type EditMaterial } from '@/lib/editing';
@@ -26,6 +26,72 @@ beforeEach(() => {
   vi.mocked(editing.render).mockImplementation(async (_id, revision) => ({ ...project, revision, output: { url: '/result.mp4', revision } }));
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); window.location.hash = ''; });
+
+async function openDirtyTimeline() {
+  render(<EditingPage />);
+  await screen.findByRole('option', { name: project.title });
+  fireEvent.change(screen.getByRole('combobox', { name: 'Editing project' }), { target: { value: project.id } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Import' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Import to workspace Original.mp4' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to edit Original.mp4' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit clip 1: Original.mp4' }));
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Playhead (seconds)' }), { target: { value: '0.5' } });
+}
+
+it('blocks custom shortcuts during save and render, then allows new edits and undo', async () => {
+  let finishSave!: (project: EditProject) => void;
+  vi.mocked(editing.save).mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve; }));
+  await openDirtyTimeline();
+  const workbench = screen.getByRole('region', { name: 'Multitrack editing' });
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  for (const key of ['s', 'Delete', 'Backspace']) fireEvent.keyDown(workbench, { key });
+  expect(screen.getByRole('button', { name: 'Edit clip 1: Original.mp4' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Edit clip 2: Original.mp4' })).not.toBeInTheDocument();
+  const submitted = vi.mocked(editing.save).mock.calls[0][2];
+  const saved = { ...project, revision: 2, plan: submitted, sources: { [material.id]: material } };
+  await act(async () => finishSave(saved));
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  let finishRender!: (project: EditProject) => void;
+  vi.mocked(editing.render).mockImplementationOnce(() => new Promise(resolve => { finishRender = resolve; }));
+  fireEvent.click(screen.getByRole('button', { name: 'Render MP4' }));
+  for (const key of ['s', 'Delete']) fireEvent.keyDown(workbench, { key });
+  expect(screen.getByRole('button', { name: 'Edit clip 1: Original.mp4' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Edit clip 2: Original.mp4' })).not.toBeInTheDocument();
+  await act(async () => finishRender(saved));
+  fireEvent.keyDown(workbench, { key: 's' });
+  expect(screen.getByRole('button', { name: 'Edit clip 2: Original.mp4' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(screen.queryByRole('button', { name: 'Edit clip 2: Original.mp4' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(editing.save).mock.calls[1][1]).toBe(2);
+  expect(vi.mocked(editing.save).mock.calls[1][2].lanes[0].clips).toHaveLength(2);
+});
+
+it('retains the draft and undo history after a failed save, and unlocks for retry', async () => {
+  let failSave!: (error: Error) => void;
+  vi.mocked(editing.save).mockImplementationOnce(() => new Promise((_resolve, reject) => { failSave = reject; }));
+  await openDirtyTimeline();
+  const workbench = screen.getByRole('region', { name: 'Multitrack editing' });
+  fireEvent.keyDown(workbench, { key: 's' });
+  expect(screen.getByRole('button', { name: 'Edit clip 2: Original.mp4' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  for (const key of ['s', 'Delete']) fireEvent.keyDown(workbench, { key });
+  await act(async () => failSave(new Error('Save failed')));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Save failed');
+  expect(screen.getByRole('button', { name: 'Edit clip 1: Original.mp4' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Edit clip 2: Original.mp4' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  expect(screen.queryByRole('button', { name: 'Edit clip 2: Original.mp4' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Redo' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(editing.save).mock.calls[1][2]).toEqual(vi.mocked(editing.save).mock.calls[0][2]);
+});
 
 it.each(['start', 'end'] as const)('undoes an audio %s edge gesture and preserves the crop after saving and reopening', async edge => {
   const audio = { ...material, id: 'audio', name: 'Music.wav', video: false, duration_ms: 10000 };
