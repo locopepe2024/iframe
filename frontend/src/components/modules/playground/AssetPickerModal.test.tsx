@@ -3,7 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import AssetPickerModal from './AssetPickerModal';
 
-const mocks = vi.hoisted(() => ({ history: vi.fn(), library: vi.fn() }));
+const mocks = vi.hoisted(() => ({ history: vi.fn(), library: vi.fn(), catalog: vi.fn() }));
 vi.mock('next-intl', () => ({ useTranslations: () => (key: string) => key }));
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -11,7 +11,7 @@ vi.mock('framer-motion', () => ({
 }));
 vi.mock('@/lib/api', () => ({
   playgroundApi: { getHistory: mocks.history },
-  api: { getAssetLibraryIndex: mocks.library },
+  api: { getAssetLibraryIndex: mocks.library, getPlatformReferenceLibrary: mocks.catalog },
 }));
 vi.mock('@/lib/utils', () => ({ getAssetUrl: (value: string) => value }));
 vi.mock('@/components/shared/AssetIndexPreview', () => ({ AssetIndexPreview: () => <span data-testid="asset-preview" /> }));
@@ -26,6 +26,7 @@ const library = { assets: [{
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.history.mockResolvedValue([]);
+  mocks.catalog.mockResolvedValue({ resources: [], total: 0 });
   mocks.library.mockResolvedValue(library);
 });
 
@@ -41,7 +42,7 @@ it('loads again after closing and reopening the asset picker', async () => {
 it('does not hide the library when one source endpoint fails', async () => {
   mocks.history.mockRejectedValue(new Error('history unavailable'));
   render(<AssetPickerModal isOpen onClose={vi.fn()} onSelect={vi.fn()} accept="image" />);
-  expect(screen.getByText('assetPicker.loading')).toBeInTheDocument();
+  expect(screen.getByText('加载参考素材…')).toBeInTheDocument();
   // The library source is still usable while history is unavailable.
   await waitFor(() => expect(screen.getByRole('button', { name: '武侠-男-3' })).toBeInTheDocument());
 });

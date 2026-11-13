@@ -191,6 +191,7 @@ export interface StoryboardFrame {
     status?: string;
     locked?: boolean;
     workbench_generate_audio?: boolean | null;
+    workbench_material_references?: import("@/lib/api").AssetLibraryReference[];
     workbench_reference_variant_ids?: Record<string, string[]>;
     workbench_pose_reference_variant_ids?: Record<string, string[]>;
     workbench_director_snapshot_media_id?: string | null;

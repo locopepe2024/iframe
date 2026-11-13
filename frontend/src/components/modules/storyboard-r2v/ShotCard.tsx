@@ -57,6 +57,7 @@ export interface ShotNode {
     /** Explicit per-shot generated-audio choice. Undefined inherits the UI default. */
     generateAudio?: boolean;
     /** Explicit image variants selected from each semantic asset for this shot. */
+    materialReferences?: import("@/lib/api").AssetLibraryReference[];
     referenceVariantIds?: Record<string, string[]>;
     poseReferenceVariantIds?: Record<string, string[]>;
     directorSnapshotMediaId?: string | null;

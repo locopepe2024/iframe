@@ -8,6 +8,8 @@ import { resolveShotVideoInput } from "./storyboard-r2v/shotVideoInput";
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { Plus, Loader2, Sparkles, PanelBottomOpen, PanelBottomClose } from "lucide-react";
+import ReferenceMaterialPicker from "@/components/shared/ReferenceMaterialPicker";
+import type { ReferenceMaterial } from "@/lib/api";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import RenderPromptPreviewDialog, { type FrameRenderPreview } from "./RenderPromptPreviewDialog";
 import VideoSubmissionPreviewDialog, { type VideoSubmissionPreview } from "./storyboard-r2v/VideoSubmissionPreviewDialog";
@@ -989,7 +991,36 @@ export default function StoryboardR2V() {
         buildReferenceAssets(assetIndex, characters, scenes, props),
     [assetIndex, characters, scenes, props]);
 
-    const loadShotReferences = useCallback(async (shot: Pick<ShotNode, "id" | "prompt" | "referenceVariantIds">) => {
+    const [materialPreviews, setMaterialPreviews] = useState<Record<string, ReferenceMaterial[]>>({});
+    const materialSignature = JSON.stringify(shots.map(shot => [shot.id, shot.materialReferences || []]));
+    useEffect(() => {
+        if (!currentProject) return;
+        let active = true;
+        setMaterialPreviews({});
+        void Promise.all(shots.filter(shot => shot.materialReferences?.length).map(async shot => {
+            try {
+                const materials = await Promise.all(shot.materialReferences!.map(reference => api.resolveReferenceMaterial(reference, currentProject.id)));
+                if (active) setMaterialPreviews(previous => ({ ...previous, [shot.id]: materials }));
+            } catch (error) {
+                if (active) setShotErrors(previous => ({ ...previous, [shot.id]: "参考素材已不可用，请重新选择。" }));
+            }
+        }));
+        return () => { active = false; };
+    // Stable identities, rather than prompt edits, invalidate this projection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentProject?.id, materialSignature]);
+
+    const changeMaterialReferences = async (shot: ShotNode, references: import("@/lib/api").AssetLibraryReference[]) => {
+        if (!currentProject || shot.id.startsWith("shot_")) throw new Error("请先保存镜头后添加参考素材");
+        const projectId = currentProject.id;
+        const saved = await api.updateFrameWorkbench(projectId, shot.id, { workbench_material_references: references });
+        if (useProjectStore.getState().currentProject?.id !== projectId) return;
+        setShots(previous => previous.map(item => item.id === shot.id ? { ...item, materialReferences: saved.workbench_material_references } : item));
+        const project = useProjectStore.getState().currentProject!;
+        updateProject(projectId, { frames: project.frames.map(frame => frame.id === shot.id ? { ...frame, workbench_material_references: saved.workbench_material_references } : frame) });
+    };
+
+    const loadShotReferences = useCallback(async (shot: Pick<ShotNode, "id" | "prompt" | "referenceVariantIds" | "materialReferences">) => {
         if (!currentProject) return null;
         try {
             const fresh = await refreshReferenceSubmission(
@@ -1000,7 +1031,9 @@ export default function StoryboardR2V() {
             // current editor or start a task after the user switched projects.
             if (useProjectStore.getState().currentProject?.id !== currentProject.id) return null;
             setIndexedProject({ projectId: currentProject.id, assets: fresh.index });
-            return fresh.submission;
+            const materials = await Promise.all((shot.materialReferences || []).map(reference => api.resolveReferenceMaterial(reference, currentProject.id)));
+            if (useProjectStore.getState().currentProject?.id !== currentProject.id) return null;
+            return { ...fresh.submission, materialUrls: materials.map(item => item.path) };
         } catch (error) {
             if (useProjectStore.getState().currentProject?.id !== currentProject.id) return null;
             debugLog.error("Studio", "Asset index verification failed", error);
@@ -1011,7 +1044,7 @@ export default function StoryboardR2V() {
         }
     }, [currentProject, t]);
 
-    const resolveShotReferences = useCallback((shot: Pick<ShotNode, "id" | "prompt" | "referenceVariantIds">) =>
+    const resolveShotReferences = useCallback((shot: Pick<ShotNode, "id" | "prompt" | "referenceVariantIds" | "materialReferences">) =>
         resolveReferenceSubmission(shot.prompt, referenceAssets, shot.referenceVariantIds,
             currentProject?.frames?.find((frame) => frame.id === shot.id)),
     [referenceAssets, currentProject]);
@@ -1140,7 +1173,7 @@ export default function StoryboardR2V() {
             params?.audio ?? storyboardAudioChoice(shot.generateAudio, videoConfig.audio),
         );
         const referenceSubmission = tabMode === "direct_r2v"
-            ? await loadShotReferences(shot) : resolveShotReferences(shot);
+            ? await loadShotReferences(shot) : { ...resolveShotReferences(shot), materialUrls: [] as string[] };
         if (!referenceSubmission) return;
         if (tabMode === "direct_r2v") {
             const frame = currentProject.frames.find((item: any) => item.id === shot.id);
@@ -1177,7 +1210,7 @@ export default function StoryboardR2V() {
         // "排队中..." until the failure surfaced. Cheaper to validate
         // here and show inline error in the ParamsSection.
         if (tabMode === "direct_r2v") {
-            const refs = referenceSubmission.urls;
+            const refs = [...referenceSubmission.urls, ...referenceSubmission.materialUrls];
             if (refs.length === 0 || referenceSubmission.unresolvedNames.length > 0 || referenceSubmission.ambiguousNames.length > 0) {
                 const unresolved = referenceSubmission.unresolvedNames;
                 let errMsg: string;
@@ -1348,7 +1381,7 @@ export default function StoryboardR2V() {
                     resolution: params?.resolution ?? videoConfig.resolution,
                     count: effectiveCount,
                     generateAudio,
-                    references: tabMode === "direct_r2v" ? [...referenceSubmission.urls] : [],
+                    references: tabMode === "direct_r2v" ? [...referenceSubmission.urls, ...referenceSubmission.materialUrls] : [],
                     settings: [
                         ...(tabMode === "direct_r2v" ? [{ label: "画幅", value: String(params?.ratio ?? "模型默认") }] : []),
                         { label: "随机种子", value: params?.seed == null ? "模型默认" : String(params.seed) },
@@ -2244,11 +2277,15 @@ export default function StoryboardR2V() {
                                 if (!shot.prompt.includes(tag)) updatePrompt(index, `${shot.prompt} ${tag}`.trim());
                             }}
                         />}
+                        <ReferenceMaterialPicker title="参考素材" projectId={currentProject?.id}
+                            selected={shot.materialReferences || []}
+                            max={Math.max(0, (paramsState.model.toLowerCase().includes("minimax-h3") ? 9 : 10) - resolveShotReferences(shot).urls.length)}
+                            onChange={references => changeMaterialReferences(shot, references)} />
                         <ShotCard
                             projectId={currentProject?.id}
                             activeVideoTaskId={currentProject?.frames?.find((frame) => frame.id === shot.id)?.selected_video_id || shot.videoTaskId}
                             referenceImageUrls={isR2vImageBased(paramsState.model)
-                                ? resolveShotReferences(shot).urls
+                                ? [...resolveShotReferences(shot).urls, ...(materialPreviews[shot.id] || []).map(item => item.path)]
                                 : []}
                             onResolvePolishReferences={async () => {
                                 const fresh = await loadShotReferences(shot);
@@ -2263,7 +2300,7 @@ export default function StoryboardR2V() {
                                     throw new Error(`参考素材未找到：${fresh.unresolvedNames.join("、")}`);
                                 }
                                 return {
-                                    urls: fresh.urls,
+                                    urls: [...fresh.urls, ...fresh.materialUrls],
                                     slots: fresh.groups.map((group) => ({
                                         slot: group.slot,
                                         asset_id: group.assetId,

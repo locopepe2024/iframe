@@ -236,13 +236,32 @@ export const authenticatedFetch = (
 export type ProviderMode = "dashscope" | "vendor";
 
 export interface AssetLibraryReference {
-    asset_type: "character" | "scene" | "prop" | "platform_reference";
+    asset_type: "character" | "scene" | "prop" | "platform_reference" | "media";
     asset_id: string;
     variant_id: string;
     source_scope?: "shared" | "project" | "episode" | "series" | "private" | "platform";
+    source_container_id?: string;
     revision?: number;
     application_mode?: "reference_only" | "parameters_only" | "parameters_with_media" | "parameters_with_video";
     applied_fields?: string[];
+}
+
+export interface PlatformReferenceContext {
+    platform_resource_id: string;
+    revision: number;
+    title: string;
+    summary: string;
+    tags: string[];
+    category_path: string;
+    semantics: Record<string, unknown>;
+}
+
+export interface ReferenceMaterial {
+    context?: PlatformReferenceContext | null;
+    reference: AssetLibraryReference;
+    path: string;
+    label: string;
+    media_id?: string;
 }
 
 export interface AssetImageReviewRequest {
@@ -415,11 +434,18 @@ export interface PlatformReferenceResource {
     [key: string]: unknown;
 }
 
+export interface PlatformReferenceFacets {
+    categories: { id: string; label: string; count: number }[];
+    tags: { id: string; label: string; count: number }[];
+}
+
 export interface PlatformReferenceCatalog {
     scope: "platform_shared";
     schema_version: number;
     catalog_revision: string;
     resources: PlatformReferenceResource[];
+    total?: number;
+    facets?: PlatformReferenceFacets;
 }
 
 export interface PlatformReferenceReviewer {
@@ -788,9 +814,14 @@ export const api = {
         return res.data;
     },
 
-    getPlatformReferenceLibrary: async (query = "", kind?: string, category?: string, tag?: string, semanticDomain?: string, entryType?: string): Promise<PlatformReferenceCatalog> => {
+    resolveReferenceMaterial: async (reference: AssetLibraryReference, projectId?: string, label = ""): Promise<ReferenceMaterial> => {
+        const res = await axios.post(`${API_URL}/reference-materials/resolve`, { reference, project_id: projectId, label }, { timeout: 60000 });
+        return res.data;
+    },
+
+    getPlatformReferenceLibrary: async (query = "", kind?: string, category?: string, tag?: string, semanticDomain?: string, entryType?: string, page?: { limit: number; offset: number; visual_only?: boolean }): Promise<PlatformReferenceCatalog> => {
         const res = await axios.get<PlatformReferenceCatalog>(`${API_URL}/platform-reference-library`, {
-            params: { query: query || undefined, kind: kind || undefined, category: category || undefined, tag: tag || undefined, semantic_domain: semanticDomain || undefined, entry_type: entryType || undefined },
+            params: { query: query || undefined, kind: kind || undefined, category: category || undefined, tag: tag || undefined, semantic_domain: semanticDomain || undefined, entry_type: entryType || undefined, ...page },
             headers: { "Cache-Control": "no-cache" },
         });
         return res.data;
@@ -1107,6 +1138,7 @@ export const api = {
             video_model?: string;
             workbench_generate_audio?: boolean;
             workbench_prompt_is_optimized?: boolean;
+            workbench_material_references?: AssetLibraryReference[];
             workbench_reference_variant_ids?: Record<string, string[]>;
             workbench_pose_reference_variant_ids?: Record<string, string[]>;
             workbench_director_snapshot_media_id?: string | null;

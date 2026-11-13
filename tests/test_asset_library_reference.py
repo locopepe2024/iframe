@@ -47,7 +47,7 @@ def test_published_platform_image_resolves_by_revision(monkeypatch, tmp_path):
     resource = {
         "platform_resource_id": "platform.pose.one", "revision": 2,
         "kind": "image", "category_path": "reference/pose", "title": "坐姿",
-        "status": "active", "payload": {"media_file": "pose.png"},
+        "status": "active", "payload": {"media_file": "pose.png", "angle": "high", "representation": "depth_reference"},
         "provenance": {"license": "test", "content_sha256": "digest"},
     }
     manifest.write_text(json.dumps({"schema_version": 1, "catalog_revision": "test",
@@ -75,7 +75,7 @@ def test_platform_reference_is_frozen_in_asset_review(monkeypatch, tmp_path):
     (media_dir / "pose.png").write_bytes(b"pose")
     manifest.write_text(json.dumps({"schema_version": 1, "catalog_revision": "test", "resources": [{
         "platform_resource_id": "platform.pose.one", "revision": 2, "kind": "image",
-        "category_path": "reference/pose", "title": "坐姿", "status": "active",
+        "category_path": "reference/pose", "title": "坐姿", "status": "active", "tags": ["坐姿", "俯视"], "summary": "屈腿坐姿",
         "payload": {"media_file": "pose.png"},
         "provenance": {"license": "test", "content_sha256": "digest"},
     }]}), encoding="utf-8")
@@ -87,6 +87,8 @@ def test_platform_reference_is_frozen_in_asset_review(monkeypatch, tmp_path):
         image_generation_mode="reference", references=[reference],
     )
     assert review["reference_inputs"] == [reference]
+    assert '屈腿坐姿' in review['positive_prompt'] and 'depth_reference' in review['positive_prompt']
+    assert pipeline._reference_semantic_prompt(pipeline.scripts['project'], 'A seated person', [reference]) == review['positive_prompt']
 
 
 def _pipeline_with_assets(tmp_path: Path):

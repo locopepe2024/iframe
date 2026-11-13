@@ -84,3 +84,12 @@ def list_media(owner_profile_id: str, *, display_name: str | None = None,
         )
         for row in rows
     ]
+
+
+def get_media_by_storage_key(owner_profile_id: str, storage_key: str, *, output_root: str = "output") -> dict | None:
+    path = _registry_path(owner_profile_id, output_root)
+    if not os.path.isfile(path):
+        return None
+    with closing(sqlite3.connect(path, timeout=10)) as db:
+        row = db.execute("SELECT media_id FROM media_records WHERE storage_key=?", (storage_key,)).fetchone()
+    return get_media(owner_profile_id, row[0], output_root=output_root) if row else None

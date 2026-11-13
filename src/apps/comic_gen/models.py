@@ -207,7 +207,7 @@ class ProviderRoutingConfig(BaseModel):
     )
 
 class AssetImageReferenceIdentity(BaseModel):
-    asset_type: Literal["character", "scene", "prop", "platform_reference"]
+    asset_type: Literal["character", "scene", "prop", "platform_reference", "media"]
     asset_id: str
     variant_id: str
 
@@ -284,7 +284,7 @@ class ImageVariant(BaseModel):
     source_origin: Optional[str] = Field(None, description="Material origin: upload, workbench, or generation")
     source_generation_id: Optional[str] = Field(None, description="Workbench generation provenance")
     source_output_id: Optional[str] = Field(None, description="Workbench output provenance")
-    reference_asset_type: Optional[Literal["character", "scene", "prop"]] = Field(
+    reference_asset_type: Optional[Literal["character", "scene", "prop", "platform_reference", "media"]] = Field(
         None,
         description="Asset-library reference type used to generate this variant",
     )
@@ -408,10 +408,11 @@ class AssetLibraryReference(BaseModel):
     task execution time, so delivery URLs never become durable request state.
     """
 
-    asset_type: Literal["character", "scene", "prop", "platform_reference"]
+    asset_type: Literal["character", "scene", "prop", "platform_reference", "media"]
     asset_id: str = Field(..., min_length=1)
     variant_id: str = Field(..., min_length=1)
     source_scope: Optional[Literal["shared", "project", "episode", "series", "private", "platform"]] = None
+    source_container_id: Optional[str] = None
     revision: Optional[int] = Field(None, ge=1)
     application_mode: Optional[Literal[
         "reference_only", "parameters_only", "parameters_with_media", "parameters_with_video"
@@ -1154,6 +1155,7 @@ class StoryboardFrame(BaseModel):
     workbench_visual_source_hash: Optional[str] = Field(
         None, description="Visual and shot-field source hash when the full workbench prompt was accepted"
     )
+    workbench_material_references: List[AssetLibraryReference] = Field(default_factory=list, max_length=10)
     workbench_reference_variant_ids: Dict[str, List[str]] = Field(
         default_factory=dict,
         description="Explicit per-shot image variant selections keyed by semantic asset ID",

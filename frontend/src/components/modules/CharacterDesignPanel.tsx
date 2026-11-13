@@ -2,7 +2,7 @@
 
 import { useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Image as ImageIcon, Search, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { AssetLibraryReference, ChatModel } from "@/lib/api";
 import ReferencePromptEditor, { type PromptSlashSuggestion, type ReferenceCandidate, type ReferenceSuggestion } from "./playground/ReferencePromptEditor";
 import { IDENTITY_FIELDS, LOOK_FIELDS, type IdentityFeatures, type LookFeatures, type CharacterConstraints } from "@/lib/characterStructuredDesign";
@@ -10,41 +10,12 @@ import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import CharacterPromptDictionary, { CharacterDictionaryHost } from "./CharacterPromptDictionary";
 import CharacterMetricBodyFields, { type CharacterMetricBody } from "./CharacterMetricBodyFields";
 import { searchReferenceCandidates, selectedReferenceCandidates } from "@/lib/referenceCandidateSearch";
+import ReferenceMaterialPicker from "@/components/shared/ReferenceMaterialPicker";
+import type { MaterialCandidate } from "@/components/shared/ReferenceMaterialBrowser";
 import { AssetIndexPreview } from "@/components/shared/AssetIndexPreview";
 
-function DesignReferencePicker({ candidates, selected, onChange, onOpen }: { candidates: ReferenceCandidate[]; selected: AssetLibraryReference[]; onChange?: (references: AssetLibraryReference[]) => void; onOpen?: () => void }) {
-    const [open, setOpen] = useState(false);
-    const [query, setQuery] = useState("");
-    const keys = new Set(selected.map((item) => `${item.asset_type}:${item.asset_id}:${item.variant_id}`));
-    const results = searchReferenceCandidates(candidates, query);
-    const toggle = (candidate: ReferenceCandidate) => {
-        if (!candidate.reference || !onChange) return;
-        const key = `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}`;
-        onChange(keys.has(key) ? selected.filter((item) => `${item.asset_type}:${item.asset_id}:${item.variant_id}` !== key) : [...selected, candidate.reference]);
-    };
-    return <div className="rounded border border-glass-border bg-surface/60 p-2">
-        <button type="button" aria-expanded={open} onClick={() => { if (!open) onOpen?.(); setOpen((value) => !value); }} className="flex min-h-10 w-full items-center justify-between px-2 text-left text-xs text-text-secondary hover:text-foreground">
-            <span className="inline-flex items-center gap-1.5"><ImageIcon size={14} />角色设计参考素材{selected.length ? ` · ${selected.length}` : ""}</span>
-            {open ? <X size={14} aria-label="关闭参考素材列表" /> : <Search size={14} />}
-        </button>
-        {open && <div className="mt-2">
-            <input aria-label="搜索角色设计参考素材" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索已加入参考素材" className="h-9 w-full rounded border border-glass-border bg-surface px-2 text-xs text-foreground" />
-            <div className="mt-2 max-h-40 space-y-1 overflow-y-auto" role="listbox" aria-label="角色设计参考素材">
-                {results.length === 0 ? <p className="px-2 py-2 text-xs text-text-muted">{candidates.length ? "没有匹配的参考素材" : "请先在图片面板加入参考素材"}</p> : results.map((candidate) => {
-                    const key = candidate.reference ? `${candidate.reference.asset_type}:${candidate.reference.asset_id}:${candidate.reference.variant_id}` : candidate.label;
-                    const checked = keys.has(key);
-                    return <button type="button" role="option" aria-selected={checked} key={key} onClick={() => toggle(candidate)} className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left hover:bg-hover-bg">
-                        <span className="h-7 w-7 shrink-0 overflow-hidden rounded bg-surface-inset">{candidate.previewRef ? <AssetIndexPreview asset={candidate.previewRef} /> : null}</span>
-                        <span className="min-w-0 flex-1 truncate text-xs text-foreground">{candidate.label}</span>{checked && <Check size={14} className="text-primary" />}
-                    </button>;
-                })}
-            </div>
-        </div>}
-    </div>;
-}
-
 export default function CharacterDesignPanel({ description, details, onDetailsChange, result, onResultChange,
-    identityFields, lookFields, metricBody, onMetricBodyChange, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onRecover, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange, onRefreshReferences,
+    identityFields, lookFields, metricBody, onMetricBodyChange, onFieldsChange, onDictionaryFields, onDictionaryConfiguration, configurations, previousExpressionText, constraints, onConstraintsChange, supplemental, onSupplementalChange, reviewItems, models, model, onModelChange, busy, saving, canSave, canReedit, error, status, tab, onTabChange, onSubmit, onRecover, onSave, onReedit, referenceCandidates = [], referenceSelections = [], onReferenceSelectionsChange, onRefreshReferences, onReferenceCandidate,
 }: {
     description: string; details: string; onDetailsChange: (value: string) => void;
     result: string | null; onResultChange: (value: string) => void;
@@ -62,6 +33,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
     busy: boolean; saving: boolean; canSave: boolean; canReedit: boolean; error: string; status: string;
     tab: "design" | "ai"; onTabChange: (tab: "design" | "ai") => void;
     onSubmit: () => void; onRecover?: () => void; onSave: (source: "panel" | "ai") => void; onReedit: () => void;
+    onReferenceCandidate?: (candidate: MaterialCandidate) => void;
     referenceCandidates?: ReferenceCandidate[]; referenceSelections?: AssetLibraryReference[]; onRefreshReferences?: () => void;
     onReferenceSelectionsChange?: (references: AssetLibraryReference[]) => void;
 }) {
@@ -148,7 +120,7 @@ export default function CharacterDesignPanel({ description, details, onDetailsCh
                 <button type="button" disabled={saving} onMouseDown={event => event.preventDefault()} onClick={() => setOpenSlashRequest(value => value + 1)} className="min-h-11 rounded border border-glass-border px-3 text-xs hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">快捷面板</button>
                 </div>
             </div>
-            <DesignReferencePicker candidates={referenceCandidates} selected={referenceSelections} onChange={onReferenceSelectionsChange} onOpen={onRefreshReferences} />
+            <ReferenceMaterialPicker title="角色设计参考素材" onDiscover={onReferenceCandidate} candidates={referenceCandidates} selected={referenceSelections} onChange={onReferenceSelectionsChange} onOpen={onRefreshReferences} />
             <p className="mb-2 text-[11px] text-text-muted">可直接使用角色设计，也可先提交 AI 完善。保存会保留两份内容，当前页签决定用于出图的版本。</p>
             <div className="relative min-h-36 rounded border border-glass-border p-2">
                 <ReferencePromptEditor value={details} onChange={onDetailsChange} candidates={selectedCandidates} restoreSelectedReferences={referenceSelections} expanded editable={!saving}
