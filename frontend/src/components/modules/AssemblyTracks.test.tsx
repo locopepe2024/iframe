@@ -139,6 +139,15 @@ it("zooms the shared ruler, seeks precisely, and fits without changing clip rang
     expect(onChange).not.toHaveBeenCalled();
 });
 
+it("reveals more source-frame intervals when the timeline is zoomed in", () => {
+    const videoPlan: AssemblyEditPlan = { ...plan, lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [{ id: "shot", label: "Shot", source_media_id: "media:shot", source_start_ms: 0, source_end_ms: 5000, timeline_start_ms: 0, timeline_end_ms: 5000, enabled: true, source_refs: [] }] }] };
+    const view = render(<AssemblyTracks plan={videoPlan} project={project} resourceId="p" saved onChange={vi.fn()} materials={{ "media:shot": { url: "shot.mp4" } }} />);
+    const strip = () => view.container.querySelector("[data-thumbnail-count]") as HTMLElement;
+    const initialCount = Number(strip().dataset.thumbnailCount);
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(Number(strip().dataset.thumbnailCount)).toBeGreaterThan(initialCount);
+});
+
 it("splits the video under the precise playhead without hidden clip selection", () => {
     const initial: AssemblyEditPlan = { ...plan, target_duration_ms: 30000, lanes: [{ id: "v", kind: "video", allow_overlap: false, clips: [{ id: "one", label: "1.mp4", source_media_id: "m1", timeline_start_ms: 0, timeline_end_ms: 30000, source_start_ms: 0, source_end_ms: 30000, enabled: true, source_refs: [] }] }] };
     const onChange = vi.fn();

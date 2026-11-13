@@ -8,7 +8,9 @@ export default function TimelineFilmstrip({ url, poster, still = false, startMs,
     const host = useRef<HTMLDivElement>(null);
     const [visible, setVisible] = useState(false);
     const [frames, setFrames] = useState<string[]>([]);
-    const count = Math.max(1, Math.min(8, Math.ceil(width / 100)));
+    // Keep one representative frame per ~100 px so zooming reveals the visual
+    // sequence instead of stretching a single poster across the whole clip.
+    const count = Math.max(1, Math.min(24, Math.ceil(width / 100)));
     useEffect(() => {
         const element = host.current;
         if (!element) return;
@@ -24,6 +26,10 @@ export default function TimelineFilmstrip({ url, poster, still = false, startMs,
         if (!visible || still) return;
         const video = document.createElement('video');
         video.muted = true; video.preload = 'auto'; video.playsInline = true;
+        // The editing API can be hosted on a different origin from the UI.
+        // Request CORS access before assigning src so canvas snapshots remain
+        // readable instead of silently falling back to one poster frame.
+        video.crossOrigin = 'anonymous';
         let cancelled = false;
         let abortWait: (() => void) | undefined;
         const wait = (event: string) => new Promise<void>((resolve, reject) => {
@@ -52,7 +58,7 @@ export default function TimelineFilmstrip({ url, poster, still = false, startMs,
         void decode().catch(() => { /* The existing poster remains visible if decoding is unavailable. */ });
         return () => { cancelled = true; abortWait?.(); video.removeAttribute('src'); video.load(); };
     }, [url, startMs, endMs, count, visible, still]);
-    return <div ref={host} className="pointer-events-none flex h-14 w-full overflow-hidden" aria-hidden="true">
+    return <div ref={host} className="pointer-events-none flex h-14 w-full overflow-hidden" aria-hidden="true" data-thumbnail-count={count}>
         {frames.length ? frames.map((src, index) => <img key={index} src={src} alt="" draggable={false} className="h-full min-w-0 flex-1 object-cover" />) : poster ? <img src={poster} alt="" loading="lazy" draggable={false} className="h-full w-full object-cover" /> : <span className="h-full w-full animate-pulse bg-foreground/10" />}
     </div>;
 }
