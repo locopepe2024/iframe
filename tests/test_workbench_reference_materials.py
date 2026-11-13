@@ -141,3 +141,29 @@ def test_generated_variant_can_record_uploaded_image_provenance():
     variant = ImageVariant(id="new", url="new.png", **AssetGenerator._reference_metadata(reference))
     assert variant.reference_asset_type == "media"
     assert variant.reference_inputs == [reference]
+
+
+@pytest.mark.parametrize("kind", ["platform_reference", "media"])
+@pytest.mark.parametrize("project_id", [None, "project"])
+def test_character_design_preview_accepts_image_evidence_from_all_sources(tmp_path, monkeypatch, kind, project_id):
+    from types import SimpleNamespace
+    from src.apps import agent_api
+    from src.apps.identity import UserContext
+    from src.apps.comic_gen import api as studio_api
+    from src.models import uniart
+    source = image_file(tmp_path)
+    pipeline = pipeline_for(tmp_path)
+    pipeline.get_script = lambda project_id, owner: pipeline.scripts["project"] if project_id else None
+    pipeline._resolve_asset_library_reference = lambda container, reference: (str(source), reference)
+    pipeline._find_asset_with_source = lambda *args: (None, None)
+    monkeypatch.setattr(studio_api, "pipeline", pipeline)
+    monkeypatch.setattr(agent_api, "validate_model", lambda *args: None)
+    def delivery(path):
+        assert "/users/" in path and Path(path).read_bytes() == source.read_bytes()
+        return "https://media.example/reference.png"
+    monkeypatch.setattr(uniart, "_image_reference_url", delivery)
+    reference = {"asset_type": kind, "asset_id": "image", "variant_id": "1"}
+    if kind == "platform_reference": reference.update(source_scope="platform", revision=1)
+    body = agent_api.CharacterDesignRequest(model="nsfw/llm-nf-all", character_name="舞者", profile="成年女性", project_id=project_id, reference_assets=[reference])
+    preview = agent_api.preview_character_design_draft(body, UserContext("user", "owner", "name", "token"))
+    assert len(preview["media"]) == 1 and preview["media"][0]["url"] == "https://media.example/reference.png"

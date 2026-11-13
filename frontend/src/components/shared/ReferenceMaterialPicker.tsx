@@ -6,7 +6,7 @@ import { api, type AssetLibraryReference } from '@/lib/api';
 import { useProjectStore } from '@/store/projectStore';
 import ReferenceMaterialBrowser, { materialKey, type MaterialCandidate } from './ReferenceMaterialBrowser';
 
-export default function ReferenceMaterialPicker({ candidates, selected, onChange, onDiscover, title = '选择参考素材', projectId, onOpen, max = 10 }: {
+export default function ReferenceMaterialPicker({ candidates, selected, onChange, onDiscover, title = '选择参考素材', projectId, onOpen, max = 9 }: {
     candidates?: MaterialCandidate[];
     selected: AssetLibraryReference[];
     onChange?: (references: AssetLibraryReference[]) => void | Promise<void>;
