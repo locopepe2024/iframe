@@ -39,6 +39,79 @@ async function openDirtyTimeline() {
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Playhead (seconds)' }), { target: { value: '0.5' } });
 }
 
+it('focuses Stay in a native leave dialog and restores focus without losing the draft', async () => {
+  await openDirtyTimeline();
+  const trigger = screen.getByRole('button', { name: 'Save edit' });
+  trigger.focus();
+  expect(requestEditingNavigation('#/library')).toBe(true);
+  const dialog = await screen.findByRole('dialog', { name: 'Leave editing?' });
+  expect(dialog.tagName).toBe('DIALOG');
+  expect(screen.getByRole('button', { name: 'Stay' })).toHaveFocus();
+  fireEvent(dialog, new Event('cancel', { cancelable: true }));
+  expect(screen.queryByRole('dialog', { name: 'Leave editing?' })).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+  expect(screen.getByText(/Unsaved/)).toBeInTheDocument();
+});
+
+it('focuses voiceover text and restores the trigger when its native dialog is canceled', async () => {
+  await openDirtyTimeline();
+  const trigger = screen.getByRole('button', { name: 'Generate voiceover' });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = await screen.findByRole('dialog', { name: 'Generate voiceover' });
+  expect(dialog.tagName).toBe('DIALOG');
+  expect(screen.getByRole('textbox', { name: 'Voiceover text' })).toHaveFocus();
+  fireEvent(dialog, new Event('cancel', { cancelable: true }));
+  expect(screen.queryByRole('dialog', { name: 'Generate voiceover' })).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+});
+
+it('keeps the voiceover dialog open while synthesis is in progress', async () => {
+  let finish!: (item: EditMaterial) => void;
+  vi.mocked(editing.synthesizeVoice).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  await openDirtyTimeline();
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Voiceover text' }), { target: { value: 'Hello' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Choose voice' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Pick Qingse' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover preview' }));
+  const dialog = screen.getByRole('dialog', { name: 'Generate voiceover' });
+  expect(dialog.tagName).toBe('DIALOG');
+  fireEvent(dialog, new Event('cancel', { cancelable: true }));
+  expect(dialog).toBeInTheDocument();
+  await act(async () => finish({ ...material, id: 'core:voice', video: false, audio: true }));
+  expect(await screen.findByLabelText('Generated voiceover preview')).toBeInTheDocument();
+});
+
+it('cancels the nested voice picker before the parent voiceover dialog', async () => {
+  await openDirtyTimeline();
+  fireEvent.click(screen.getByRole('button', { name: 'Generate voiceover' }));
+  fireEvent.change(screen.getByRole('textbox', { name: 'Voiceover text' }), { target: { value: 'Keep this draft' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Choose voice' }));
+  const dialog = screen.getByRole('dialog', { name: 'Generate voiceover' });
+  expect(screen.getByRole('button', { name: 'Pick Qingse' })).toBeInTheDocument();
+  fireEvent(dialog, new Event('cancel', { cancelable: true }));
+  expect(screen.queryByRole('button', { name: 'Pick Qingse' })).not.toBeInTheDocument();
+  expect(screen.getByRole('textbox', { name: 'Voiceover text' })).toHaveValue('Keep this draft');
+  fireEvent(dialog, new Event('cancel', { cancelable: true }));
+  expect(screen.queryByRole('dialog', { name: 'Generate voiceover' })).not.toBeInTheDocument();
+});
+
+it('restores focus after canceling the native transcription dialog', async () => {
+  vi.mocked(agentRequest).mockResolvedValue({ available: false });
+  await openDirtyTimeline();
+  const trigger = screen.getByRole('button', { name: 'Source audio to captions' });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = await screen.findByRole('dialog', { name: 'Source audio to captions' });
+  expect(dialog.tagName).toBe('DIALOG');
+  expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus();
+  fireEvent(dialog, new Event('cancel', { cancelable: true }));
+  expect(screen.queryByRole('dialog', { name: 'Source audio to captions' })).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+  expect(screen.getByText(/Unsaved/)).toBeInTheDocument();
+});
+
 it('keeps the draft when leaving is canceled, and discards it only after confirmation', async () => {
   await openDirtyTimeline();
   expect(requestEditingNavigation('#/library')).toBe(true);

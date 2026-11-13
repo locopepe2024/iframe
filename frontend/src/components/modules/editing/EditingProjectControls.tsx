@@ -33,8 +33,8 @@ export function EditingProjectActions({ label, children }: { label: string; chil
   </div>;
 }
 
-export function EditingProjectDialog({ title, closeLabel, busy = false, onClose, children }: {
-  title: string; closeLabel: string; busy?: boolean; onClose: () => void; children: ReactNode;
+export function EditingProjectDialog({ title, closeLabel, busy = false, initialFocus, size = 'md', onClose, children }: {
+  title: string; closeLabel: string; busy?: boolean; initialFocus?: string; size?: 'md' | 'lg' | 'xl'; onClose: () => void; children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const heading = useId();
@@ -42,10 +42,10 @@ export function EditingProjectDialog({ title, closeLabel, busy = false, onClose,
     const previous = document.activeElement as HTMLElement | null;
     const dialog = ref.current;
     dialog?.showModal();
-    (dialog?.querySelector('input') || dialog?.querySelector('button'))?.focus();
+    (dialog?.querySelector<HTMLElement>(initialFocus || 'input:not(:disabled), textarea:not(:disabled)') || dialog?.querySelector('button:not(:disabled)'))?.focus();
     return () => { dialog?.close(); if (previous?.isConnected) previous.focus(); };
   }, []);
-  return <dialog ref={ref} aria-labelledby={heading} aria-modal="true" className="m-auto max-h-[85dvh] w-[calc(100vw_-_2rem)] max-w-md space-y-4 overflow-y-auto rounded-xl border border-glass-border bg-surface p-4 text-foreground shadow-xl backdrop:bg-black/70"
+  return <dialog ref={ref} aria-labelledby={heading} aria-modal="true" className={`m-auto max-h-[85dvh] w-[calc(100vw_-_2rem)] ${size === 'xl' ? 'max-w-2xl' : size === 'lg' ? 'max-w-lg' : 'max-w-md'} space-y-4 overflow-y-auto rounded-xl border border-glass-border bg-surface p-4 text-foreground shadow-xl backdrop:bg-black/70`}
     onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}
     onClick={event => { if (event.target === event.currentTarget && !busy) {
       const bounds = event.currentTarget.getBoundingClientRect();

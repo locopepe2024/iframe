@@ -144,19 +144,16 @@ export default function EditingPage() {
   const iconButton = 'glass-button flex h-11 w-11 shrink-0 items-center justify-center p-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40';
   const menuButton = 'flex min-h-11 w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-white/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40';
   return <div className="h-full space-y-3 overflow-y-auto p-3 md:p-4">
-    {pendingLeave && <div role="dialog" aria-modal="true" aria-labelledby="editing-leave-title" className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4">
-      <div className="w-full max-w-md space-y-4 rounded-xl border border-glass-border bg-background p-5 shadow-2xl">
-        <h2 id="editing-leave-title" className="text-lg font-semibold">{t('离开剪辑？', 'Leave editing?')}</h2>
+    {pendingLeave && <EditingProjectDialog title={t('离开剪辑？', 'Leave editing?')} closeLabel={t('关闭离开确认', 'Close leave confirmation')} initialFocus="[data-editing-stay]" onClose={() => { setPendingLeave(null); setLeaveError(''); }}>
         <p className="text-sm text-text-secondary">{busy ? t('当前操作完成后再决定如何离开。', 'Choose how to leave after the current operation finishes.') : t('当前剪辑有未保存的修改。', 'This edit has unsaved changes.')}</p>
         {busy && <p role="status" className="text-sm text-text-secondary">{t('处理中…', 'Finishing current operation…')}</p>}
         {leaveError && <p role="alert" className="text-sm text-red-300">{leaveError}</p>}
         <div className="flex flex-wrap justify-end gap-2">
-          <button type="button" className="glass-button min-h-11 px-3 text-sm" onClick={() => { setPendingLeave(null); setLeaveError(''); }}>{t('留在此页', 'Stay')}</button>
+          <button type="button" data-editing-stay className="glass-button min-h-11 px-3 text-sm" onClick={() => { setPendingLeave(null); setLeaveError(''); }}>{t('留在此页', 'Stay')}</button>
           <button type="button" className="glass-button min-h-11 px-3 text-sm" disabled={busy} onClick={discardAndLeave}>{t('放弃并离开', 'Discard and leave')}</button>
           <button type="button" className="min-h-11 rounded-lg bg-primary px-3 text-sm text-white disabled:opacity-40" disabled={busy || !dirty || !project || !plan} onClick={() => void saveAndLeave()}>{busy ? t('处理中…', 'Processing…') : t('保存并离开', 'Save and leave')}</button>
         </div>
-      </div>
-    </div>}
+    </EditingProjectDialog>}
     <h1 className="sr-only">{t('独立剪辑', 'Independent editing')}</h1>
     <header className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2 rounded-lg border border-glass-border bg-white/[0.02] p-2 xl:flex xl:items-center" aria-label={t('剪辑工作区工具栏', 'Editing workspace toolbar')}>
       <nav className="flex shrink-0 items-center gap-1" aria-label={t('剪辑视图', 'Editing views')}>
