@@ -33,6 +33,7 @@ from .media_reference import normalize_managed_media_reference
 from .agent_tools import search_knowledge
 from . import agent_facts
 from .comic_gen.character_constraints import CharacterConstraints
+from .comic_gen.models import AssetLibraryReference, Script
 from .comic_gen.extraction_jobs import ExtractionJobs
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -340,8 +341,7 @@ def current_information_request(content: str) -> bool:
             and bool(re.search(r"资讯|新闻|公告|研究|分析|近况|动态|运营|经营", content)))
 
 
-class CharacterDesignReference(BaseModel):
-    asset_type: Literal["character", "scene", "prop"]
+class CharacterDesignReference(AssetLibraryReference):
     asset_id: str = Field(min_length=1, max_length=200)
     variant_id: str = Field(min_length=1, max_length=200)
 
@@ -641,27 +641,40 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
               + "参考图片是只读视觉证据，只能描述图中清晰可见的内容；不要推断图外事实。不要把图中其他人物或物品混为本角色。")
     source = body.model_dump(exclude={"reviewed_messages", "review_token"})
     user_data = body.model_dump(exclude={"model", "project_id", "reference_assets", "reviewed_messages", "review_token"})
-    user_data["reference_assets"] = [reference.model_dump() for reference in body.reference_assets]
+    user_data["reference_assets"] = [reference.model_dump(exclude_none=True, exclude_defaults=True) for reference in body.reference_assets]
     user_content = json.dumps(user_data, ensure_ascii=False)
     media: list[dict] = []
     resolved_references: list[dict] = []
     if body.reference_assets:
-        if not body.project_id:
-            raise HTTPException(422, "选择角色参考图时需要当前项目")
+        if not body.project_id and any(
+            reference.asset_type in ("character", "scene", "prop") and not reference.source_container_id
+            and reference.source_scope not in ("shared", "private") for reference in body.reference_assets
+        ):
+            raise HTTPException(422, "选择角色参考图时需要当前项目或明确的素材来源")
         from .comic_gen.api import pipeline as studio_pipeline
         from .comic_gen.pipeline import InvalidAssetReference
         from ..models.uniart import _image_reference_url
 
-        script = studio_pipeline.get_script(body.project_id, ctx.owner_profile_id)
+        script = (studio_pipeline.get_script(body.project_id, ctx.owner_profile_id) if body.project_id
+                  else Script(id="design-references", title="References", original_text="",
+                              owner_profile_id=ctx.owner_profile_id, created_at=0, updated_at=0))
         if not script:
             raise HTTPException(404, "项目不存在或当前用户无权访问")
         labels = []
+        reference_contexts = []
         for index, reference in enumerate(body.reference_assets):
             try:
                 media_path, stable_reference = studio_pipeline._resolve_asset_library_reference(
                     script,
-                    reference.model_dump(),
+                    reference.model_dump(exclude_none=True, exclude_defaults=True),
                 )
+                from .reference_materials import reference_context, append_reference_context
+                context = reference_context(reference, ctx.owner_profile_id, output_root=studio_pipeline.output_root)
+                if reference.asset_type in ("media", "platform_reference") and not media_path.startswith(("http://", "https://")):
+                    from .reference_materials import materialize_image
+                    from ..utils.managed_media_root import ManagedMediaRoot
+                    material = materialize_image(ctx.owner_profile_id, media_path, output_root=studio_pipeline.output_root, context=context)
+                    media_path = str(ManagedMediaRoot(studio_pipeline.output_root).resolve(material["storage_key"]))
                 media_url = _image_reference_url(media_path)
             except InvalidAssetReference as exc:
                 raise HTTPException(422, "所选参考图已失效或不属于当前项目可用素材，请重新选择") from exc
@@ -672,11 +685,13 @@ def _compile_character_design_draft_input(body: CharacterDesignRequest, ctx: Use
                 reference.asset_id,
                 reference.asset_type,
             )
-            label = getattr(asset, "name", None) or f"{reference.asset_type}素材"
+            label = (context or {}).get("title") or getattr(asset, "name", None) or f"{reference.asset_type}素材"
             labels.append(f"角色参考图 @{index + 1}：{label}（只读视觉证据）")
+            reference_contexts.append(context)
             media.append({"label": labels[-1], "url": media_url})
-            resolved_references.append({"path": media_path, "identity": stable_reference})
+            resolved_references.append({"path": media_path, "identity": stable_reference, "context": context})
         user_content += "\n" + "\n".join(labels)
+        user_content = append_reference_context(user_content, reference_contexts)
     messages = {"system": system, "user": user_content}
     token = hashlib.sha256(json.dumps({"owner": ctx.owner_profile_id, "source": source,
                                       "references": resolved_references, "compiled": messages},

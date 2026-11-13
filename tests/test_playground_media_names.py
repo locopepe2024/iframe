@@ -13,13 +13,13 @@ def test_signed_history_reference_resolves_in_owner_storage(tmp_path):
     assert storage.resolve_media_reference('/playground/media/gen/out?expires=123&signature=abc') == 'owned.png'
 
 
-def test_names_round_trip_without_resolving_media_by_name():
+def test_names_round_trip_without_resolving_media_by_name(tmp_path):
     reference = '/playground/input-media/unique.png'
     draft = PlaygroundDraft(media_names={reference: 'Same name'}, input_media=[reference])
     assert PlaygroundDraft.model_validate_json(draft.model_dump_json()).media_names == draft.media_names
     captured = {}
     storage = SimpleNamespace(
-        owner_user_id='u', owner_profile_id='p',
+        owner_user_id='u', owner_profile_id='p', media_root=str(tmp_path),
         resolve_media_reference=lambda value: 'owned.png' if value == reference else None,
         ensure_session=lambda *args: SimpleNamespace(id='session'),
         add_generation=lambda generation: captured.update(generation=generation),
@@ -29,6 +29,7 @@ def test_names_round_trip_without_resolving_media_by_name():
         input_media=[reference], media_names={reference: 'Same name'})
     generation = PlaygroundService(storage).create_generation(request)
     assert generation.input_media == ['owned.png']
+    assert generation.reference_contexts == [None]
     assert generation.media_names == {'owned.png': 'Same name'}
     assert captured['draft'].input_media == ['owned.png']
     assert captured['draft'].media_names == {'owned.png': 'Same name'}

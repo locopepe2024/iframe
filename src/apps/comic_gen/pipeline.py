@@ -473,6 +473,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         video_model: Optional[str] = None,
         workbench_generate_audio: Optional[bool] = None,
         workbench_prompt_is_optimized: Optional[bool] = None,
+        workbench_material_references: Optional[List[AssetLibraryReference]] = None,
         workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None,
         workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None,
         workbench_director_snapshot_media_id: Optional[str] = None,
@@ -501,6 +502,13 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame = next((f for f in frames if getattr(f, "id", None) == frame_id), None)
             if not frame:
                 return None
+            previous_material_references = frame.workbench_material_references
+            if workbench_material_references is not None:
+                if len(workbench_material_references) > 10:
+                    raise ValueError("At most 10 supplemental reference images are allowed")
+                for reference in workbench_material_references:
+                    self._resolve_asset_library_reference(script, reference)
+                frame.workbench_material_references = workbench_material_references
             if workbench_tab_mode is not None:
                 if workbench_tab_mode not in self._WORKBENCH_TAB_VALUES:
                     raise ValueError(
@@ -594,6 +602,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 self._save_data()
             except Exception:
                 logger.warning("update_frame_workbench: save failed")
+                if workbench_material_references is not None:
+                    frame.workbench_material_references = previous_material_references
+                    raise
             return frame
 
     def list_shot_visual_presets(self, script_id: str, scene_id: Optional[str] = None) -> List[ShotVisualPreset]:
@@ -1642,6 +1653,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         encoded = json.dumps(reviewed, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 
+    def _reference_semantic_prompt(self, owner, prompt: str, references) -> str:
+        from ..reference_materials import append_reference_context, reference_context
+        return append_reference_context(prompt, [reference_context(item, owner.owner_profile_id, output_root=self.output_root)
+                                                 for item in references])
+
     def preview_asset_image_submission(
         self, scope_id: str, asset_id: str, asset_type: str, *,
         prompt: str, negative_prompt: str = "", model_name: Optional[str] = None,
@@ -1707,7 +1723,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             if is_series else aspect_ratio or getattr(owner.model_settings, f"{asset_type}_aspect_ratio")
         )
         snapshot = self._asset_submission_snapshot(
-            asset, asset_type, prompt=prompt, negative_prompt=negative_prompt,
+            asset, asset_type, prompt=self._reference_semantic_prompt(owner, prompt, ([normalized_reference] if normalized_reference else []) + normalized_references), negative_prompt=negative_prompt,
             model_id=effective_model, aspect_ratio=effective_aspect,
             generation_type=generation_type, image_generation_mode=image_generation_mode,
             batch_size=batch_size, reference=normalized_reference, references=normalized_references,
@@ -1768,6 +1784,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 resolved_references.append(resolved)
                 reference_provenance_list.append(provenance)
         
+        semantic_references = ([reference_provenance] if reference_provenance else []) + reference_provenance_list
+        if prompt:
+            prompt = self._reference_semantic_prompt(script, prompt, semantic_references)
+
         # Get effective model names from project settings if not overridden
         t2i_model = self._asset_generation_model(script, model_name)
         series = self.series_store.get(script.series_id) if script.series_id else None
@@ -1815,6 +1835,9 @@ class ComicGenPipeline(StudioOwnerMixin):
             # when it belongs to exactly one plan scene. Shared assets stay
             # generic so one episode cannot overwrite another scene's look.
             effective_positive_prompt = episode_context_prompt
+        if not prompt:
+            # Keep the generator's default subject prompt when no authored prompt was supplied.
+            effective_positive_prompt = self._reference_semantic_prompt(script, effective_positive_prompt, semantic_references)
         generation_lineage = self.generation_lineage(
             script, director_profile, director_execution,
         )
@@ -2217,6 +2240,12 @@ class ComicGenPipeline(StudioOwnerMixin):
                 resolved_references.append(resolved)
                 reference_provenance_list.append(provenance)
 
+        semantic_references = ([reference_provenance] if reference_provenance else []) + reference_provenance_list
+        if prompt:
+            prompt = self._reference_semantic_prompt(series, prompt, semantic_references)
+        else:
+            positive_prompt = self._reference_semantic_prompt(series, positive_prompt or "", semantic_references)
+
         if asset_type == "character":
             target = next((c for c in series.characters if c.id == asset_id), None)
             if not target:
@@ -2551,7 +2580,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         asset_type = raw.get("asset_type")
         asset_id = raw.get("asset_id")
         variant_id = raw.get("variant_id")
-        if asset_type not in ("character", "scene", "prop", "platform_reference"):
+        if asset_type not in ("character", "scene", "prop", "platform_reference", "media"):
             raise InvalidAssetReference("reference.asset_type is invalid")
         if not isinstance(asset_id, str) or not asset_id.strip():
             raise InvalidAssetReference("reference.asset_id is required")
@@ -2566,6 +2595,11 @@ class ComicGenPipeline(StudioOwnerMixin):
         # provider URL. Preserve it when supplied so previews and snapshots can
         # explain how a selected asset was applied; legacy callers retain the
         # original three-key shape.
+        source_container_id = raw.get("source_container_id")
+        if source_container_id is not None:
+            if not isinstance(source_container_id, str) or not source_container_id.strip():
+                raise InvalidAssetReference("reference.source_container_id is invalid")
+            stable["source_container_id"] = source_container_id.strip()
         source_scope = raw.get("source_scope")
         if source_scope not in (None, "shared", "project", "episode", "series", "private", "platform"):
             raise InvalidAssetReference("reference.source_scope is invalid")
@@ -3031,6 +3065,15 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         asset_type = normalized["asset_type"]
         asset_id = normalized["asset_id"]
+        if asset_type == "media":
+            if normalized["variant_id"] != asset_id or normalized.get("source_scope") not in (None, "private"):
+                raise InvalidAssetReference("uploaded image identity is invalid")
+            from ..reference_materials import resolve_owned_image
+            try:
+                media = resolve_owned_image(container.owner_profile_id, asset_id, output_root=self.output_root)
+            except (ValueError, OSError) as exc:
+                raise InvalidAssetReference("uploaded reference image is unavailable") from exc
+            return media, normalized
         if asset_type == "platform_reference":
             if normalized.get("source_scope") not in (None, "platform"):
                 raise InvalidAssetReference("platform reference scope is invalid")
@@ -3043,6 +3086,15 @@ class ComicGenPipeline(StudioOwnerMixin):
             except (ValueError, OSError) as exc:
                 raise InvalidAssetReference("platform reference is unavailable or its revision changed") from exc
             return str(media), normalized
+        if normalized.get("source_container_id"):
+            owner = container.owner_profile_id
+            scope = normalized.get("source_scope")
+            source_id = normalized["source_container_id"]
+            source = (self.get_series(source_id, owner) if scope == "series"
+                      else self.get_script(source_id, owner) if scope in ("project", "episode") else None)
+            if source is None:
+                raise InvalidAssetReference("reference source is not visible to this owner")
+            container = source
         if isinstance(container, Script):
             asset, _source = self._find_asset_with_source(container, asset_id, asset_type)
         elif isinstance(container, Series):
@@ -3984,6 +4036,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 context["shot"] = {key: value for key, value in context["shot"].items() if key != "lighting"}
             else:
                 context.pop("lighting", None)
+        prompt = self._reference_semantic_prompt(script, prompt, frame.workbench_material_references)
         projected_context = append_projected_shot_context(prompt.strip(), context)
         frame_projection = self.storyboard_frame_prompt_projection(script, frame)
         asset_visual_context, _ = self._shot_asset_visual_context(script, frame, self.resolve_project_assets(script))
@@ -8260,6 +8313,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             "micro_expression_timing": frame.micro_expression_timing,
             "image_polish_source": frame.image_polish_source,
             "image_polish_candidate": frame.image_polish_candidate,
+            "material_references": [item.model_dump(mode="json") for item in frame.workbench_material_references],
+            "material_semantic_prompt": self._reference_semantic_prompt(script, "", frame.workbench_material_references),
             "style_prompt_override": frame.style_prompt_override,
             "lighting_override": frame.lighting_override,
             "negative_prompt_override": frame.negative_prompt_override,
@@ -8412,6 +8467,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             preserve_prompt = prompt_is_complete or bool(polished and polished == prompt.strip())
             final_prompt = prompt if preserve_prompt else self.storyboard_render_prompt_projection(script, frame, prompt)
             
+            final_prompt = self._reference_semantic_prompt(script, final_prompt, frame.workbench_material_references)
+
             # Update frame with final prompt
             frame.image_prompt = final_prompt
             
@@ -8434,6 +8491,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 logger.debug(f"Original reference URLs from frontend: {ref_image_urls}")
 
             # Call generator
+            supplemental_ref_image_paths += self._frame_material_paths(script, frame)
             self.storyboard_generator.generate_frame(
                 frame,
                 resolved["characters"],
@@ -8457,6 +8515,20 @@ class ComicGenPipeline(StudioOwnerMixin):
             frame.status = GenerationStatus.FAILED
             self._save_data()
             raise e
+
+    def _frame_material_paths(self, script: Script, frame: StoryboardFrame) -> List[str]:
+        from ..reference_materials import materialize_image, reference_context
+        from ...utils.managed_media_root import ManagedMediaRoot
+        paths = []
+        for reference in frame.workbench_material_references:
+            source, _ = self._resolve_asset_library_reference(script, reference)
+            if source.startswith(("http://", "https://")) or is_object_key(source):
+                paths.append(source)
+                continue
+            material = materialize_image(script.owner_profile_id, source, output_root=self.output_root,
+                                         context=reference_context(reference, script.owner_profile_id, output_root=self.output_root))
+            paths.append(str(ManagedMediaRoot(self.output_root).resolve(material["storage_key"])))
+        return paths
 
     def generate_storyboard_candidate(
         self,
@@ -8499,6 +8571,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             for item in candidate.reference_package.references
             if item.url and item.kind != "reference_video"
         ] if candidate.reference_package.confirmed else []
+        supplemental_ref_image_paths += self._frame_material_paths(script, source)
+        prompt = self._reference_semantic_prompt(script, prompt, source.workbench_material_references)
         self.storyboard_generator.generate_frame(
             candidate,
             resolved["characters"],
@@ -8583,7 +8657,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             clause = f"{label}：{'；'.join(static_states)}"
             if clause not in prompt:
                 additions.append(clause)
-        return "\n".join([prompt.strip(), *additions])
+        return self._reference_semantic_prompt(script, "\n".join([prompt.strip(), *additions]), frame.workbench_material_references)
 
     def storyboard_candidate_preview_token(
         self, script_id: str, frame_id: str, prompt: str, negative_prompt: Optional[str]
@@ -8648,6 +8722,15 @@ class ComicGenPipeline(StudioOwnerMixin):
                     asset_type=identity.asset_type, asset_id=identity.asset_id,
                     variant_id=identity.variant_id, media_id=variant.media_id,
                     storage_key=stored_key,
+                ))
+        if frame and generation_mode == "r2v" and model != "wan2.6-r2v":
+            material_paths = self._frame_material_paths(script, frame)
+            prompt = self._reference_semantic_prompt(script, prompt, frame.workbench_material_references)
+            reference_image_urls = list(reference_image_urls or []) + material_paths
+            for reference, path in zip(frame.workbench_material_references, material_paths):
+                validated_reference_inputs.append(VideoReferenceIdentity(
+                    asset_type=reference.asset_type, asset_id=reference.asset_id,
+                    variant_id=reference.variant_id, storage_key=path,
                 ))
         prompt_warning = None
         if (frame and frame.workbench_prompt_is_optimized and frame.workbench_visual_source_hash

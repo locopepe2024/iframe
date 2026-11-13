@@ -133,7 +133,7 @@ jobs:
         working-directory: frontend
         run: |
           npm test -- --run src/__tests__/project-asset-index-api.test.ts
-          npm run test:ui -- src/components/modules/storyboard-r2v/referenceAssets.test.tsx src/components/modules/storyboard-r2v/AssetDrawer.test.tsx src/components/modules/storyboard-r2v/AssetChipBar.scope.test.tsx src/components/modules/CharacterWorkbench.test.tsx src/components/modules/cast/CastWorkbenchModal.test.tsx
+          npm run test:ui -- src/components/modules/storyboard-r2v/referenceAssets.test.tsx src/components/modules/storyboard-r2v/AssetDrawer.test.tsx src/components/modules/storyboard-r2v/AssetChipBar.scope.test.tsx src/components/modules/CharacterWorkbench.test.tsx src/components/modules/cast/CastWorkbenchModal.test.tsx src/components/shared/ReferenceMaterialBrowser.test.tsx src/components/modules/playground/AssetPickerModal.test.tsx
 
       - name: Verify character speech and quick presets
         working-directory: frontend

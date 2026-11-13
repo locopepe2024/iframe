@@ -199,16 +199,65 @@ def get_platform_reference_library(
     query: str = "",
     semantic_domain: Optional[str] = None,
     entry_type: Optional[str] = None,
+    limit: Optional[int] = Query(None, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    visual_only: bool = False,
     user: UserContext = Depends(require_user_context),
 ):
     """Read active deployment-scoped resources; mutations are not exposed here."""
     try:
-        return private_no_store_signed_response(list_platform_reference_resources(
+        catalog = list_platform_reference_resources(
             kind=kind, category=category, tag=tag, query=query,
             semantic_domain=semantic_domain, entry_type=entry_type,
-        ))
+            visual_only=visual_only,
+        )
+        catalog["total"] = len(catalog["resources"])
+        if limit is not None:
+            catalog["resources"] = catalog["resources"][offset:offset + limit]
+        return private_no_store_signed_response(catalog)
     except ValueError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+class ResolveReferenceMaterialRequest(BaseModel):
+    reference: AssetLibraryReference
+    project_id: Optional[str] = None
+    label: str = Field(default="", max_length=200)
+
+
+@app.post("/reference-materials/resolve")
+def resolve_reference_material(request: ResolveReferenceMaterialRequest,
+                               user: UserContext = Depends(require_studio_user)):
+    from ..reference_materials import materialize_image, reference_context
+    try:
+        container = (pipeline.get_script(request.project_id, user.owner_profile_id)
+                     if request.project_id else Script(id="reference-browser", owner_profile_id=user.owner_profile_id, title="References", original_text="", created_at=0, updated_at=0))
+        if container is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        source, _ = pipeline._resolve_asset_library_reference(container, request.reference)
+        context = reference_context(request.reference, user.owner_profile_id, output_root=pipeline.output_root)
+        label = context["title"] if context else request.label
+        if not label and request.reference.asset_type == "platform_reference":
+            from ..platform_reference_catalog import platform_resource_by_id
+            label = (platform_resource_by_id(request.reference.asset_id) or {}).get("title", "")
+        if not label and request.reference.asset_type == "media":
+            from ..media_registry import get_media
+            label = (get_media(user.owner_profile_id, request.reference.asset_id, output_root=pipeline.output_root) or {}).get("display_name", "")
+        if source.startswith(("http://", "https://")) or is_object_key(source):
+            uploader = OSSImageUploader()
+            key = managed_object_key_from_url(source, uploader) if source.startswith(("http://", "https://")) else source
+            if not key:
+                raise ValueError("External reference image is not managed")
+            result = {"path": uploader.sign_url_for_api(key), "label": label or request.reference.asset_id}
+        else:
+            result = materialize_image(user.owner_profile_id, source, label=label or request.reference.asset_id, output_root=pipeline.output_root, context=context)
+        result["context"] = context
+        # Keep platform revision and semantic identity; URLs are display/transport projections.
+        if request.reference.asset_type != "media":
+            result["reference"] = request.reference.model_dump(mode="json")
+        return private_no_store_signed_response(result)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/platform-reference-library/categories")
@@ -508,6 +557,7 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         or path.startswith("/library/")
         or path == "/asset-index"
         or path.startswith("/asset-index/")
+        or path.startswith("/reference-materials/")
         or path == "/upload"
         or path == "/config/models"
         or path == "/config/uniart/models"
@@ -4954,6 +5004,7 @@ class UpdateFrameWorkbenchRequest(BaseModel):
     video_model: Optional[str] = None
     workbench_generate_audio: Optional[bool] = None
     workbench_prompt_is_optimized: Optional[bool] = None
+    workbench_material_references: Optional[List[AssetLibraryReference]] = Field(None, max_length=10)
     workbench_reference_variant_ids: Optional[Dict[str, List[str]]] = None
     workbench_pose_reference_variant_ids: Optional[Dict[str, List[str]]] = None
     workbench_director_snapshot_media_id: Optional[str] = None
@@ -5074,6 +5125,7 @@ def update_frame_workbench(
             video_model=request.video_model,
             workbench_generate_audio=request.workbench_generate_audio,
             workbench_prompt_is_optimized=request.workbench_prompt_is_optimized,
+            workbench_material_references=request.workbench_material_references,
             workbench_reference_variant_ids=request.workbench_reference_variant_ids,
             workbench_pose_reference_variant_ids=request.workbench_pose_reference_variant_ids,
             workbench_director_snapshot_media_id=request.workbench_director_snapshot_media_id,

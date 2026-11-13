@@ -45,6 +45,7 @@ class PlaygroundSession(BaseModel):
 
 
 class PlaygroundGeneration(BaseModel):
+    reference_contexts: List[Optional[dict]] = Field(default_factory=list, description="Server-resolved semantic evidence aligned with input_media")
     media_names: dict[str, str] = Field(default_factory=dict, description="Display names only; never media identity")
     id: str = Field(..., description="Unique identifier (UUID)")
     mode: PlaygroundMode = Field(..., description="Generation mode")

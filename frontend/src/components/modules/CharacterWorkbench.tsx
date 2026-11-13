@@ -1,11 +1,11 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useState, useEffect, useMemo, useRef, useId, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, Sparkles, Search } from "lucide-react";
-import { agentRequest, api, API_URL, authenticatedFetch, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel, type PlatformReferenceResource } from "@/lib/api";
+import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -38,6 +38,8 @@ import { IDENTITY_FIELDS, LOOK_FIELDS, characterSectionText, characterStructured
     type CharacterSectionEditorMode, type IdentityFeatures, type LookFeatures } from "@/lib/characterStructuredDesign";
 import type { DictionaryConfiguration } from "@/lib/characterDictionaryPresets";
 import { type CharacterPresetTarget } from "@/lib/characterQuickActions";
+import ReferenceMaterialPicker from "@/components/shared/ReferenceMaterialPicker";
+import type { MaterialCandidate } from "@/components/shared/ReferenceMaterialBrowser";
 import CharacterDesignPanel from "./CharacterDesignPanel";
 import { requestCharacterDesignJob, waitForCharacterDesignPoll } from "@/lib/characterDesignJobs";
 import WhiteFaceModel from "./character/WhiteFaceModel";
@@ -319,195 +321,7 @@ function referenceScopeLabel(scope?: AssetReferenceIndexEntry["source_scope"]): 
     }
 }
 
-function PlatformReferenceThumbnail({ resourceId }: { resourceId: string }) {
-    const [url, setUrl] = useState("");
-    useEffect(() => {
-        const controller = new AbortController();
-        let objectUrl = "";
-        void authenticatedFetch(`${API_URL}/platform-reference-library/${encodeURIComponent(resourceId)}/media?preview=true`, { signal: controller.signal })
-            .then(async (response) => {
-                if (!response.ok) throw new Error("preview unavailable");
-                objectUrl = URL.createObjectURL(await response.blob());
-                setUrl(objectUrl);
-            }).catch(() => setUrl(""));
-        return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-    }, [resourceId]);
-    return url ? <img src={url} alt="" className="h-full w-full object-cover" />
-        : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />;
-}
 
-function AssetReferencePicker({
-    candidates,
-    selected,
-    onChange,
-    title,
-    description,
-    onOpen,
-}: {
-    candidates: ReferenceCandidate[];
-    selected: AssetLibraryReference[];
-    onChange: (references: AssetLibraryReference[]) => void;
-    title: string;
-    description: string;
-    onOpen?: () => void;
-}) {
-    const [query, setQuery] = useState("");
-    const [isOpen, setIsOpen] = useState(false);
-    const pickerRef = useRef<HTMLElement | null>(null);
-    const generatedId = useId().replace(/:/g, "");
-    const searchId = `character-reference-search-${generatedId}`;
-    const optionId = (index: number) => `${searchId}-option-${index}`;
-    const selectedKeys = new Set(selected.map(referenceKey));
-    // Keep the complete owner-scoped candidate set available. The picker is
-    // already scroll-bounded; truncating to the first 20 hides valid assets
-    // (for example a generated crowd roster) behind earlier shared assets.
-    const filtered = searchReferenceCandidates(candidates, query).slice(0, 100);
-
-    useEffect(() => {
-        if (!isOpen) return;
-        const handlePointerDown = (event: PointerEvent) => {
-            const target = event.target as Node | null;
-            if (target && pickerRef.current?.contains(target)) return;
-            setIsOpen(false);
-            setQuery("");
-        };
-        document.addEventListener("pointerdown", handlePointerDown);
-        return () => document.removeEventListener("pointerdown", handlePointerDown);
-    }, [isOpen]);
-
-    const toggle = (candidate: ReferenceCandidate) => {
-        if (!candidate.reference) return;
-        const key = referenceKey(candidate.reference);
-        onChange(selectedKeys.has(key)
-            ? selected.filter((item) => referenceKey(item) !== key)
-            : [...selected, candidate.reference]);
-    };
-
-    return (
-        <section ref={pickerRef} data-reference-picker className="mt-3 rounded-md border border-glass-border bg-surface/60 p-3">
-            <button
-                type="button"
-                aria-expanded={isOpen}
-                onClick={() => {
-                    if (!isOpen) onOpen?.();
-                    setIsOpen(!isOpen);
-                }}
-                className="flex min-h-8 w-full items-center justify-between gap-2 text-left text-xs font-medium text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-            >
-                <span>{title}{selected.length > 0 ? ` · ${selected.length}` : ""}</span>
-                <span className="inline-flex items-center gap-1">
-                    {isOpen && <span
-                        role="button"
-                        tabIndex={0}
-                        aria-label="关闭参考素材搜索"
-                        onMouseDown={(event) => event.stopPropagation()}
-                        onClick={(event) => { event.stopPropagation(); setIsOpen(false); setQuery(""); }}
-                        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setIsOpen(false); setQuery(""); } }}
-                        className="inline-flex h-7 w-7 items-center justify-center rounded hover:bg-hover-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-                    ><X size={14} aria-hidden="true" /></span>}
-                    <ImageIcon size={15} className="shrink-0 text-text-muted" aria-hidden="true" />
-                </span>
-            </button>
-            {isOpen && <>
-            <p className="mt-1 text-[11px] leading-4 text-text-muted">{description}</p>
-            <label className="sr-only" htmlFor={searchId}>搜索角色参考素材</label>
-            <div className="relative mt-2">
-                <Search size={14} className="pointer-events-none absolute left-2.5 top-3 text-text-muted" aria-hidden="true" />
-                <input
-                    id={searchId}
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    onKeyDown={(event) => {
-                        if (event.key === "Escape") {
-                            event.preventDefault();
-                            setIsOpen(false);
-                            setQuery("");
-                            return;
-                        }
-                        if (event.key === "ArrowDown" && filtered.length > 0) {
-                            event.preventDefault();
-                            document.getElementById(optionId(0))?.focus();
-                        } else if (event.key === "Enter" && filtered.length > 0) {
-                            event.preventDefault();
-                            toggle(filtered[0]);
-                        }
-                    }}
-                    aria-label="搜索角色参考素材"
-                    placeholder="搜索名称、来源或变体"
-                    className="h-9 w-full rounded-md border border-glass-border bg-surface pl-8 pr-2 text-xs text-foreground placeholder:text-text-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-                />
-            </div>
-            {selected.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5" aria-label="已选择的角色参考图">
-                    {selected.map((reference) => {
-                        const candidate = candidates.find((item) => referenceKey(item.reference) === referenceKey(reference));
-                        return (
-                            <button
-                                type="button"
-                                key={referenceKey(reference)}
-                                onClick={() => onChange(selected.filter((item) => referenceKey(item) !== referenceKey(reference)))}
-                                className="inline-flex min-h-8 items-center gap-1 rounded-full border border-primary/50 bg-primary/10 px-2 text-[11px] text-primary hover:bg-primary/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-                                aria-label={`移除参考图 ${candidate?.label || reference.variant_id}`}
-                            >
-                                <span className="max-w-[12rem] truncate">{candidate?.label || reference.variant_id}</span>
-                                <X size={12} aria-hidden="true" />
-                            </button>
-                        );
-                    })}
-                </div>
-            )}
-            <div className="mt-2 max-h-44 space-y-1 overflow-y-auto" role="listbox" aria-label="角色参考素材结果" aria-multiselectable="true">
-                {filtered.length === 0 ? (
-                    <p className="px-2 py-2 text-xs text-text-muted">{candidates.length ? "没有匹配的参考素材" : "暂无可用参考素材"}</p>
-                ) : filtered.map((candidate, index) => {
-                    const key = referenceKey(candidate.reference);
-                    const isSelected = selectedKeys.has(key);
-                    return (
-                        <button
-                            type="button"
-                            id={optionId(index)}
-                            key={key}
-                            role="option"
-                            aria-selected={isSelected}
-                            onKeyDown={(event) => {
-                                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                                    event.preventDefault();
-                                    const nextIndex = event.key === "ArrowDown"
-                                        ? Math.min(index + 1, filtered.length - 1)
-                                        : Math.max(index - 1, 0);
-                                    document.getElementById(optionId(nextIndex))?.focus();
-                                } else if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    toggle(candidate);
-                                } else if (event.key === "Escape") {
-                                    event.preventDefault();
-                                    document.getElementById(searchId)?.focus();
-                                }
-                            }}
-                            onClick={() => toggle(candidate)}
-                            className={`flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${isSelected ? "bg-primary/10" : "hover:bg-hover-bg"}`}
-                        >
-                            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-inset">
-                                {candidate.previewRef ? <AssetIndexPreview asset={candidate.previewRef} />
-                                    : candidate.previewUrl ? <img src={candidate.previewUrl} alt="" loading="lazy" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
-                                    : candidate.platformResourceId ? <PlatformReferenceThumbnail resourceId={candidate.platformResourceId} />
-                                    : <ImageIcon size={14} className="text-text-muted" aria-hidden="true" />}
-                            </span>
-                            <span className="min-w-0 flex-1">
-                                <span className="block truncate text-xs text-foreground">{candidate.label}</span>
-                                <span className="block truncate text-[11px] text-text-muted">
-                                    {[candidate.sourceLabel || "素材库", candidate.variantLabel ? `变体：${candidate.variantLabel}` : ""].filter(Boolean).join(" · ")}
-                                </span>
-                            </span>
-                            {isSelected && <Check size={14} className="shrink-0 text-primary" aria-label="已选择" />}
-                        </button>
-                    );
-                })}
-            </div>
-            </>}
-        </section>
-    );
-}
 interface CharacterWorkbenchProps {
     asset: any;
     seriesId?: string;
@@ -600,9 +414,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
     // per variant without creating another character asset.
     const variantNameFallback = (index: number) => `view ${index + 1}`;
     const [assetIndex, setAssetIndex] = useState<AssetReferenceIndexEntry[]>([]);
-    const [platformReferences, setPlatformReferences] = useState<PlatformReferenceResource[]>([]);
+    const [discoveredReferences, setDiscoveredReferences] = useState<MaterialCandidate[]>([]);
     const assetIndexRequest = useRef(0);
-    const platformRequest = useRef(0);
     const assetIndexRevision = JSON.stringify(
         [currentProject?.characters, currentProject?.scenes, currentProject?.props].map((items) =>
             Array.isArray(items) ? items.map((item: any) => [
@@ -667,35 +480,17 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 setAssetIndex(entries);
                 const available = new Set(entries.flatMap((entry) => entry.variants.map((variant) =>
                     `${entry.asset_type}:${entry.asset_id}:${variant.id}`)));
-                setDesignReferenceAssets((current) => current.filter((reference) => reference.asset_type === "platform_reference" || available.has(referenceKey(reference))));
+                setDesignReferenceAssets((current) => current.filter((reference) => (reference.asset_type === "platform_reference" || reference.asset_type === "media") || available.has(referenceKey(reference))));
                 setPromptPickerReferences((current) => Object.fromEntries(Object.entries(current).map(([panel, refs]) =>
-                    [panel, refs.filter((ref) => ref.asset_type === "platform_reference" || available.has(referenceKey(ref)))])) as typeof current);
+                    [panel, refs.filter((ref) => (ref.asset_type === "platform_reference" || ref.asset_type === "media") || available.has(referenceKey(ref)))])) as typeof current);
             })
             .catch(() => { if (requestId === assetIndexRequest.current) setAssetIndex([]); });
     }, [currentProject?.id]);
 
-    const refreshPlatformReferences = useCallback(() => {
-        const requestId = ++platformRequest.current;
-        void api.getPlatformReferenceLibrary("", "image")
-            .then((catalog) => {
-                if (requestId !== platformRequest.current) return;
-                const resources = catalog.resources.filter((resource) =>
-                    resource.status === "active" && resource.category_path?.startsWith("reference/") && !!resource.payload?.media_file);
-                setPlatformReferences(resources);
-                const available = new Set(resources.map((resource) =>
-                    `platform_reference:${resource.platform_resource_id}:${resource.revision}`));
-                setDesignReferenceAssets((current) => current.filter((reference) =>
-                    reference.asset_type !== "platform_reference" || available.has(referenceKey(reference))));
-                setPromptPickerReferences((current) => Object.fromEntries(Object.entries(current).map(([panel, refs]) =>
-                    [panel, refs.filter((reference) => reference.asset_type !== "platform_reference" || available.has(referenceKey(reference)))])) as typeof current);
-            })
-            .catch(() => { if (requestId === platformRequest.current) setPlatformReferences([]); });
+    const refreshReferences = refreshAssetIndex;
+    const discoverReference = useCallback((candidate: MaterialCandidate) => {
+        setDiscoveredReferences(previous => [...previous.filter(item => referenceKey(item.reference) !== referenceKey(candidate.reference)), candidate]);
     }, []);
-
-    const refreshReferences = useCallback(() => {
-        refreshAssetIndex();
-        refreshPlatformReferences();
-    }, [refreshAssetIndex, refreshPlatformReferences]);
 
     useEffect(() => {
         setAssetIndex([]);
@@ -734,23 +529,8 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 });
             });
         }
-        for (const resource of platformReferences) {
-            const reference: AssetLibraryReference = {
-                asset_type: "platform_reference", asset_id: resource.platform_resource_id,
-                variant_id: String(resource.revision), source_scope: "platform", revision: resource.revision,
-            };
-            candidates.push({
-                label: resource.title,
-                sourceLabel: "平台参考库",
-                variantLabel: resource.category_path?.split("/").at(-1),
-                description: [resource.summary, ...(resource.tags || [])].filter(Boolean).join(" "),
-                platformResourceId: resource.platform_resource_id,
-                previewUrl: typeof resource.payload?.thumbnail_url === "string" ? resource.payload.thumbnail_url : undefined,
-                reference,
-            });
-        }
-        return candidates;
-    }, [assetIndex, platformReferences]);
+        return Array.from(new Map([...candidates, ...discoveredReferences].map(candidate => [referenceKey(candidate.reference), candidate])).values());
+    }, [assetIndex, discoveredReferences]);
 
     // Mode state for Asset Activation v2 (Static/Motion)
     const [fullBodyMode, setFullBodyMode] = useState<'static' | 'motion'>('static');
@@ -1547,6 +1327,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
             clearAIResultForInput();
             setDesignConstraints(value); setDesignStatus("draft"); setPromptsNeedDesignApply(true);
         }}
+        onReferenceCandidate={discoverReference}
         referenceCandidates={referenceCandidates}
         referenceSelections={designReferenceAssets}
         onRefreshReferences={refreshReferences}
@@ -1804,6 +1585,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         }}
                         platformPromptSource={platformPromptSources.full_body}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, full_body: source }))}
+                        onReferenceCandidate={discoverReference}
                         referenceCandidates={referenceCandidates}
                         onRefreshReferences={refreshReferences}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
@@ -1872,6 +1654,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         }}
                         platformPromptSource={platformPromptSources.three_view}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, three_view: source }))}
+                        onReferenceCandidate={discoverReference}
                         referenceCandidates={referenceCandidates}
                         onRefreshReferences={refreshReferences}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
@@ -1920,6 +1703,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         }}
                         platformPromptSource={platformPromptSources.headshot}
                         onPlatformPromptSourceChange={(source: AppliedPlatformPrompt | null) => setPlatformPromptSources((current) => ({ ...current, headshot: source }))}
+                        onReferenceCandidate={discoverReference}
                         referenceCandidates={referenceCandidates}
                         onRefreshReferences={refreshReferences}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
@@ -2046,6 +1830,7 @@ export function WorkbenchPanel({
     onDictionaryConfiguration,
     referenceCandidates = [],
     onRefreshReferences,
+    onReferenceCandidate,
     onReferencesChange,
     showReferencePicker = false,
     designReferences,
@@ -2129,7 +1914,7 @@ export function WorkbenchPanel({
                     <span className="font-medium text-text-secondary">本次实际传递的参考图：</span>{effectiveReferenceLabels.length ? ` ${effectiveReferenceLabels.join("、")}` : " 无（白模只作为骨相参数，不上传为参考图）"}
                 </div>}
                 {showReferencePicker && <div className="px-4 pt-2">
-                    <AssetReferencePicker
+                    <ReferenceMaterialPicker
                         candidates={referenceCandidates}
                         selected={pickerReferences}
                         onChange={(references) => {
@@ -2137,7 +1922,7 @@ export function WorkbenchPanel({
                             if (references.length > 0) onImageGenerationModeChange?.("reference");
                         }}
                         title="选择参考素材"
-                        description="不用记住 @：搜索并选择要传给图片模型的素材变体。"
+                        onDiscover={onReferenceCandidate}
                         onOpen={onRefreshReferences}
                     />
                 </div>}

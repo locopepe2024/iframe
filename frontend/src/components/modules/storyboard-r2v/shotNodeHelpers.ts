@@ -209,6 +209,7 @@ export function frameToShotNode(
         generateAudio: typeof frame.workbench_generate_audio === "boolean"
             ? frame.workbench_generate_audio
             : undefined,
+        materialReferences: frame.workbench_material_references || [],
         referenceVariantIds: frame.workbench_reference_variant_ids && typeof frame.workbench_reference_variant_ids === "object"
             ? frame.workbench_reference_variant_ids
             : {},
