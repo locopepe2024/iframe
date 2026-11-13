@@ -1,3 +1,4 @@
+import math
 import sys
 from pathlib import Path
 
@@ -80,7 +81,7 @@ def test_bounded_plane_correction_returns_unapplied_request():
     from bounded_support_ik import bounded_plane_correction
     result = bounded_plane_correction([[0, 0, 0], [1, 0, .01], [0, 1, 0]])
     assert result['applied'] is False
-    assert result['angleDeg'] == pytest.approx(-0.5729, rel=1e-3)
+    assert result['angleDeg'] == pytest.approx(0.5729, rel=1e-3)
     assert result['planeResidualM'] == pytest.approx(0)
 
 
@@ -101,3 +102,64 @@ def test_ground_patch_rejects_invalid_band():
     from bounded_support_ik import select_ground_patch
     with pytest.raises(ValueError):
         select_ground_patch([[0, 0, 0]], 0)
+
+
+@pytest.mark.parametrize('a,b', [(0.04, 0), (0, -.07), (.04, -.06), (-.05, .03), (0, 0)])
+def test_requested_rotation_flattens_contact_geometry(a, b):
+    from bounded_support_ik import bounded_plane_correction, fit_contact_plane
+    points = [[x, y, a*x+b*y] for x, y in [(0, 0), (.1, 0), (0, .1), (.1, .1)]]
+    request = bounded_plane_correction(points)
+    axis = request['axisWorld']
+    angle = math.radians(request['angleDeg'])
+    # Rodrigues' rotation, independent of the slope-to-axis implementation.
+    rotated = []
+    for p in points:
+        cross = [axis[1]*p[2]-axis[2]*p[1], axis[2]*p[0]-axis[0]*p[2], axis[0]*p[1]-axis[1]*p[0]]
+        projection = sum(x*y for x, y in zip(axis, p))
+        rotated.append([p[i]*math.cos(angle)+cross[i]*math.sin(angle)
+                        +axis[i]*projection*(1-math.cos(angle)) for i in range(3)])
+    assert fit_contact_plane(rotated)['tiltDeg'] < 1e-8
+    assert max(p[2] for p in rotated)-min(p[2] for p in rotated) < 1e-10
+
+
+def test_plane_fit_is_stable_under_large_world_translation():
+    from bounded_support_ik import fit_contact_plane
+    points = [[x, y, .04*x-.03*y] for x, y in [(0, 0), (.1, 0), (0, .1), (.1, .1)]]
+    moved = [[x+1e6, y-1e6, z+100] for x, y, z in points]
+    assert fit_contact_plane(moved)['slopeXY'] == pytest.approx([.04, -.03], abs=1e-8)
+    assert fit_contact_plane(moved)['maxAbsResidualM'] < 1e-8
+
+
+@pytest.mark.parametrize('scale', [.001, 1, 1000])
+def test_plane_rank_check_is_independent_of_patch_scale(scale):
+    from bounded_support_ik import fit_contact_plane
+    points = [[scale*x, scale*y, scale*.03*x] for x, y in [(0, 0), (.1, 0), (0, .1)]]
+    assert fit_contact_plane(points)['slopeXY'] == pytest.approx([.03, 0])
+    with pytest.raises(ValueError, match='collinear'):
+        fit_contact_plane([[0, 0, 0], [scale, 0, .03*scale], [scale, 1e-8*scale, .03*scale]])
+
+
+@pytest.mark.parametrize('patch', [
+    [[0, 0, 0], [.1, 0, 0], [.2, 0, 0], [0, .1, .02]],
+    [[0, 0, 0], [.1, 0, .02], [0, .1, .03], [.1, .1, .04]],
+])
+def test_filtered_degenerate_patch_is_rejected_without_losing_phase_metrics(patch):
+    item = sample(0, 1, [0, 0, 0])
+    item['soleRegionWorldM'] = patch
+    report = summarize_contact_phases([item], 24)['fullWeight']
+    assert report['maxAnchorResidualM'] == 0
+    assert report['patchPlane'] is None
+    assert report['planeCorrection']['status'] == 'rejected'
+    assert report['planeCorrection']['applied'] is False
+
+
+def test_phase_reports_each_frame_including_later_unsafe_tilt():
+    items = [sample(0, 1, [0, 0, 0]), sample(1, 1, [0, 0, 0])]
+    for item, slope in zip(items, (0.02, .2)):
+        item['soleRegionWorldM'] = [[0, 0, 0], [.02, 0, .02*slope], [0, .02, 0]]
+    result = summarize_contact_phases(items, 24)['fullWeight']
+    assert result['patchPlaneFrame'] == 0
+    assert [p['frame'] for p in result['planeFrames']] == [0, 1]
+    assert result['planeFrames'][0]['planeCorrection']['status'] == 'diagnostic_only'
+    assert result['planeFrames'][1]['planeCorrection']['status'] == 'rejected'
+    assert result['maxPatchTiltDeg'] == pytest.approx(math.degrees(math.atan(.2)))
