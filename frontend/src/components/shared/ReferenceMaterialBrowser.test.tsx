@@ -48,3 +48,12 @@ it('uploads an image and verifies the owner registry ID', async () => {
     await waitFor(() => expect(mocks.resolve).toHaveBeenCalledWith({ asset_type: 'media', asset_id: 'upload-1', variant_id: 'upload-1', source_scope: 'private' }, 'project', 'test.png'));
     await waitFor(() => expect(select).toHaveBeenCalledOnce());
 });
+it('keeps a chosen platform image when project candidates refresh', async () => {
+    const select = vi.fn(); const close = vi.fn();
+    const view = render(<ReferenceMaterialBrowser open onClose={close} onSelect={select} candidates={[]} />);
+    fireEvent.click(await screen.findByRole('button', { name: title }));
+    view.rerender(<ReferenceMaterialBrowser open onClose={close} onSelect={select} candidates={[{ label: '更新的角色', reference: { asset_type: 'character', asset_id: 'new', variant_id: 'front' } }]} />);
+    await waitFor(() => expect(screen.getByRole('button', { name: '使用参考素材' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '使用参考素材' }));
+    await waitFor(() => expect(select).toHaveBeenCalledWith(expect.objectContaining({ reference: expect.objectContaining({ asset_id: 'pose.high.depth' }) }), expect.anything()));
+});

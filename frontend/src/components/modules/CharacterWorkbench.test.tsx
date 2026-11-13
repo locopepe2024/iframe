@@ -723,6 +723,7 @@ it("removes a deleted shared asset when the reference picker opens again", async
     fireEvent.click(screen.getByRole("button", { name: "关闭参考素材" }));
     fireEvent.click(picker);
     await waitFor(() => expect(apiMocks.getAssetReferenceIndex).toHaveBeenCalledTimes(3));
+    fireEvent.click(screen.getByRole("tab", { name: "项目资产" }));
     await waitFor(() => expect(screen.getAllByText("没有匹配的参考素材").length).toBeGreaterThan(0));
     expect(screen.queryByText("Deleted actor")).not.toBeInTheDocument();
 });
