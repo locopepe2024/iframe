@@ -141,6 +141,12 @@ jobs:
           npm test -- --run src/__tests__/voice-catalog-api.test.ts
           npm run test:ui -- src/components/modules/Cast.test.tsx src/components/modules/cast/CharacterVoiceBinding.test.tsx src/components/modules/CharacterDesignPanel.test.tsx src/components/modules/playground/ReferencePromptEditor.test.tsx src/components/modules/CharacterPromptDictionary.test.tsx
 
+      - name: Verify editing timeline and save contracts
+        working-directory: frontend
+        run: |
+          npm test -- --run src/__tests__/editing-contract.test.ts src/__tests__/assembly-render.test.ts
+          npm run test:ui -- src/components/modules/assemblyEditing.test.tsx src/components/modules/AssemblyTracks.test.tsx src/components/modules/TimelineFilmstrip.test.tsx src/components/modules/TimelineAudioPreview.test.tsx src/components/modules/TimelineWaveform.test.tsx src/components/modules/editing/EditingPage.test.tsx src/components/modules/editing/EditingNavigationGuard.test.tsx
+
       - name: Build frontend export
         working-directory: frontend
         env:
