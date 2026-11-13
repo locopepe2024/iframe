@@ -15,6 +15,7 @@ beforeEach(() => {
 it('searches 举臂交叉 and submits its stable revision only after confirmation', async () => {
     const select = vi.fn(); render(<ReferenceMaterialBrowser open onClose={vi.fn()} onSelect={select} />);
     fireEvent.change(screen.getByLabelText('快速搜索参考素材'), { target: { value: '举臂交叉' } });
+    expect(screen.getByRole('dialog', { name: '参考素材' }).closest('[data-agent-asset-picker]')).not.toBeNull();
     fireEvent.click(await screen.findByRole('button', { name: title })); expect(select).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '使用参考素材' }));
     await waitFor(() => expect(select).toHaveBeenCalledWith(expect.objectContaining({ reference: { asset_type: 'platform_reference', asset_id: 'pose.high.depth', variant_id: '1', revision: 1, source_scope: 'platform' } }), expect.objectContaining({ label: title })));

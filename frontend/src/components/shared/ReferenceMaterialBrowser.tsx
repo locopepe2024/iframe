@@ -172,7 +172,7 @@ export default function ReferenceMaterialBrowser({ open, onClose, onSelect, proj
         } catch (error) { setErrors([failure(error)]); }
         finally { setBusy(false); }
     };
-    return createPortal(<div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+    return createPortal(<div data-agent-asset-picker className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 p-3" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
         <div ref={dialog} role="dialog" aria-modal="true" aria-label="参考素材" className="flex max-h-[85dvh] min-h-[360px] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-glass-border bg-elevated shadow-xl"
             onKeyDown={event => {
                 if (event.key === 'Escape' && !busy) { event.stopPropagation(); onClose(); }
