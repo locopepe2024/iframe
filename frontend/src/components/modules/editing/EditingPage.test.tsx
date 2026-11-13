@@ -4,6 +4,7 @@ import EditingPage, { EditingMaterials, EditingMaterialManager } from './Editing
 import { editing, type EditProject, type EditMaterial } from '@/lib/editing';
 import { agentRequest, agentTranscribe } from '@/lib/api';
 import type { AssemblyEditPlan } from '@/lib/api';
+import { requestEditingNavigation } from '@/lib/editingNavigationGuard';
 vi.mock('next-intl', () => ({ useLocale: () => 'en' }));
 vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), agentRequest: vi.fn(), agentTranscribe: vi.fn() }));
 vi.mock('../cast/VoicePickerModal', () => ({ default: ({ isOpen, onApply }: { isOpen: boolean; onApply: (id: string, name: string) => void }) => isOpen ? <button type="button" onClick={() => onApply('uniart:speech-2.8-hd:male-qn-qingse', 'Qingse')}>Pick Qingse</button> : null }));
@@ -37,6 +38,58 @@ async function openDirtyTimeline() {
   fireEvent.click(screen.getByRole('button', { name: 'Edit clip 1: Original.mp4' }));
   fireEvent.change(screen.getByRole('spinbutton', { name: 'Playhead (seconds)' }), { target: { value: '0.5' } });
 }
+
+it('keeps the draft when leaving is canceled, and discards it only after confirmation', async () => {
+  await openDirtyTimeline();
+  expect(requestEditingNavigation('#/library')).toBe(true);
+  expect(await screen.findByRole('dialog', { name: 'Leave editing?' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Stay' }));
+  expect(screen.queryByRole('dialog', { name: 'Leave editing?' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Unsaved/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled();
+
+  expect(requestEditingNavigation('#/library')).toBe(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Discard and leave' }));
+  await waitFor(() => expect(window.location.hash).toBe('#/library'));
+});
+
+it('keeps an unsaved draft when switching to the internal materials tab', async () => {
+  await openDirtyTimeline();
+  fireEvent.click(screen.getByRole('button', { name: 'Materials' }));
+  expect(await screen.findByText(/Manage uploaded materials/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Editing' }));
+  expect(screen.getByText(/Unsaved/)).toBeInTheDocument();
+  expect(screen.queryByRole('dialog', { name: 'Leave editing?' })).not.toBeInTheDocument();
+});
+
+it('saves before leaving and keeps the dialog and draft available after save failure', async () => {
+  vi.mocked(editing.save).mockRejectedValueOnce(new Error('Save unavailable'));
+  await openDirtyTimeline();
+  expect(requestEditingNavigation('#/settings')).toBe(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Save and leave' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Save unavailable');
+  expect(screen.getByRole('dialog', { name: 'Leave editing?' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Save edit' })).toBeEnabled();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Save and leave' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(window.location.hash).toBe('#/settings'));
+});
+
+it('waits for an in-flight save before continuing a requested leave', async () => {
+  let finishSave!: (value: EditProject) => void;
+  vi.mocked(editing.save).mockImplementationOnce(() => new Promise(resolve => { finishSave = resolve; }));
+  await openDirtyTimeline();
+  fireEvent.click(screen.getByRole('button', { name: 'Save edit' }));
+  await waitFor(() => expect(editing.save).toHaveBeenCalledOnce());
+  expect(requestEditingNavigation('#/director')).toBe(true);
+  await screen.findByRole('dialog', { name: 'Leave editing?' });
+  expect(screen.getByRole('button', { name: 'Discard and leave' })).toBeDisabled();
+  const submitted = vi.mocked(editing.save).mock.calls[0][2];
+  await act(async () => finishSave({ ...project, revision: 1, plan: submitted, sources: { [material.id]: material } }));
+  await waitFor(() => expect(window.location.hash).toBe('#/director'));
+  expect(screen.queryByRole('dialog', { name: 'Leave editing?' })).not.toBeInTheDocument();
+});
 
 it('blocks custom shortcuts during save and render, then allows new edits and undo', async () => {
   let finishSave!: (project: EditProject) => void;
