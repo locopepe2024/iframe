@@ -49,6 +49,19 @@ export default function VoicePickerModal({
     const [previewingId, setPreviewingId] = useState<string | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const previewRequest = useRef(0);
+    const dialogRef = useRef<HTMLDialogElement>(null);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const previous = document.activeElement as HTMLElement | null;
+        const dialog = dialogRef.current;
+        dialog?.showModal();
+        dialog?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+        return () => {
+            dialog?.close();
+            if (previous?.isConnected) previous.focus();
+        };
+    }, [isOpen]);
 
     useEffect(() => () => {
         previewRequest.current++;
@@ -149,9 +162,15 @@ export default function VoicePickerModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] grid place-items-center bg-overlay backdrop-blur-sm" onClick={() => { if (!savingRef.current) onClose(); }}>
+        <dialog ref={dialogRef} aria-modal="true" aria-label={t("title")}
+            className="fixed inset-0 z-[100] m-0 grid h-dvh max-h-none w-screen max-w-none place-items-center border-0 bg-overlay p-0 text-foreground backdrop-blur-sm backdrop:bg-transparent"
+            onCancel={event => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!savingRef.current) onClose();
+            }}
+            onClick={event => { if (event.target === event.currentTarget && !savingRef.current) onClose(); }}>
             <div
-                role="dialog" aria-modal="true" aria-label={t("title")}
                 className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-2xl border border-glass-border bg-elevated shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7)]"
                 onClick={(e) => e.stopPropagation()}
             >
@@ -259,7 +278,7 @@ export default function VoicePickerModal({
             </div>
 
 
-        </div>
+        </dialog>
     );
 }
 

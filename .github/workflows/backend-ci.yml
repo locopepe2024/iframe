@@ -139,7 +139,7 @@ jobs:
         working-directory: frontend
         run: |
           npm test -- --run src/__tests__/voice-catalog-api.test.ts
-          npm run test:ui -- src/components/modules/Cast.test.tsx src/components/modules/cast/CharacterVoiceBinding.test.tsx src/components/modules/CharacterDesignPanel.test.tsx src/components/modules/playground/ReferencePromptEditor.test.tsx src/components/modules/CharacterPromptDictionary.test.tsx
+          npm run test:ui -- src/components/modules/Cast.test.tsx src/components/modules/cast/CharacterVoiceBinding.test.tsx src/components/modules/cast/VoicePickerModal.test.tsx src/components/modules/CharacterDesignPanel.test.tsx src/components/modules/playground/ReferencePromptEditor.test.tsx src/components/modules/CharacterPromptDictionary.test.tsx
 
       - name: Verify editing timeline and save contracts
         working-directory: frontend
