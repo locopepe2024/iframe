@@ -672,12 +672,12 @@ it('configures gender, age and height together while omitting cleared fields', (
   expect(replaceWithText).toHaveBeenCalledWith('年龄：人物年龄阶段为婴儿。');
 });
 
-it('browses all 45 upstream styles and inserts edited text only after confirmation', () => {
+it('keeps all 45 upstream styles alongside eight color looks and inserts edited text only after confirmation', () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText, onApply } = setup('');
   fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
   fireEvent.click(screen.getByRole('option', { name: /^视觉风格/ }));
-  expect(screen.getAllByRole('option').filter(node => node.getAttribute('aria-label')?.startsWith('Prompt 模板 ·'))).toHaveLength(45);
+  expect(screen.getAllByRole('option').filter(node => node.getAttribute('aria-label')?.startsWith('Prompt 模板 ·'))).toHaveLength(53);
   fireEvent.change(screen.getByRole('combobox', { name: '来源模板分类' }), { target: { value: '古装' } });
   expect(screen.getAllByRole('option').filter(node => node.getAttribute('aria-label')?.startsWith('Prompt 模板 ·'))).toHaveLength(3);
   fireEvent.click(screen.getByRole('option', { name: /Prompt 模板 · 武侠江湖/ }));
@@ -688,6 +688,58 @@ it('browses all 45 upstream styles and inserts edited text only after confirmati
   fireEvent.click(screen.getByRole('button', { name: '使用此模板' }));
   expect(replaceWithText).toHaveBeenCalledWith('用户修改后的写实风格');
   expect(onApply.mock.calls[0][1].structuredFields).toBeUndefined();
+});
+
+it('filters color looks within visual styles and appends only the edited preview after explicit application', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const appendWithText = vi.fn(text => `原有角色设计。\n${text}`);
+  const replaceWithText = vi.fn();
+  const onApply = vi.fn();
+  const onConfiguration = vi.fn();
+  render(<CharacterPromptDictionary suggestion={{ query: '', appendWithText, replaceWithText }}
+    onApply={onApply} onConfiguration={onConfiguration} onClose={vi.fn()} keyHandler={{ current: null }} />);
+  fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
+  fireEvent.click(screen.getByRole('option', { name: /^视觉风格/ }));
+  const category = screen.getByRole('combobox', { name: '来源模板分类' });
+  fireEvent.change(category, { target: { value: '黑白影调' } });
+  expect(screen.getAllByRole('option').filter(node => node.getAttribute('aria-label')?.startsWith('Prompt 模板 ·'))).toHaveLength(2);
+  expect(screen.queryByRole('option', { name: /Prompt 模板 · 鲜艳清晰/ })).not.toBeInTheDocument();
+  fireEvent.change(category, { target: { value: '胶片色彩' } });
+  expect(screen.getAllByRole('option').filter(node => node.getAttribute('aria-label')?.startsWith('Prompt 模板 ·'))).toHaveLength(6);
+  fireEvent.click(screen.getByRole('option', { name: /Prompt 模板 · 鲜艳清晰/ }));
+  expect(screen.getByText(/参考方向：Kodak Ektar 100/)).toHaveTextContent('组合提醒：与以下要求可能冲突：整体灰淡低饱和');
+  expect(screen.getByText(/iFrame 改写/)).toHaveTextContent('4a37fa65');
+  const preview = screen.getByRole('textbox', { name: '将插入的完整文字' });
+  expect(preview).not.toHaveAttribute('readonly');
+  expect((preview as HTMLTextAreaElement).value).not.toContain('组合提醒');
+  expect(onApply).not.toHaveBeenCalled();
+  expect(appendWithText).not.toHaveBeenCalled();
+  const edited = '保留原有角色设计，仅使用克制的鲜艳配色。';
+  fireEvent.change(preview, { target: { value: edited } });
+  fireEvent.click(screen.getByRole('button', { name: '使用此模板' }));
+  expect(appendWithText).toHaveBeenCalledExactlyOnceWith(edited);
+  expect(replaceWithText).not.toHaveBeenCalled();
+  expect(onConfiguration).not.toHaveBeenCalled();
+  expect(onApply).toHaveBeenCalledWith(`原有角色设计。\n${edited}`, expect.objectContaining({
+    id: 'film-color.ektar-100', text: edited, structuredFields: undefined,
+  }));
+});
+
+it.each([
+  ['Acros', '细腻灰阶黑白'],
+  ['CineStill 800T', '夜景高光光晕'],
+  ['柔和粉彩', '柔和粉彩'],
+])('finds a color look by %s without applying it when preview is closed', (query, title) => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { onApply, replaceWithText, onClose } = setup('');
+  fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索面板、词典或模板' }), { target: { value: query } });
+  fireEvent.click(screen.getByRole('option', { name: `Prompt 模板 · ${title}` }));
+  expect(screen.getByRole('textbox', { name: '将插入的完整文字' })).not.toHaveAttribute('readonly');
+  fireEvent.click(screen.getByRole('button', { name: '关闭面板' }));
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(onApply).not.toHaveBeenCalled();
+  expect(replaceWithText).not.toHaveBeenCalled();
 });
 
 it('keeps motion and contact sheets in separate tasks and resets the upstream tag when returning', () => {
