@@ -3,7 +3,7 @@ import { describeSceneDirection } from "./sceneDirection";
 export interface ScenePromptLayers {
     version?: 1;
     lighting?: Partial<Record<"season" | "time_of_day" | "source" | "direction" | "quality" | "fill" | "contrast" | "mood" | "air" | "color" | "shadow" | "rim", string>> & { angles?: SceneLayerAngles | null };
-    camera?: Partial<Record<"framing" | "viewpoint" | "focal_length" | "depth_of_field", string>> & { angles?: SceneLayerAngles | null; focus?: SceneFocusPoint | null };
+    camera?: Partial<Record<"framing" | "viewpoint" | "focal_length" | "depth_of_field" | "capture_device" | "image_character", string>> & { angles?: SceneLayerAngles | null; focus?: SceneFocusPoint | null };
     composition?: Partial<Record<"subject_position" | "spatial_layers" | "leading_relation" | "frame_orientation", string>>;
 }
 export interface SceneFocusPoint { target?: string; x?: number | null; y?: number | null; radius?: number | null }
@@ -80,10 +80,25 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
             ["平视", "平视机位"], ["高机位", "高机位俯视"], ["低机位", "低机位仰视"], ["正俯视", "正上方垂直俯视"], ["侧视", "侧面机位"], ["背视", "背面机位"],
         ] },
         { key: "focal_length", label: "焦距观感", options: [
-            ["广角", "广角观感，近大远小的透视关系明显，空间纵深展开"], ["标准", "标准焦距观感，空间比例自然"], ["长焦", "长焦观感，远近空间呈压缩感"], ["鱼眼", "鱼眼镜头观感，边缘呈明显桶形弯曲"],
+            ["14mm 超广角", "14mm 全画幅等效超广角，近大远小的透视关系明显"], ["24mm 广角", "24mm 全画幅等效广角，空间纵深展开"],
+            ["35mm 纪实", "35mm 全画幅等效焦段，呈现自然环境关系"], ["50mm 标准", "50mm 全画幅等效标准焦段，空间比例自然"],
+            ["85mm 人像", "85mm 全画幅等效人像焦段，透视压缩适中"], ["135mm 长焦", "135mm 全画幅等效长焦，远近空间压缩明显"],
+            ["200mm 超长焦", "200mm 全画幅等效超长焦，视角狭窄、空间压缩明显"], ["广角", "广角观感，近大远小的透视关系明显，空间纵深展开"],
+            ["标准", "标准焦距观感，空间比例自然"], ["长焦", "长焦观感，远近空间呈压缩感"], ["鱼眼", "鱼眼镜头观感，边缘呈明显桶形弯曲"],
+        ] },
+        { key: "capture_device", label: "拍摄设备", options: [
+            ["Super 35 数字电影摄影机", "Super 35 数字电影摄影机观感"], ["大画幅数字电影摄影机", "大画幅数字电影摄影机观感"],
+            ["35mm 胶片电影摄影机", "35mm 胶片电影摄影机观感，保留自然颗粒"], ["16mm 胶片摄影机", "16mm 胶片摄影机观感，颗粒与反差随场景呈现"],
+            ["手机多摄系统", "手机多摄系统观感；焦段按全画幅等效视角描述"], ["运动相机", "运动相机观感，通常使用超广视角"],
+            ["监控摄像机", "固定机位监控摄像机观感，成像质感依具体设备而定"],
         ] },
         { key: "depth_of_field", label: "景深", options: [
             ["深景深", "深景深，前中后景均清晰可辨"], ["中等景深", "中等景深，主体清楚，远处逐渐失焦"], ["浅景深", "浅景深，主体清楚，焦外区域失焦"],
+        ] },
+        { key: "image_character", label: "成像质感", options: [
+            ["高解析细节", "高解析成像，主体与材质细节清晰"], ["自然材质", "自然成像，保留适度纹理与细节"],
+            ["细颗粒胶片", "细腻胶片颗粒与平顺影调，主体细节仍清楚"], ["粗颗粒低保真", "粗颗粒、低保真录像质感，弱化精细纹理"],
+            ["柔焦低反差", "柔焦低反差成像，边缘细节与明暗反差收敛"],
         ] },
     ],
     composition: [
@@ -101,6 +116,47 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
         ] },
     ],
 };
+
+export function sceneCameraCompatibilityNotes(layers: ScenePromptLayers): string[] {
+    const camera = layers.camera;
+    if (!camera) return [];
+    const notes: string[] = [];
+    const focal = camera.focal_length || "";
+    const framing = camera.framing || "";
+    const viewpoint = camera.viewpoint || "";
+    const device = camera.capture_device || "";
+    if (/14mm|24mm|广角|鱼眼/.test(focal) && /近景|特写|细节/.test(framing)) {
+        notes.push("广角或鱼眼靠近主体会强化近大远小和边缘变形；若要自然人脸比例，可退远拍摄再裁切。若要夸张透视，这种组合可以保留。");
+    }
+    if (/135mm|200mm|长焦/.test(focal) && /大全景|全景/.test(framing)) {
+        notes.push("长焦拍大全景或全景需要较远机位与足够空间；检查场地距离，或改用较短焦段保留环境范围。");
+    }
+    if (/高机位|俯视|正俯视/.test(viewpoint) && /近景|特写|细节/.test(framing)) {
+        notes.push("俯视近景会改变面部与物体的可见比例；若身份或形状辨识优先，确认俯角仍能呈现关键特征。俯拍特写本身可以是有意选择。");
+    }
+    if (/低机位|仰视/.test(viewpoint) && /14mm|24mm|广角/.test(focal)) {
+        notes.push("低机位广角会加强垂直线汇聚和近处透视夸张；若建筑线条需保持端正，可改高机位/标准焦段，或明确要求透视校正。");
+    }
+    if (/手机/.test(device) && /85mm|135mm|200mm/.test(focal)) {
+        notes.push("手机的长焦视角通常由独立长焦模组或裁切实现；这里的焦段是全画幅等效视角，不代表手机镜头的实际焦距。");
+    }
+    if (/运动相机/.test(device) && /85mm|135mm|200mm/.test(focal)) {
+        notes.push("常见运动相机使用固定超广角；长焦要求与其默认视角不一致。若是可换镜头机型或后期裁切，请在描述中注明。");
+    }
+    if (/监控摄像机/.test(device) && /浅景深/.test(camera.depth_of_field || "")) {
+        notes.push("固定机位监控画面通常呈现较深景深；若要浅景深效果，可注明这是刻意的电影化处理。");
+    }
+    if (/运动相机/.test(device) && /浅景深/.test(camera.depth_of_field || "")) {
+        notes.push("常见小型运动相机偏深景深；若保留浅景深，说明使用大传感器/可换镜头机型或后期模拟。");
+    }
+    if (/手机/.test(device) && /浅景深/.test(camera.depth_of_field || "")) {
+        notes.push("手机浅景深可能来自长焦模组或计算虚化；若需要自然遮挡边缘，可注明光学虚化优先于人像抠图效果。");
+    }
+    if (/粗颗粒|低保真/.test(camera.image_character || "") && /特写|细节/.test(framing)) {
+        notes.push("粗颗粒低保真会遮蔽细小纹理；若细节特写必须清楚，可降低颗粒强度或改用自然成像。");
+    }
+    return notes;
+}
 
 const titles: Record<SceneLayer, string> = { lighting: "光影", camera: "镜头", composition: "构图" };
 export function compileScenePromptLayers(layers: ScenePromptLayers): string {

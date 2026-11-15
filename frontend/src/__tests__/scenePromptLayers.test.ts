@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compileScenePromptLayers, sceneLightDirectionConflict, SCENE_LAYER_FIELDS } from "@/lib/scenePromptLayers";
+import { compileScenePromptLayers, sceneCameraCompatibilityNotes, sceneLightDirectionConflict, SCENE_LAYER_FIELDS } from "@/lib/scenePromptLayers";
 
 describe("static scene prompt layers", () => {
     it("emits no implicit defaults or bundled aesthetics", () => {
@@ -10,6 +10,13 @@ describe("static scene prompt layers", () => {
         const longLens = SCENE_LAYER_FIELDS.camera.find(f => f.key === "focal_length")!.options.find(o => o[0] === "长焦")![1];
         expect(compileScenePromptLayers({ camera: { focal_length: longLens } })).toBe(`镜头：焦距观感：${longLens}`);
         expect(longLens).not.toMatch(/景深|虚化|柔化/);
+    });
+    it("compiles opt-in capture device and image character separately from model resolution", () => {
+        expect(compileScenePromptLayers({ camera: {
+            capture_device: "手机多摄系统观感；焦段按全画幅等效视角描述",
+            focal_length: "85mm 全画幅等效人像焦段，透视压缩适中",
+            image_character: "自然成像，保留适度纹理与细节",
+        } })).toBe("镜头：焦距观感：85mm 全画幅等效人像焦段，透视压缩适中；拍摄设备：手机多摄系统观感；焦段按全画幅等效视角描述；成像质感：自然成像，保留适度纹理与细节");
     });
     it("keeps the three layers separate and compiles only selected fields", () => {
         expect(compileScenePromptLayers({
@@ -29,6 +36,28 @@ describe("static scene prompt layers", () => {
         expect(sceneLightDirectionConflict({ lighting: { direction: "背面来光" } }, ["front"])).toBe(false);
         expect(sceneLightDirectionConflict({ lighting: { direction: "背面来光" } }, ["back"])).toBe(true);
     });
+});
+
+it("advises on plausible shot and lens mismatches without forbidding intentional combinations", () => {
+    expect(sceneCameraCompatibilityNotes({ camera: {
+        framing: "特写，呈现材质或物件细节", focal_length: "14mm 全画幅等效超广角，近大远小的透视关系明显",
+    } })).toEqual(expect.arrayContaining([expect.stringContaining("广角或鱼眼靠近主体")]));
+    expect(sceneCameraCompatibilityNotes({ camera: {
+        framing: "大全景，展示完整环境及周边空间", focal_length: "200mm 全画幅等效超长焦，视角狭窄、空间压缩明显",
+    } })[0]).toContain("需要较远机位");
+    expect(sceneCameraCompatibilityNotes({ camera: {
+        capture_device: "手机多摄系统观感；焦段按全画幅等效视角描述",
+        focal_length: "85mm 全画幅等效人像焦段，透视压缩适中",
+    } })[0]).toContain("全画幅等效视角");
+    expect(sceneCameraCompatibilityNotes({ camera: {
+        viewpoint: "低机位仰视", focal_length: "14mm 全画幅等效超广角，近大远小的透视关系明显",
+    } })).toEqual(expect.arrayContaining([expect.stringContaining("垂直线汇聚")]));
+    expect(sceneCameraCompatibilityNotes({ camera: {
+        capture_device: "运动相机观感，通常使用超广视角", depth_of_field: "浅景深，主体清楚，焦外区域失焦",
+    } })[0]).toContain("小型运动相机偏深景深");
+    expect(sceneCameraCompatibilityNotes({ camera: {
+        framing: "特写，呈现材质或物件细节", focal_length: "50mm 全画幅等效标准焦段，空间比例自然",
+    } })).toEqual([]);
 });
 
 it("compiles explicit focus targets and image-relative coordinates without implying world distance", () => {

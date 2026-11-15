@@ -330,7 +330,7 @@ export function SceneImageTools({ kind, sources, sceneAssetId, projectId, lighti
                 }} />}
                 <ScenePromptLayersPanel value={panelSettings ?? {}} onChange={value => { setPanelSettings(value); setRimLight(false); setLightingPreset(null); setReviewedPrompt(""); }}
                     fields={kind === "lighting" ? { lighting: ["season", "time_of_day", "source", "quality", "fill", "contrast", "shadow", "rim", "mood", "air"] }
-                        : { camera: ["focal_length", "depth_of_field"], composition: ["frame_orientation", "subject_position", "spatial_layers", "leading_relation"] }} />
+                        : { camera: ["focal_length", "capture_device", "depth_of_field", "image_character"], composition: ["frame_orientation", "subject_position", "spatial_layers", "leading_relation"] }} />
                 <label className="block text-sm text-text-secondary" htmlFor={`${kind}-extra`}>补充提示词</label>
                 <textarea id={`${kind}-extra`} value={extra} onChange={(event) => setExtra(event.target.value)} onFocus={() => { if (kind === "camera") setCameraPromptEnabled(true); }} disabled={kind === "lighting" && !intelligent} rows={3} className={`${control} w-full py-2 disabled:opacity-50`} placeholder={kind === "lighting" ? "补充想要的光影氛围" : "补充镜头位置或构图要求"} />
                 {reviewedPrompt && <div className="space-y-2 rounded-lg border border-primary/40 bg-primary/5 p-3"><p className="text-xs font-medium text-foreground">提交前提示词核对</p><pre className="max-h-44 overflow-auto whitespace-pre-wrap text-xs leading-5 text-text-secondary">{reviewedPrompt}</pre><p className="text-xs text-text-muted">确认后将提交上面这份完整文本。</p></div>}

@@ -27,6 +27,16 @@ it("selects and clears independent fields, with no initial prompt", () => {
     expect(screen.getByTestId("prompt")).toHaveTextContent("景深：深景深");
 });
 
+it("shows conditional compatibility advice while keeping the selected settings intact", () => {
+    render(<Harness />);
+    open("镜头");
+    fireEvent.click(screen.getByRole("button", { name: "14mm 超广角" }));
+    fireEvent.click(screen.getByRole("button", { name: "近景" }));
+    expect(screen.getByText(/^组合提醒：/)).toHaveTextContent("广角或鱼眼靠近主体");
+    expect(screen.getByTestId("prompt")).toHaveTextContent("焦距观感");
+    expect(screen.getByRole("button", { name: "14mm 超广角" })).toHaveAttribute("aria-pressed", "true");
+});
+
 it("replaces only the chosen layer direction and can clear sphere settings", async () => {
     render(<Harness />);
     open("光影");

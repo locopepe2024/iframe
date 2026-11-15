@@ -231,10 +231,11 @@ def test_panel_settings_compile_without_legacy_preset_or_default_rim():
     assert "光影：光源：月光；软硬：硬光；轮廓光：蓝色轮廓光；氛围：清冷" in prompt
     assert "不额外增加明显轮廓光" not in prompt
     camera = scene_tool_prompt(parse_scene_tool({"kind": "camera", "panel_settings": {
-        "camera": {"focal_length": "鱼眼"}, "composition": {"frame_orientation": "倾斜画面"},
+        "camera": {"focal_length": "鱼眼", "capture_device": "监控摄像机观感", "image_character": "高解析成像"},
+        "composition": {"frame_orientation": "倾斜画面"},
     }}))
     assert "镜头设置；水平环绕" in camera
-    assert "镜头：焦距观感：鱼眼\n构图：画面倾斜：倾斜画面" in camera
+    assert "镜头：焦距观感：鱼眼；拍摄设备：监控摄像机观感；成像质感：高解析成像\n构图：画面倾斜：倾斜画面" in camera
     assert "预设视角" not in camera
 
 

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, type ReactNode } from "react";
-import { SCENE_LAYER_FIELDS, type SceneLayer, type SceneLayerAngles, type ScenePromptLayers } from "@/lib/scenePromptLayers";
+import { SCENE_LAYER_FIELDS, sceneCameraCompatibilityNotes, type SceneLayer, type SceneLayerAngles, type ScenePromptLayers } from "@/lib/scenePromptLayers";
 
 const SceneDirectionSphere = dynamic(() => import("./SceneDirectionSphere"), { ssr: false });
 const layerNames: Record<SceneLayer, string> = { lighting: "光影", camera: "镜头", composition: "构图" };
@@ -42,6 +42,10 @@ export default function ScenePromptLayersPanel({ value, onChange, fields, lighti
                         {typeof selected?.[field.key] === "string" && selected[field.key] &&
                             <p className="mt-1 text-xs text-text-muted">{String(selected[field.key])}</p>}
                     </fieldset>)}
+                    {layer === "camera" && <>
+                        <p className="text-xs text-text-muted">设备与成像质感是视觉描述；输出画幅和分辨率由生成任务与模型参数决定。</p>
+                        {sceneCameraCompatibilityNotes(value).map(note => <p key={note} role="status" className="text-xs text-amber-300">组合提醒：{note}</p>)}
+                    </>}
                     {!fields && layer === "camera" && <fieldset className="space-y-2 rounded border border-glass-border p-3">
                         <legend className="px-1 text-xs text-text-secondary">对焦</legend>
                         <label className="block text-xs text-text-secondary">对焦目标
