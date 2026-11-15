@@ -2,6 +2,7 @@
 
 import { OPEN_AI_CANVAS_PROMPTS } from "@/lib/openAiCanvasPrompts";
 import { FILM_COLOR_PROMPTS } from "@/lib/filmColorPrompts";
+import { COLOR_TECHNIQUE_PROMPTS } from "@/lib/colorTechniquePrompts";
 import { Search, X } from "lucide-react";
 import { createContext, Fragment, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
@@ -36,7 +37,7 @@ const DOMAINS: Record<string, string> = {
   "character.identity": "身份", "character.look": "造型", "character.performance": "表演", "world.style": "风格",
 };
 const DISCOVERY_SECTIONS = ["基础面板", "词典", "Prompt 模板"] as const;
-const PROMPT_REFERENCE_TEMPLATES = [...OPEN_AI_CANVAS_PROMPTS, ...FILM_COLOR_PROMPTS];
+const PROMPT_REFERENCE_TEMPLATES = [...OPEN_AI_CANVAS_PROMPTS, ...FILM_COLOR_PROMPTS, ...COLOR_TECHNIQUE_PROMPTS];
 export const CharacterDictionaryHost = createContext<HTMLElement | null>(null);
 
 const buttonStyle = "min-h-11 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary hover:bg-hover-bg";

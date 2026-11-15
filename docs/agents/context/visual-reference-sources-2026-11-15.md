@@ -54,3 +54,9 @@ videos, erotic examples or upstream agent instructions are imported.
 
 The broader source list remains the foundation for subsequent coverage review.
 Named-anchor absence alone does not prove that a visual effect is missing.
+
+Follow-up: `docs/agents/context/source-import-status-2026-11-15.md` records the
+nine-source status audit, the recovered 263-link Screenweaver inventory, separate
+IYIShow import evidence and the 15-direction color coverage comparison. Three
+independently authored color-technique entries extend the existing discovery UI;
+they do not turn the registered sites into imported catalogs.

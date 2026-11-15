@@ -672,12 +672,12 @@ it('configures gender, age and height together while omitting cleared fields', (
   expect(replaceWithText).toHaveBeenCalledWith('年龄：人物年龄阶段为婴儿。');
 });
 
-it('keeps all 45 upstream styles alongside eight color looks and inserts edited text only after confirmation', () => {
+it('keeps all 45 upstream styles alongside eight film looks and three color techniques', () => {
   getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
   const { replaceWithText, onApply } = setup('');
   fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
   fireEvent.click(screen.getByRole('option', { name: /^视觉风格/ }));
-  expect(screen.getAllByRole('option').filter(node => node.getAttribute('aria-label')?.startsWith('Prompt 模板 ·'))).toHaveLength(53);
+  expect(screen.getAllByRole('option').filter(node => node.getAttribute('aria-label')?.startsWith('Prompt 模板 ·'))).toHaveLength(56);
   fireEvent.change(screen.getByRole('combobox', { name: '来源模板分类' }), { target: { value: '古装' } });
   expect(screen.getAllByRole('option').filter(node => node.getAttribute('aria-label')?.startsWith('Prompt 模板 ·'))).toHaveLength(3);
   fireEvent.click(screen.getByRole('option', { name: /Prompt 模板 · 武侠江湖/ }));
@@ -736,6 +736,53 @@ it.each([
   fireEvent.change(screen.getByRole('searchbox', { name: '搜索面板、词典或模板' }), { target: { value: query } });
   fireEvent.click(screen.getByRole('option', { name: `Prompt 模板 · ${title}` }));
   expect(screen.getByRole('textbox', { name: '将插入的完整文字' })).not.toHaveAttribute('readonly');
+  fireEvent.click(screen.getByRole('button', { name: '关闭面板' }));
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(onApply).not.toHaveBeenCalled();
+  expect(replaceWithText).not.toHaveBeenCalled();
+});
+
+it('previews color technique meaning and combination advice but appends only confirmed edited text', () => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const appendWithText = vi.fn(text => `原有角色设计。\n${text}`);
+  const replaceWithText = vi.fn();
+  const onApply = vi.fn();
+  const onConfiguration = vi.fn();
+  render(<CharacterPromptDictionary suggestion={{ query: '', appendWithText, replaceWithText }}
+    onApply={onApply} onConfiguration={onConfiguration} onClose={vi.fn()} keyHandler={{ current: null }} />);
+  fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
+  fireEvent.click(screen.getByRole('option', { name: /^视觉风格/ }));
+  fireEvent.change(screen.getByRole('combobox', { name: '来源模板分类' }), { target: { value: '色彩技法' } });
+  expect(screen.getAllByRole('option').filter(node => node.getAttribute('aria-label')?.startsWith('Prompt 模板 ·'))).toHaveLength(3);
+  expect(screen.queryByRole('option', { name: /Prompt 模板 · 鲜艳清晰/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('option', { name: /Prompt 模板 · 暖褐单色/ }));
+  expect(screen.getByText(/技法含义：将画面归入褐色/)).toHaveTextContent('红蓝绿等多种固有色必须准确呈现');
+  expect(screen.getByText(/iFrame 独立编写/)).toHaveTextContent('ScreenWeaver');
+  const preview = screen.getByRole('textbox', { name: '将插入的完整文字' });
+  expect(preview).not.toHaveAttribute('readonly');
+  expect((preview as HTMLTextAreaElement).value).not.toMatch(/组合提醒|适用|ScreenWeaver/);
+  const edited = '回忆段落用轻柔的暖褐单色，保留服饰明暗层次。';
+  fireEvent.change(preview, { target: { value: edited } });
+  expect(onApply).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '使用此模板' }));
+  expect(appendWithText).toHaveBeenCalledExactlyOnceWith(edited);
+  expect(replaceWithText).not.toHaveBeenCalled();
+  expect(onConfiguration).not.toHaveBeenCalled();
+  expect(onApply).toHaveBeenCalledWith(`原有角色设计。\n${edited}`, expect.objectContaining({
+    id: 'color-technique.sepia', text: edited, structuredFields: undefined,
+  }));
+});
+
+it.each([
+  ['Bleach bypass', '跳漂·低饱和硬反差'],
+  ['Sepia', '暖褐单色·老照片影调'],
+  ['交叉冲洗', '反冲洗·实验偏色'],
+])('finds a color technique by %s and cancels without changing the draft', (query, title) => {
+  getPlatformReferenceLibrary.mockResolvedValueOnce({ resources: [] });
+  const { onApply, replaceWithText, onClose } = setup('');
+  fireEvent.click(screen.getByRole('tab', { name: 'Prompt 模板' }));
+  fireEvent.change(screen.getByRole('searchbox', { name: '搜索面板、词典或模板' }), { target: { value: query } });
+  fireEvent.click(screen.getByRole('option', { name: `Prompt 模板 · ${title}` }));
   fireEvent.click(screen.getByRole('button', { name: '关闭面板' }));
   expect(onClose).toHaveBeenCalledOnce();
   expect(onApply).not.toHaveBeenCalled();
