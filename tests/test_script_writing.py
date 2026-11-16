@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.apps.comic_gen.script_writing import build_episode_writing_messages, generate_episode_text
@@ -63,7 +64,8 @@ def test_generate_episode_text_uses_shared_llm_and_strips_fences():
     assert calls[0]["stream"] is True
 
 
-def test_script_writing_endpoint_is_owner_scoped_and_returns_preview_draft(monkeypatch):
+@pytest.mark.parametrize("mode", ["expand_outline", "continue"])
+def test_script_writing_endpoint_is_owner_scoped_and_returns_preview_draft(monkeypatch, mode):
     from src.apps.comic_gen import api
     from src.apps.identity import UserContext
 
@@ -72,7 +74,10 @@ def test_script_writing_endpoint_is_owner_scoped_and_returns_preview_draft(monke
         SimpleNamespace(id="episode-1", title="筹码不能流血", owner_profile_id=profile, series_id=None)
         if profile == owner.owner_profile_id else None
     ))
-    monkeypatch.setattr(api.pipeline.script_processor.llm, "chat", lambda **kwargs: "正文草稿")
+    calls = []
+    monkeypatch.setattr(api.pipeline.script_processor.llm, "chat", lambda **kwargs: (
+        calls.append(kwargs) or "正文草稿"
+    ))
     monkeypatch.setattr(api.extraction_jobs, "start", lambda _owner, _project, _fingerprint, work, **_kwargs: {
         "id": "job-1", "status": "completed", "result": work(), "error": None,
     })
@@ -80,7 +85,7 @@ def test_script_writing_endpoint_is_owner_scoped_and_returns_preview_draft(monke
     try:
         response = TestClient(api.app).post("/script-writing/generate", json={
             "project_id": "episode-1",
-            "mode": "expand_outline",
+            "mode": mode,
             "title": "筹码不能流血",
             "source_text": "纲手摘下项链。",
             "target_word_count": 2000,
@@ -90,7 +95,54 @@ def test_script_writing_endpoint_is_owner_scoped_and_returns_preview_draft(monke
 
     assert response.status_code == 202
     assert response.json()["result"]["draft"] == "正文草稿"
-    assert response.json()["result"]["mode"] == "expand_outline"
+    assert response.json()["result"]["mode"] == mode
+    system = calls[0]["messages"][0]["content"]
+    for dimension in ("01 场景与情境", "03 天气与身体状态", "04 服装与连续性",
+                      "06 动作与空间关系", "07 表情、眼神与情绪变化"):
+        assert dimension in system
+    assert "只按剧情需要选用" in system
+    assert ("单集大纲扩写技能" in system) == (mode == "expand_outline")
+    user_prompt = calls[0]["messages"][1]["content"]
+    assert "纲手摘下项链。" in user_prompt
+    if mode == "continue":
+        assert "只输出新增内容，不重复已有段落" in user_prompt
+
+
+@pytest.mark.parametrize("failure", ["missing", "empty"])
+def test_scene_detail_resources_fail_explicitly_before_model_call(tmp_path, monkeypatch, failure):
+    from src.apps.comic_gen import script_writing
+
+    for path in script_writing._SCENE_DETAIL_DIR.iterdir():
+        (tmp_path / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    resource = tmp_path / "06-action.md"
+    if failure == "missing":
+        resource.unlink()
+    else:
+        resource.write_text(" \n", encoding="utf-8")
+    monkeypatch.setattr(script_writing, "_SCENE_DETAIL_DIR", tmp_path)
+    calls = []
+    with pytest.raises(RuntimeError, match="06-action.md"):
+        generate_episode_text(
+            SimpleNamespace(chat=lambda **kw: calls.append(kw)),
+            mode="continue", title="返程", source_text="她走到门前。", target_word_count=100,
+        )
+    assert not calls
+
+
+def test_scene_detail_loader_does_not_import_unreviewed_neighboring_markdown(tmp_path, monkeypatch):
+    from src.apps.comic_gen import script_writing
+
+    for path in script_writing._SCENE_DETAIL_DIR.iterdir():
+        (tmp_path / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "unreviewed.md").write_text("UNREVIEWED_NEIGHBOR", encoding="utf-8")
+    monkeypatch.setattr(script_writing, "_SCENE_DETAIL_DIR", tmp_path)
+    messages = build_episode_writing_messages(
+        mode="continue", title="返程", source_text="她走到门前。", target_word_count=100,
+        instruction="保留结尾，不新增道具。",
+    )
+    assert "06 动作与空间关系" in messages[0]["content"]
+    assert "UNREVIEWED_NEIGHBOR" not in messages[0]["content"]
+    assert "保留结尾，不新增道具。" in messages[1]["content"]
 
 
 def test_script_writing_endpoint_rejects_foreign_project(monkeypatch):

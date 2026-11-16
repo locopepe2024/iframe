@@ -1,9 +1,38 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal
 
 
 WritingMode = Literal["expand_outline", "continue"]
+
+_SCENE_DETAIL_DIR = Path(__file__).with_name("presets") / "script-writing"
+_SCENE_DETAIL_FILES = (
+    "01-scene.md",
+    "03-physical-state.md",
+    "04-wardrobe.md",
+    "06-action.md",
+    "07-expression.md",
+)
+
+
+def _scene_detail_guidance() -> str:
+    """Load only the reviewed prose guides, never neighboring Markdown files."""
+    sections = [
+        "普通剧情与非露骨描写规则：\n"
+        "原稿事实、已确认设定、用户本次要求和当前任务的输出范围优先于下列描写建议。"
+        "只按剧情需要选用，不要求每场覆盖所有模块，不新增关键事实、线索或未来事件。"
+        "将适用细节融入中文剧本正文，不输出规则分析、模块标题、标签列表或英文提示词。"
+    ]
+    for filename in _SCENE_DETAIL_FILES:
+        try:
+            content = (_SCENE_DETAIL_DIR / filename).read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise RuntimeError(f"无法读取剧本描写规则：{filename}") from exc
+        if not content:
+            raise RuntimeError(f"剧本描写规则为空：{filename}")
+        sections.append(content)
+    return "\n\n".join(sections)
 
 
 def build_episode_writing_messages(
@@ -37,6 +66,7 @@ def build_episode_writing_messages(
             f"请从现有剧本结尾继续写约 {target_word_count} 字的后续正文。只输出新增内容，不重复已有段落；"
             "承接人物状态、场景、道具和已经发生的事件，不擅自改写原稿或提前兑现后续剧情。"
         )
+    system += "\n\n" + _scene_detail_guidance()
     constraints = [
         f"当前分集标题：{title.strip() or '未命名剧本'}",
         f"本集正文目标字数：约 {target_word_count} 字" if mode == "expand_outline" else f"本次新增目标字数：约 {target_word_count} 字",
@@ -81,7 +111,7 @@ def generate_passage_rewrite(
             "前后文仅用于衔接，不是改写范围。不得复述前后文，不续写整集，不改写未选中内容。"
             "只输出选中片段的替换正文，不输出解释、标题标签、分析过程或 Markdown 代码围栏。"
             "除非修改意见明确要求改变长度，保持与原片段相近的篇幅。"
-        )},
+        ) + "\n\n" + _scene_detail_guidance()},
         {"role": "user", "content": "\n\n".join([
             "剧本标题：" + title,
             "修改意见：\n" + instruction,
