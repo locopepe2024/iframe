@@ -91,6 +91,18 @@ def test_lookup_reuses_legacy_series_episode_without_source_link(planned_episode
     assert api.get_script_document_project(episodes[0]['id'], owner)['project_id'] == project.id
 
 
+def test_handoff_repairs_legacy_series_links_before_duplicate_check(planned_episodes):
+    owner, _, episodes = planned_episodes
+    first = asyncio.run(create(owner, episodes[0]))
+    second = asyncio.run(create(owner, episodes[1]))
+    first.source_script_document_id = None
+    second.source_script_document_id = None
+    result = asyncio.run(create(owner, episodes[0]))
+    assert result.id == first.id
+    assert first.source_script_document_id == episodes[0]['id']
+    assert second.source_script_document_id == episodes[1]['id']
+
+
 def test_concurrent_sibling_handoffs_create_one_series(planned_episodes):
     owner, _, episodes = planned_episodes
 

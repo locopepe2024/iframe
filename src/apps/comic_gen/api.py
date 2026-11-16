@@ -1305,7 +1305,7 @@ def _create_script_document_project(request: CreateProjectRequest, user: UserCon
     with pipeline._save_lock:
         source = load_script_document(request.source_script_document_id, user)
         source_document_id = source["id"]
-        existing = _find_script_document_project(source_document_id, user)
+        existing = _find_script_document_entry_project(source_document_id, user)
 
         def node_text(node):
             if node.get("type") == "hardBreak":

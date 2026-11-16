@@ -12182,6 +12182,21 @@ class ComicGenPipeline(StudioOwnerMixin):
             series = matches[0] if matches else None
             if requested_series_id and (not series or series.id != requested_series_id):
                 raise ValueError("分集必须进入总纲对应的制作系列")
+            if series:
+                # Older handoffs stored series membership but no source document
+                # id. Recover that link from the stable episode number before
+                # validating duplicate document ownership.
+                by_number = {number: document_id for document_id, number in episode_numbers.items()}
+                repaired = False
+                for script in self.scripts.values():
+                    if (script.owner_profile_id == owner_profile_id
+                            and script.id in series.episode_ids
+                            and not script.source_script_document_id
+                            and script.episode_number in by_number):
+                        script.source_script_document_id = by_number[script.episode_number]
+                        repaired = True
+                if repaired:
+                    self._save_data()
             episodes = [script for script in self.list_scripts(owner_profile_id)
                         if script.source_script_document_id in episode_numbers]
             if len({script.source_script_document_id for script in episodes}) != len(episodes):
