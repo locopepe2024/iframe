@@ -22,6 +22,7 @@ export interface RightPanelContainerProps {
   productionDisabled?: boolean;
   productionProjectId?: string;
   productionPending?: boolean;
+  productionAvailable?: boolean;
 }
 
 type PanelTab = 'entities' | 'shots' | 'pipeline' | 'notes' | 'ai';
@@ -41,6 +42,7 @@ export default function RightPanelContainer({
   productionDisabled,
   productionProjectId,
   productionPending,
+  productionAvailable = true,
 }: RightPanelContainerProps) {
   const t = useTranslations('scriptEditor');
   const activePanel = useEditorStore((s) => s.activeRightPanel);
@@ -188,6 +190,7 @@ export default function RightPanelContainer({
                 onEnterPipeline={onEnterPipeline}
                 disabled={productionDisabled}
                 isEntering={productionPending}
+                productionAvailable={productionAvailable}
               />
             )}
             {currentTab === 'entities' && entityPanel === 'locations' && !isEmbedded && (

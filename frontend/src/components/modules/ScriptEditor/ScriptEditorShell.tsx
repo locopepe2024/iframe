@@ -64,6 +64,9 @@ export default function ScriptEditorShell({
   const [seriesImportError, setSeriesImportError] = useState('');
   const [documentLoading, setDocumentLoading] = useState(Boolean(projectId || scriptDocumentId));
   const [documentLoadFailed, setDocumentLoadFailed] = useState(false);
+  const [authoringParentId, setAuthoringParentId] = useState<string | null | undefined>(
+    scriptDocumentId ? undefined : null,
+  );
   const { showHint, analysis, applyFormatting, dismissHint } = usePasteHandler(editor);
   const { showShortcutHelp, closeShortcutHelp } = useKeyboardShortcuts(editor);
   const continuityReport = useContinuityCheck(editor);
@@ -76,8 +79,22 @@ export default function ScriptEditorShell({
   const canPersist = Boolean(documentKey) && !documentLoading && !documentLoadFailed;
   const { save } = useAutoSave(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined, projectTitle);
   const productionDisabled = !canPersist || isOffline || navigating || outlineOpen || scriptWritingOpen || Boolean(rewritePassage) || seriesImportOpen || seriesImportSaving;
+  const isRootOutline = Boolean(
+    scriptDocumentId
+      && authoringParentId === null
+      && writingWorkspace?.root_document_id === scriptDocumentId
+      && (writingWorkspace.plan || writingWorkspace.interpretation_draft),
+  );
+  const productionHandoffAvailable = Boolean(
+    projectId
+      || (scriptDocumentId
+        && !documentLoading
+        && !isRootOutline
+        && (authoringParentId || writingWorkspace?.root_document_id === scriptDocumentId)),
+  );
+  const handoffDocumentId = productionHandoffAvailable ? scriptDocumentId : undefined;
   const { isEntering: creatingProject, isChecking: checkingProduction, targetProjectId: productionProjectId, enterProduction: handleEnterProduction } = useProductionHandoff({
-    editor, projectId, scriptDocumentId, title: projectTitle, canEnter: !productionDisabled, save,
+    editor, projectId, scriptDocumentId: handoffDocumentId, title: projectTitle, canEnter: !productionDisabled, save,
   });
   const refreshDerivation = useDerivation(editor);
   useL3Completion(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined);
@@ -126,6 +143,8 @@ export default function ScriptEditorShell({
     store.setL3Results(null);
     store.setL3Status('idle');
     store.setL3LastFetchTime(null);
+    setAuthoringParentId(scriptDocumentId ? undefined : null);
+    setWritingWorkspace(null);
     let cancelled = false;
 
     if (!projectId && !scriptDocumentId) {
@@ -139,6 +158,9 @@ export default function ScriptEditorShell({
     (scriptDocumentId ? scriptEditorApi.loadScriptDocument(scriptDocumentId) : scriptEditorApi.loadDocument(projectId!))
       .then((response) => {
         if (cancelled) return;
+        setAuthoringParentId(scriptDocumentId
+          ? (response as { authoring_parent_id?: string }).authoring_parent_id ?? null
+          : null);
         if (response.title) setProjectTitle(response.title);
         editor.commands.setContent(response.content, { emitUpdate: false });
         refreshDerivation();
@@ -368,7 +390,7 @@ export default function ScriptEditorShell({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {scriptDocumentId && editor && !documentLoading && (
+            {scriptDocumentId && editor && !documentLoading && productionHandoffAvailable && (
               <>
                 <button type="button" onClick={() => { void backToLibrary(); }} disabled={creatingProject}
                   className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50">
@@ -540,6 +562,7 @@ export default function ScriptEditorShell({
               productionProjectId={productionProjectId ?? undefined}
               productionDisabled={productionDisabled || checkingProduction}
               productionPending={creatingProject || checkingProduction}
+              productionAvailable={productionHandoffAvailable}
             />
           </aside>
         )}

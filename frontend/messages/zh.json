@@ -3297,6 +3297,7 @@
       "productionTitle": "制作项目",
       "productionExistingHint": "当前分集已有制作项目，点击后进入对应分集。",
       "productionNewHint": "当前分集尚未创建制作项目，首次进入时创建。",
+      "productionOutlineHint": "总纲用于规划全剧，请先选择具体分集再进入制作。",
       "productionBodyCount": "当前正文 {count} 字",
       "productionEntering": "正在打开…",
       "productionCreate": "创建制作项目",
