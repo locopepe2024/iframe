@@ -1299,6 +1299,129 @@ def _find_script_document_series(document_id: str, user: UserContext):
                  if series.source_script_document_id == document_id), None)
 
 
+def _script_document_plain_text(node: Any) -> str:
+    """Extract readable text from a screenplay document for compact context previews."""
+    if not isinstance(node, dict):
+        return ""
+    if node.get("type") == "text":
+        return str(node.get("text") or "")
+    children = node.get("content") or []
+    if not isinstance(children, list):
+        return ""
+    separator = "\n" if node.get("type") in {"doc", "section", "shotBlock"} else ""
+    return separator.join(_script_document_plain_text(child) for child in children)
+
+
+def _authoring_context_projects(
+    root_document_id: str,
+    plan_episodes: list[dict[str, Any]],
+    series: Any,
+    user: UserContext,
+) -> tuple[Any, dict[str, Any]]:
+    """Resolve production projects for an authoring root and its episodes.
+
+    The source-document link is canonical for new projects. Episode number and
+    series membership provide a repair path for projects created before that
+    link was persisted.
+    """
+    projects = pipeline.list_scripts(user.owner_profile_id)
+    by_source = {
+        project.source_script_document_id: project
+        for project in projects
+        if project.source_script_document_id
+    }
+    root_project = by_source.get(root_document_id)
+    by_episode_number: dict[int, Any] = {}
+    if series is not None:
+        for project in pipeline.get_series_episodes(series.id):
+            if project.episode_number is not None:
+                by_episode_number[project.episode_number] = project
+    episode_projects: dict[str, Any] = {}
+    for episode in plan_episodes:
+        document_id = episode.get("document_id")
+        project = by_source.get(document_id) if document_id else None
+        if project is None and episode.get("number") is not None:
+            project = by_episode_number.get(episode["number"])
+        if project is not None:
+            episode_projects[document_id] = project
+    return root_project, episode_projects
+
+
+@app.get("/projects/{script_id}/authoring-context")
+def get_project_authoring_context(
+    script_id: str,
+    user: UserContext = Depends(require_studio_user),
+):
+    """Return the screenplay root and episode project context for Studio.
+
+    A root production project is intentionally independent from its Series, so
+    `series_id` alone cannot describe the navigation context. Resolve through
+    the authoring document graph instead, with a no-context response for old
+    manually-created projects.
+    """
+    project = pipeline.get_script(script_id, user.owner_profile_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    source_document_id = project.source_script_document_id
+    if not source_document_id:
+        return {"available": False, "root": None, "series": None, "episodes": []}
+
+    try:
+        source_dir = _script_document_dir(user.owner_profile_id, source_document_id)
+        source_metadata = _script_document_metadata(source_dir)
+        root_document_id = source_metadata.get("authoring_parent_id") or source_document_id
+        root_dir = _script_document_dir(user.owner_profile_id, root_document_id)
+        root_metadata = _script_document_metadata(root_dir)
+        workspace = _authoring_store(user).workspace(root_document_id)
+    except HTTPException:
+        # A deleted or legacy source document should not make the production
+        # workspace unusable; it simply has no authoring navigation context.
+        return {"available": False, "root": None, "series": None, "episodes": []}
+
+    plan_episodes = list((workspace.get("plan") or {}).get("episodes") or [])
+    series = pipeline.get_series(project.series_id, user.owner_profile_id) if project.series_id else None
+    series = series or _find_script_document_series(root_document_id, user)
+    root_project, episode_projects = _authoring_context_projects(
+        root_document_id, plan_episodes, series, user,
+    )
+    try:
+        root_document = json.loads((root_dir / "document.json").read_text(encoding="utf-8"))
+        root_preview = _script_document_plain_text(root_document)[:2400].strip()
+    except (OSError, json.JSONDecodeError):
+        root_preview = ""
+
+    episodes = []
+    for episode in sorted(plan_episodes, key=lambda item: item.get("number") or 999999):
+        document_id = episode.get("document_id")
+        episode_project = episode_projects.get(document_id)
+        if episode_project is None:
+            # Production navigation is about projects that already exist.
+            # Uncreated planned episodes remain available from the authoring
+            # library and should not appear as dead links in Studio.
+            continue
+        episodes.append({
+            "document_id": document_id,
+            "title": episode.get("title") or f"第{episode.get('number', '?')}集",
+            "episode_number": episode.get("number"),
+            "project_id": episode_project.id if episode_project else None,
+            "current": bool(episode_project and episode_project.id == project.id),
+        })
+
+    return {
+        "available": True,
+        "current_role": "root" if source_document_id == root_document_id else "episode",
+        "root": {
+            "document_id": root_document_id,
+            "title": root_metadata.get("title") or root_document_id,
+            "project_id": root_project.id if root_project else None,
+            "preview": root_preview,
+            "current": bool(root_project and root_project.id == project.id),
+        },
+        "series": ({"id": series.id, "title": series.title} if series else None),
+        "episodes": episodes,
+    }
+
+
 def _create_script_document_project(request: CreateProjectRequest, user: UserContext):
     # Use the persistence lock for lookup + creation, including simultaneous
     # requests from separate tabs. Reentry never overwrites production edits.

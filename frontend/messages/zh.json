@@ -2844,6 +2844,8 @@
     "episodeLocalTooltip": "此资产仅在本集中可见，不会影响其他剧集。"
   },
   "episodeMiniList": {
+    "outline": "总纲",
+    "outlineMark": "纲",
     "title": "本系列 · {count} 集",
     "addEpisode": "添加新集"
   },

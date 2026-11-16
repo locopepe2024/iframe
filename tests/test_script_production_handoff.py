@@ -349,3 +349,21 @@ def test_single_episode_outline_and_episode_create_separate_projects(workspace):
     assert asyncio.run(create(owner, root)).id == outline_project.id
     assert len(api.pipeline.scripts) == 2
     assert not api.pipeline.series_store
+
+
+def test_authoring_context_links_outline_and_episode_projects(planned_episodes):
+    owner, root, episodes = planned_episodes
+    outline_project = asyncio.run(create(owner, root))
+    first = asyncio.run(create(owner, episodes[0]))
+    second = asyncio.run(create(owner, episodes[1]))
+
+    root_context = api.get_project_authoring_context(outline_project.id, owner)
+    assert root_context["available"] is True
+    assert root_context["current_role"] == "root"
+    assert root_context["root"]["project_id"] == outline_project.id
+    assert [item["project_id"] for item in root_context["episodes"]] == [first.id, second.id]
+
+    episode_context = api.get_project_authoring_context(first.id, owner)
+    assert episode_context["current_role"] == "episode"
+    assert episode_context["root"]["project_id"] == outline_project.id
+    assert [item["project_id"] for item in episode_context["episodes"]] == [first.id, second.id]

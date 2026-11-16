@@ -2844,6 +2844,8 @@
     "episodeLocalTooltip": "Local to this episode only. Edits don't affect other episodes."
   },
   "episodeMiniList": {
+    "outline": "Outline",
+    "outlineMark": "OUT",
     "title": "Series · {count} eps",
     "addEpisode": "Add episode"
   },

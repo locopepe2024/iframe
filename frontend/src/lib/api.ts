@@ -788,6 +788,12 @@ export const api = {
         const res = await axios.get(`${API_URL}/projects/${scriptId}`);
         return { ...res.data, originalText: res.data.original_text };
     },
+    getProjectAuthoringContext: async (scriptId: string) => {
+        const res = await axios.get(`${API_URL}/projects/${scriptId}/authoring-context`, {
+            headers: { "Cache-Control": "no-cache" },
+        });
+        return res.data;
+    },
 
     getAssetReferenceIndex: async (scriptId: string): Promise<AssetReferenceIndex> => {
         const res = await axios.get<AssetReferenceIndex>(`${API_URL}/projects/${scriptId}/asset-index`, {
