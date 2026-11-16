@@ -248,3 +248,86 @@ def test_contract_correction_does_not_retry_transport_or_truncated_json(failure)
             {'stage': 'compile_episodes', 'episode_numbers': [5, 6]}, None,
             analysis.Checkpoints(None, 'source', None), 'episodes-5-6')
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize('bad_responses', [1, 2])
+def test_source_coverage_correction_is_bounded_and_resumes_valid_fragments(tmp_path, monkeypatch, caplog, bad_responses):
+    monkeypatch.setattr(analysis, 'SOURCE_BATCH_CHARS', 74)
+    text = '共2集。\n第1集 开始\n' + '第一集原文。' * 10 + '\n第2集 结尾\n不能丢弃的结尾对白。'
+    calls = []
+    remaining = [bad_responses]
+
+    def chat(**kw):
+        data = json.loads(kw['messages'][1]['content'])
+        calls.append(data)
+        assert kw['model'] == 'uniart/deepseek-v4.1-flash'
+        if data['stage'] == 'map_source':
+            blocks = data['source_blocks']
+            number = 2 if data['fragment'] == 2 else 1
+            refs = [b['id'] for b in blocks]
+            if data['fragment'] == 2:
+                if 'contract_errors' in data:
+                    assert data['contract_errors'] == [{'field': 'source_refs', 'type': 'source_unassigned',
+                                                       'refs': [blocks[-1]['id']]}]
+                if remaining[0]:
+                    remaining[0] -= 1
+                    refs = refs[:-1]
+            return response({'episodes': [{'number': number, 'source_refs': refs}]})
+        return response({'episodes': [{'number': n, 'title': f'标题{n}', 'outline': '事件'}
+                                      for n in data['episode_numbers']]})
+
+    llm = SimpleNamespace(chat=chat)
+    if bad_responses == 2:
+        with pytest.raises(RuntimeError, match='总纲第 2/2.*未归属'):
+            analysis.analyze_chunked_outline(llm, text, model='uniart/deepseek-v4.1-flash', cache_dir=tmp_path)
+        assert sorted(p.name for p in tmp_path.rglob('map-*.json')) == ['map-0001.json']
+    else:
+        result = analysis.analyze_chunked_outline(llm, text, model='uniart/deepseek-v4.1-flash', cache_dir=tmp_path)
+    assert [c['fragment'] for c in calls if c['stage'] == 'map_source'] == [1, 2, 2]
+    result = analysis.analyze_chunked_outline(llm, text, model='uniart/deepseek-v4.1-flash', cache_dir=tmp_path)
+    assert '不能丢弃的结尾对白。' in result['draft']['episodes'][1]['source_excerpt']
+    assert [c['fragment'] for c in calls if c['stage'] == 'map_source'] == [1, 2, 2] + ([2] if bad_responses == 2 else [])
+    assert '不能丢弃的结尾对白' not in caplog.text
+    prior = len(calls)
+    assert analysis.analyze_chunked_outline(llm, text, model='uniart/deepseek-v4.1-flash', cache_dir=tmp_path) == result
+    assert len(calls) == prior
+
+
+@pytest.mark.parametrize('value,code', [
+    ({'episodes': [{'number': 1, 'source_refs': ['PRIVATE_RETURNED_VALUE']}]}, 'source_unknown'),
+    ({'settings': {'background': {'PRIVATE_RETURNED_VALUE': True}}}, 'list_type'),
+])
+def test_source_contract_diagnostics_never_echo_returned_values(value, code, caplog):
+    calls = []
+    data = {'stage': 'map_source', 'fragment': 1, 'source_blocks': [{'id': 'p00001', 'text': 'PRIVATE_SOURCE'}]}
+
+    def chat(**kw):
+        payload = json.loads(kw['messages'][1]['content'])
+        calls.append(payload)
+        assert 'PRIVATE_RETURNED_VALUE' not in kw['messages'][1]['content']
+        return response(value)
+
+    with pytest.raises(analysis.SourceMapValidationError):
+        analysis._map_source_batch(SimpleNamespace(chat=chat), 'schema', data, None,
+                                   analysis.Checkpoints(None, 'source', None), 'map-0001')
+    assert len(calls) == 2
+    assert calls[1]['contract_errors'][0]['type'] == code
+    assert 'PRIVATE_RETURNED_VALUE' not in caplog.text
+    assert 'PRIVATE_SOURCE' not in caplog.text
+
+
+@pytest.mark.parametrize('failure', [RuntimeError('upstream error'), '{"episodes": ['])
+def test_source_correction_does_not_retry_transport_or_truncated_json(failure):
+    calls = []
+
+    def chat(**kw):
+        calls.append(kw)
+        if isinstance(failure, Exception):
+            raise failure
+        return failure
+
+    with pytest.raises(RuntimeError):
+        analysis._map_source_batch(SimpleNamespace(chat=chat), 'schema',
+            {'stage': 'map_source', 'fragment': 1, 'source_blocks': [{'id': 'p00001', 'text': 'source'}]}, None,
+            analysis.Checkpoints(None, 'source', None), 'map-0001')
+    assert len(calls) == 1
