@@ -50,6 +50,7 @@ export default function ScriptEditorShell({
   const t = useTranslations('scriptEditor');
   const { editor, isReady } = useEditorSetup({ content: initialContent });
   const [writingWorkspace, setWritingWorkspace] = useState<WritingWorkspace | null>(null);
+  const [writingWorkspaceLoading, setWritingWorkspaceLoading] = useState(Boolean(scriptDocumentId));
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [navigating, setNavigating] = useState(false);
   const selectedEpisode = writingWorkspace?.plan?.episodes.find(item => item.document_id === scriptDocumentId);
@@ -95,6 +96,7 @@ export default function ScriptEditorShell({
     projectId
       || (scriptDocumentId
         && !documentLoading
+        && !writingWorkspaceLoading
         && (!isRootDocument || isSingleEpisodeOutline)
         && (authoringParentId || writingWorkspace?.root_document_id === scriptDocumentId)),
   );
@@ -157,6 +159,7 @@ export default function ScriptEditorShell({
     setAuthoringProjectId(null);
     setAuthoringSeriesChecking(Boolean(scriptDocumentId));
     setWritingWorkspace(null);
+    setWritingWorkspaceLoading(Boolean(scriptDocumentId));
     let cancelled = false;
 
     if (!projectId && !scriptDocumentId) {
@@ -287,7 +290,8 @@ export default function ScriptEditorShell({
     let cancelled = false;
     scriptEditorApi.getWritingPlan(scriptDocumentId).then(workspace => {
       if (!cancelled) setWritingWorkspace(workspace);
-    }).catch(() => { if (!cancelled) setWritingWorkspace(null); });
+    }).catch(() => { if (!cancelled) setWritingWorkspace(null); })
+      .finally(() => { if (!cancelled) setWritingWorkspaceLoading(false); });
     return () => { cancelled = true; };
   }, [scriptDocumentId, documentLoading, documentLoadFailed]);
 
@@ -449,7 +453,7 @@ export default function ScriptEditorShell({
                   title={t('writing.continueTitle')}>
                   <TextCursorInput size={14} /> {t('writing.continue')}
                 </button>
-                {isRootDocument && !isSingleEpisodeOutline && <button type="button" onClick={() => {
+                {isRootDocument && !writingWorkspaceLoading && !isSingleEpisodeOutline && <button type="button" onClick={() => {
                     if (authoringSeriesId) window.location.hash = `#/series/${authoringSeriesId}`;
                     else void beginSeriesImport();
                   }}
