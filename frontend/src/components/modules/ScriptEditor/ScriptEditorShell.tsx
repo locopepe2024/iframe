@@ -82,11 +82,10 @@ export default function ScriptEditorShell({
   const canPersist = Boolean(documentKey) && !documentLoading && !documentLoadFailed;
   const { save } = useAutoSave(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined, projectTitle);
   const productionDisabled = !canPersist || isOffline || navigating || outlineOpen || scriptWritingOpen || Boolean(rewritePassage) || seriesImportOpen || seriesImportSaving;
-  const isRootOutline = Boolean(
+  const isRootDocument = Boolean(
     scriptDocumentId
       && authoringParentId === null
-      && writingWorkspace?.root_document_id === scriptDocumentId
-      && (writingWorkspace.plan || writingWorkspace.interpretation_draft),
+      && writingWorkspace?.root_document_id === scriptDocumentId,
   );
   const isSingleEpisodeOutline = Boolean(
     scriptDocumentId
@@ -97,7 +96,7 @@ export default function ScriptEditorShell({
     projectId
       || (scriptDocumentId
         && !documentLoading
-        && (!isRootOutline || isSingleEpisodeOutline)
+        && (!isRootDocument || isSingleEpisodeOutline)
         && (authoringParentId || writingWorkspace?.root_document_id === scriptDocumentId)),
   );
   const handoffDocumentId = productionHandoffAvailable ? scriptDocumentId : undefined;
@@ -451,7 +450,7 @@ export default function ScriptEditorShell({
                   title={t('writing.continueTitle')}>
                   <TextCursorInput size={14} /> {t('writing.continue')}
                 </button>
-                {!isSingleEpisodeOutline && <button type="button" onClick={() => {
+                {isRootDocument && !isSingleEpisodeOutline && <button type="button" onClick={() => {
                     if (authoringSeriesId) window.location.hash = `#/series/${authoringSeriesId}`;
                     else void beginSeriesImport();
                   }}
