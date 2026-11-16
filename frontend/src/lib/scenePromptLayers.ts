@@ -131,11 +131,17 @@ export function sceneCameraCompatibilityNotes(layers: ScenePromptLayers): string
     if (/135mm|200mm|长焦/.test(focal) && /大全景|全景/.test(framing)) {
         notes.push("长焦拍大全景或全景需要较远机位与足够空间；检查场地距离，或改用较短焦段保留环境范围。");
     }
+    if (/135mm|200mm|长焦/.test(focal) && /特写|细节/.test(framing)) {
+        notes.push("长焦细节特写需留意最近对焦距离、机位空间和稳定性；若无法后退或需要更近对焦，考虑微距镜头或较短焦段。长焦压缩可按创作意图保留。");
+    }
     if (/高机位|俯视|正俯视/.test(viewpoint) && /近景|特写|细节/.test(framing)) {
         notes.push("俯视近景会改变面部与物体的可见比例；若身份或形状辨识优先，确认俯角仍能呈现关键特征。俯拍特写本身可以是有意选择。");
     }
     if (/低机位|仰视/.test(viewpoint) && /14mm|24mm|广角/.test(focal)) {
         notes.push("低机位广角会加强垂直线汇聚和近处透视夸张；若建筑线条需保持端正，可改高机位/标准焦段，或明确要求透视校正。");
+    }
+    if (/背视/.test(viewpoint) && /近景|特写|细节/.test(framing)) {
+        notes.push("背视近景会遮住主体正面特征；若本镜需要确认面部身份或表情，改为侧前方机位或明确只拍后脑/背部细节。");
     }
     if (/手机/.test(device) && /85mm|135mm|200mm/.test(focal)) {
         notes.push("手机的长焦视角通常由独立长焦模组或裁切实现；这里的焦段是全画幅等效视角，不代表手机镜头的实际焦距。");
@@ -154,6 +160,9 @@ export function sceneCameraCompatibilityNotes(layers: ScenePromptLayers): string
     }
     if (/粗颗粒|低保真/.test(camera.image_character || "") && /特写|细节/.test(framing)) {
         notes.push("粗颗粒低保真会遮蔽细小纹理；若细节特写必须清楚，可降低颗粒强度或改用自然成像。");
+    }
+    if (/柔焦低反差/.test(camera.image_character || "") && /特写|细节/.test(framing)) {
+        notes.push("柔焦低反差会降低细节边缘辨识度；若这条特写用于展示产品或材质纹理，可减弱柔化并保留局部清晰度。");
     }
     return notes;
 }
