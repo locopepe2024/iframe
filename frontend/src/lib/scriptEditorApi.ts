@@ -130,7 +130,7 @@ export interface OutlineAnalysisJob {
 }
 
 export const scriptEditorApi = {
-  getWritingSettings: async (): Promise<{ model: ScriptWritingModel }> => {
+  getWritingSettings: async (): Promise<{ model: ScriptWritingModel; models?: ScriptWritingModel[] }> => {
     return (await axios.get(`${API_BASE}/script-writing/settings`)).data;
   },
   setWritingModel: async (model: ScriptWritingModel): Promise<{ model: ScriptWritingModel }> => {

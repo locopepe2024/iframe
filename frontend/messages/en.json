@@ -3159,6 +3159,8 @@
       "label": "Screenplay model",
       "hint": "Used for outline parsing, screenplay writing and continuation, and director analysis. Storyboard text analysis uses this default unless a model is selected separately.",
       "scope": "Shared across your account and saved immediately. Running tasks keep their original model.",
+      "unavailable": "Unavailable on this gateway",
+      "chooseAvailable": "The saved model is unavailable on this gateway. Please choose another model.",
       "saving": "Saving screenplay model…",
       "saved": "Saved. New tasks will use this model.",
       "loading": "Loading…",

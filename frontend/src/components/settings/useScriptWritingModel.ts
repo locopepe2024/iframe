@@ -5,6 +5,7 @@ import { scriptEditorApi, type ScriptWritingModel } from '@/lib/scriptEditorApi'
 
 export function useScriptWritingModel() {
   const [model, setModel] = useState<ScriptWritingModel>();
+  const [models, setModels] = useState<ScriptWritingModel[]>();
   const [saving, setSaving] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState(false);
@@ -15,7 +16,10 @@ export function useScriptWritingModel() {
     setError(false);
     setSaved(false);
     scriptEditorApi.getWritingSettings().then(settings => {
-      if (!cancelled) setModel(settings.model);
+      if (!cancelled) {
+        setModel(settings.model);
+        setModels(settings.models);
+      }
     }).catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, [loadAttempt]);
@@ -36,5 +40,5 @@ export function useScriptWritingModel() {
     }
   }, [saving]);
 
-  return { model, saving, saved, error, selectModel, reload: () => setLoadAttempt(value => value + 1) };
+  return { model, models, saving, saved, error, selectModel, reload: () => setLoadAttempt(value => value + 1) };
 }
