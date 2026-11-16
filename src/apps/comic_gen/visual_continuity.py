@@ -30,7 +30,7 @@ SPACE_KEYS = ("location", "reference_viewpoint", "reference_framing")
 CAMERA_KEYS = (
     "shot_size", "camera_angle", "camera_movement", "composition",
     "yaw", "pitch", "zoom", "focus", "focus_x", "focus_y", "focus_radius",
-    "focal_length", "depth_of_field", "viewpoint", "framing",
+    "focal_length", "capture_device", "depth_of_field", "viewpoint", "framing",
 )
 
 
@@ -182,7 +182,7 @@ def _merge_camera(result: Dict[str, Any], source: Dict[str, Any]) -> None:
     camera = _as_dict(layers.get("camera"))
     _put(result, "shot_size", camera.get("framing"))
     _put(result, "camera_angle", camera.get("viewpoint"))
-    for key in ("focal_length", "depth_of_field", "viewpoint", "framing"):
+    for key in ("focal_length", "capture_device", "depth_of_field", "viewpoint", "framing"):
         _put(result, key, camera.get(key))
     composition = _as_dict(layers.get("composition"))
     if composition:

@@ -17,6 +17,7 @@ from src.apps.comic_gen.models import (
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.apps.comic_gen.storyboard import StoryboardGenerator
 from src.apps.comic_gen.visual_continuity import (
+    _merge_camera,
     build_reference_projection,
     projected_design_for_target,
     reference_projection_prompt_clauses,
@@ -51,6 +52,14 @@ def context(scene_id, place, time_id, *, lighting=None):
         "shooting_plan_revision": 2,
         "shooting_plan_hash": "plan-hash",
     }
+
+
+def test_direct_camera_projection_keeps_capture_device():
+    camera = {}
+    _merge_camera(camera, {"camera": {
+        "focal_length": "24mm 广角", "capture_device": "监控摄像机观感",
+    }})
+    assert camera == {"focal_length": "24mm 广角", "capture_device": "监控摄像机观感"}
 
 
 def frozen_frame_variant(variant_id, visual_design, *, media_id=None, url="output/source.webp",
@@ -457,7 +466,9 @@ def test_scene_tool_snapshot_projects_into_shot_design_layers(tmp_path):
                 "kind": "camera", "preset": "custom", "yaw": 30, "pitch": -15,
                 "zoom": 3, "focus": True, "focus_x": 42, "focus_y": 57,
                 "focus_radius": 12, "extra": "保持主体清晰",
-                "panel_settings": {"version": 1, "camera": {"focal_length": "中长焦"}},
+                "panel_settings": {"version": 1, "camera": {
+                    "focal_length": "24mm 广角", "capture_device": "监控摄像机观感",
+                }},
             },
         },
     )
@@ -469,7 +480,8 @@ def test_scene_tool_snapshot_projects_into_shot_design_layers(tmp_path):
     assert camera["yaw"] == 30
     assert camera["pitch"] == -15
     assert camera["focus_x"] == 42
-    assert camera["focal_length"] == "中长焦"
+    assert camera["focal_length"] == "24mm 广角"
+    assert camera["capture_device"] == "监控摄像机观感"
 
 
 def test_generated_frame_reference_keeps_its_plan_scope_after_source_edits(tmp_path):

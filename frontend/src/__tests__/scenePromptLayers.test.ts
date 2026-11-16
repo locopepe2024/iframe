@@ -58,7 +58,7 @@ it("advises on plausible shot and lens mismatches without forbidding intentional
         framing: "细节特写", focal_length: "200mm 全画幅等效超长焦，视角狭窄、空间压缩明显",
     } })).toEqual(expect.arrayContaining([expect.stringContaining("最近对焦距离")]));
     expect(sceneCameraCompatibilityNotes({ camera: {
-        viewpoint: "背视", framing: "近景，突出局部结构",
+        viewpoint: "背面机位", framing: "近景，突出局部结构",
     } })).toEqual(expect.arrayContaining([expect.stringContaining("遮住主体正面特征")]));
     expect(sceneCameraCompatibilityNotes({ camera: {
         framing: "特写，呈现材质或物件细节", focal_length: "50mm 全画幅等效标准焦段，空间比例自然",

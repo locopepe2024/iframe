@@ -55,6 +55,30 @@ it("maps picked camera elevation to existing pitch and keeps focusing independen
     expect(onGenerate).toHaveBeenCalledWith(sources[0], expect.objectContaining({ yaw: 45, pitch: -30, focus: false, preset: "custom" }), expect.stringContaining("水平环绕 45°；垂直俯仰 -30°"), undefined);
 });
 
+it("uses scene-tool framing and numeric camera angles for advisories without changing submitted params", () => {
+    const onGenerate = vi.fn();
+    render(<SceneImageTools kind="camera" sources={sources} busy={false} onGenerate={onGenerate} />);
+    fireEvent.click(screen.getByText("镜头", { selector: "summary" }));
+    fireEvent.click(screen.getByRole("button", { name: "14mm 超广角" }));
+    fireEvent.change(screen.getByRole("slider", { name: /景别缩放/ }), { target: { value: "4" } });
+    const advisories = () => screen.getAllByText(/^组合提醒：/).map(item => item.textContent).join(" ");
+    expect(advisories()).toContain("广角或鱼眼靠近主体");
+
+    fireEvent.change(screen.getByRole("slider", { name: /垂直俯仰/ }), { target: { value: "30" } });
+    expect(advisories()).toContain("明显低机位广角");
+    fireEvent.change(screen.getByRole("slider", { name: /垂直俯仰/ }), { target: { value: "-45" } });
+    expect(advisories()).toContain("明显高机位近景");
+
+    fireEvent.click(screen.getByRole("button", { name: "查看并确认提示词" }));
+    fireEvent.click(screen.getByRole("button", { name: "确认并生成" }));
+    expect(onGenerate.mock.lastCall?.[1]).toEqual(expect.objectContaining({ kind: "camera", yaw: 0, pitch: -45, zoom: 4 }));
+    expect(onGenerate.mock.lastCall?.[1].panel_settings.camera).toEqual(expect.objectContaining({
+        focal_length: expect.stringContaining("14mm"),
+    }));
+    expect(onGenerate.mock.lastCall?.[1].panel_settings.camera).not.toHaveProperty("framing");
+    expect(onGenerate.mock.lastCall?.[1].panel_settings.camera).not.toHaveProperty("angles");
+});
+
 it("requires a saved scene image and disables submission while busy", () => {
     const onGenerate = vi.fn();
     const { rerender } = render(<SceneImageTools kind="lighting" sources={[]} busy={false} onGenerate={onGenerate} />);

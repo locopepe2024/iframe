@@ -6,11 +6,13 @@ import { SCENE_LAYER_FIELDS, sceneCameraCompatibilityNotes, type SceneLayer, typ
 
 const SceneDirectionSphere = dynamic(() => import("./SceneDirectionSphere"), { ssr: false });
 const layerNames: Record<SceneLayer, string> = { lighting: "光影", camera: "镜头", composition: "构图" };
+type CameraAdvisoryContext = Pick<NonNullable<ScenePromptLayers["camera"]>, "framing" | "viewpoint" | "angles">;
 
-export default function ScenePromptLayersPanel({ value, onChange, fields, lightingTemplates }: {
+export default function ScenePromptLayersPanel({ value, onChange, fields, lightingTemplates, cameraAdvisoryContext }: {
     value: ScenePromptLayers; onChange: (value: ScenePromptLayers) => void;
     fields?: Partial<Record<SceneLayer, readonly string[]>>;
     lightingTemplates?: ReactNode;
+    cameraAdvisoryContext?: CameraAdvisoryContext;
 }) {
     const [openSpheres, setOpenSpheres] = useState<Partial<Record<SceneLayer, boolean>>>({});
     const update = (layer: SceneLayer, patch: Record<string, unknown>) => onChange({
@@ -44,7 +46,10 @@ export default function ScenePromptLayersPanel({ value, onChange, fields, lighti
                     </fieldset>)}
                     {layer === "camera" && <>
                         <p className="text-xs text-text-muted">设备与等效焦段用于描述镜头观感；颗粒和胶片风格在视觉风格模板中选择。</p>
-                        {sceneCameraCompatibilityNotes(value).map(note => <p key={note} role="status" className="text-xs text-amber-300">组合提醒：{note}</p>)}
+                        {sceneCameraCompatibilityNotes({
+                            ...value,
+                            camera: { ...value.camera, ...cameraAdvisoryContext },
+                        }).map(note => <p key={note} role="status" className="text-xs text-amber-300">组合提醒：{note}</p>)}
                     </>}
                     {!fields && layer === "camera" && <fieldset className="space-y-2 rounded border border-glass-border p-3">
                         <legend className="px-1 text-xs text-text-secondary">对焦</legend>
