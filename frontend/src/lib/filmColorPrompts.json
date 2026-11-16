@@ -1,0 +1,223 @@
+{
+  "provenance": {
+    "repository": "https://github.com/wangsuizhi012-bot/nsfw-prompt-templates-asian",
+    "revision": "4a37fa6593a17a77ad8c951492d560e829a0108a",
+    "path": "08-风格胶片.md",
+    "license": "MIT",
+    "licenseSource": "README.md",
+    "adaptation": "iFrame 独立编写中性视觉描述；来源仅提供分类和检索锚点，不声称精确胶片仿真。"
+  },
+  "entries": [
+    {
+      "id": "film-color.ektar-100",
+      "title": "鲜艳清晰",
+      "referenceAnchor": "Kodak Ektar 100",
+      "category": "胶片色彩",
+      "keywords": [
+        "风格",
+        "摄影",
+        "胶片",
+        "色彩",
+        "影调",
+        "film",
+        "color",
+        "colour",
+        "grading",
+        "Kodak Ektar 100"
+      ],
+      "prompt": "鲜艳的红蓝色彩关系，画面清楚，反差明确；保留肤色和高光层次。",
+      "cautions": [
+        "整体灰淡低饱和",
+        "柔雾粉彩占主导"
+      ],
+      "sourceLines": [
+        63,
+        77
+      ]
+    },
+    {
+      "id": "film-color.pro-400h",
+      "title": "柔和粉彩",
+      "referenceAnchor": "Fujifilm Pro 400H",
+      "category": "胶片色彩",
+      "keywords": [
+        "风格",
+        "摄影",
+        "胶片",
+        "色彩",
+        "影调",
+        "film",
+        "color",
+        "colour",
+        "grading",
+        "Fujifilm Pro 400H"
+      ],
+      "prompt": "柔和粉彩色盘，反差克制，高光轻盈，肤色过渡自然，保留细微纹理。",
+      "cautions": [
+        "压黑暗部的强硬反差",
+        "整体浓艳的高饱和主调"
+      ],
+      "sourceLines": [
+        89,
+        155
+      ]
+    },
+    {
+      "id": "film-color.classic-chrome",
+      "title": "克制纪实",
+      "referenceAnchor": "Fujifilm Classic Chrome",
+      "category": "胶片色彩",
+      "keywords": [
+        "风格",
+        "摄影",
+        "胶片",
+        "色彩",
+        "影调",
+        "film",
+        "color",
+        "colour",
+        "grading",
+        "Fujifilm Classic Chrome"
+      ],
+      "prompt": "色彩克制的纪实观感，降低装饰性色彩，保留自然肤色、衣物色差与环境层次。",
+      "cautions": [
+        "糖果色高饱和主调",
+        "全局夸张变色"
+      ],
+      "sourceLines": [
+        95
+      ]
+    },
+    {
+      "id": "film-color.classic-negative",
+      "title": "复古日常",
+      "referenceAnchor": "Fujifilm Classic Negative",
+      "category": "胶片色彩",
+      "keywords": [
+        "风格",
+        "摄影",
+        "胶片",
+        "色彩",
+        "影调",
+        "film",
+        "color",
+        "colour",
+        "grading",
+        "Fujifilm Classic Negative"
+      ],
+      "prompt": "复古日常照片的色彩观感，综合色偏保持克制，暖色与较沉的暗部形成层次，保留主体辨识度。",
+      "cautions": [
+        "要求完全中性且无任何色偏",
+        "叠加另一套强烈全局色偏"
+      ],
+      "sourceLines": [
+        99
+      ]
+    },
+    {
+      "id": "film-color.cinestill-800t",
+      "title": "夜景高光光晕",
+      "referenceAnchor": "CineStill 800T",
+      "category": "胶片色彩",
+      "keywords": [
+        "风格",
+        "摄影",
+        "胶片",
+        "色彩",
+        "影调",
+        "film",
+        "color",
+        "colour",
+        "grading",
+        "CineStill 800T"
+      ],
+      "prompt": "以既有夜景灯光为基础，在明亮灯牌和点光源附近呈现克制的暖色光晕；保留暗部、肤色和场景结构。",
+      "cautions": [
+        "所有高光都要求绝对无光晕",
+        "替换已有灯光方向或新增灯牌"
+      ],
+      "sourceLines": [
+        71
+      ]
+    },
+    {
+      "id": "film-color.tri-x-400",
+      "title": "粗粝纪实黑白",
+      "referenceAnchor": "Kodak Tri-X 400",
+      "category": "黑白影调",
+      "keywords": [
+        "风格",
+        "摄影",
+        "胶片",
+        "色彩",
+        "影调",
+        "film",
+        "color",
+        "colour",
+        "grading",
+        "Kodak Tri-X 400"
+      ],
+      "prompt": "黑白纪实影调，可见但适量的颗粒，较明确的明暗分区，暗部保留必要层次。",
+      "cautions": [
+        "要求准确保留物体色相",
+        "同时要求完全无颗粒"
+      ],
+      "sourceLines": [
+        113,
+        117
+      ]
+    },
+    {
+      "id": "film-color.acros-100",
+      "title": "细腻灰阶黑白",
+      "referenceAnchor": "Fujifilm Acros 100 (II)",
+      "category": "黑白影调",
+      "keywords": [
+        "风格",
+        "摄影",
+        "胶片",
+        "色彩",
+        "影调",
+        "film",
+        "color",
+        "colour",
+        "grading",
+        "Fujifilm Acros 100 (II)"
+      ],
+      "prompt": "细腻的黑白灰阶过渡，颗粒克制，黑位扎实且保留暗部纹理，主体层次清楚。",
+      "cautions": [
+        "要求准确保留物体色相",
+        "全局粗粒与极端压黑主调"
+      ],
+      "sourceLines": [
+        107
+      ]
+    },
+    {
+      "id": "film-color.provia-100f",
+      "title": "平衡彩色",
+      "referenceAnchor": "Fujifilm Provia 100F",
+      "category": "胶片色彩",
+      "keywords": [
+        "风格",
+        "摄影",
+        "胶片",
+        "色彩",
+        "影调",
+        "film",
+        "color",
+        "colour",
+        "grading",
+        "Fujifilm Provia 100F"
+      ],
+      "prompt": "平衡克制的彩色画面，肤色与物体色彩可辨，反差适中，高光和暗部都保留层次。",
+      "cautions": [
+        "强烈全局偏色",
+        "全局黑白输出"
+      ],
+      "sourceLines": [
+        143
+      ]
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "provenance": {
+    "source": "ScreenWeaver",
+    "url": "https://www.screenweaver.ai/zh/film-techniques#color",
+    "inventoryObservedOn": "2026-10-29",
+    "inventorySha256": "031219e681980a176e05109ea87fbcd3f8fb4e5dbd00d6a7ca9a93400cde8020",
+    "authoredOn": "2026-11-16",
+    "adaptation": "iFrame 独立编写定义、适用建议与提示词；来源用于术语归类和查阅，不含来源示例提示词、文章或媒体，不声称精确复现洗印工艺。"
+  },
+  "entries": [
+    {
+      "id": "color-technique.bleach-bypass",
+      "title": "跳漂·低饱和硬反差",
+      "sourceUrl": "https://www.screenweaver.ai/zh/film-techniques/color/bleach-bypass",
+      "aliases": ["Bleach bypass", "bleach-bypass", "省漂", "银残留", "调色", "color grading"],
+      "definition": "以保留银粒的彩色洗印观感为参考，同时降低色彩强度、加深黑位并增强明暗反差。",
+      "useWhen": ["需要粗砺质感的战争或犯罪叙事", "希望弱化色彩而强化明暗结构"],
+      "avoidWhen": ["柔和粉彩与低反差同时占主导", "鲜艳饱满的全局色彩必须保持", "暗部每一处都要求均匀明亮"],
+      "prompt": "跳漂风格调色：压低整体色彩强度，增加明暗反差，以深沉黑位衬托清楚的亮部；保留眼部、肤质和关键阴影细节，高光层次可辨。"
+    },
+    {
+      "id": "color-technique.sepia",
+      "title": "暖褐单色·老照片影调",
+      "sourceUrl": "https://www.screenweaver.ai/zh/film-techniques/color/sepia",
+      "aliases": ["Sepia", "褐色调", "棕褐", "单色", "monochrome brown", "调色", "color grading"],
+      "definition": "将画面归入褐色与米白构成的单一色系，以亮度层次表达原来的多种颜色。",
+      "useWhen": ["用统一色系区分回忆段落", "需要老照片或历史档案观感"],
+      "avoidWhen": ["红蓝绿等多种固有色必须准确呈现", "完全中性的黑白灰影调", "另一套青橙或冷暖双色调同时占主导"],
+      "prompt": "暖褐单色影调：把原有色彩统一映射到深褐阴影、柔和棕色中间调和米白高光，以明暗差异保持人物、服饰与背景的辨识度，层次细腻。"
+    },
+    {
+      "id": "color-technique.cross-processing",
+      "title": "反冲洗·实验偏色",
+      "sourceUrl": "https://www.screenweaver.ai/zh/film-techniques/color/cross-processing",
+      "aliases": ["Cross processing", "cross-processing", "X-pro", "Xpro", "交叉冲洗", "错药冲洗", "实验色彩", "调色", "color grading"],
+      "definition": "参考胶片使用另一类冲洗药液时可能出现的偏色和反差变化；不同材料的结果并不固定。",
+      "useWhen": ["实验摄影或风格化音乐影像", "允许主动偏离中性色彩的叙事段落"],
+      "avoidWhen": ["商品、服装或肤色必须严格还原", "完全中性的白平衡和全局无偏色", "另一套强烈全局偏色同时占主导"],
+      "prompt": "反冲洗风格的实验调色：让暗部略偏青绿、亮部带轻微暖洋红倾向，色彩反差鲜明但变化有节制；主体轮廓与材质保持清楚，肤色偏移轻于环境。"
+    }
+  ]
+}

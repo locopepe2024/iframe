@@ -1,6 +1,8 @@
 "use client";
 
 import { OPEN_AI_CANVAS_PROMPTS } from "@/lib/openAiCanvasPrompts";
+import { FILM_COLOR_PROMPTS } from "@/lib/filmColorPrompts";
+import { COLOR_TECHNIQUE_PROMPTS } from "@/lib/colorTechniquePrompts";
 import { Search, X } from "lucide-react";
 import { createContext, Fragment, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
@@ -35,6 +37,7 @@ const DOMAINS: Record<string, string> = {
   "character.identity": "身份", "character.look": "造型", "character.performance": "表演", "world.style": "风格",
 };
 const DISCOVERY_SECTIONS = ["基础面板", "词典", "Prompt 模板"] as const;
+const PROMPT_REFERENCE_TEMPLATES = [...OPEN_AI_CANVAS_PROMPTS, ...FILM_COLOR_PROMPTS, ...COLOR_TECHNIQUE_PROMPTS];
 export const CharacterDictionaryHost = createContext<HTMLElement | null>(null);
 
 const buttonStyle = "min-h-11 rounded px-2 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary hover:bg-hover-bg";
@@ -175,7 +178,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
   // Search the template itself, not its configured defaults (e.g. a default
   // round face must not make every template a result for /圆脸).
   entries.push(...CHARACTER_DICTIONARY_PRESETS.map((preset) => ({ ...preset, preset })));
-  entries.push(...OPEN_AI_CANVAS_PROMPTS);
+  entries.push(...PROMPT_REFERENCE_TEMPLATES);
   for (const resource of resources) {
     if (resource.status !== "active" || resource.dictionary?.entry_type === "pattern") continue;
     const source = `平台 · ${resource.platform_resource_id} · r${resource.revision} · ${resource.provenance.license}`;
@@ -362,7 +365,7 @@ export default function CharacterPromptDictionary({ suggestion, onClose, onApply
         {task && <button type="button" onClick={() => { setTask(null); setPromptTag(""); }} className={buttonStyle}>返回任务分类</button>}
         {task && <span className="py-3 text-xs text-text-secondary">{PROMPT_TASKS.find(([key]) => key === task)?.[1]}</span>}
         {task && ['visual-style', 'camera-motion'].includes(task) && <label className="text-xs text-text-secondary">分类<select aria-label="来源模板分类" value={promptTag} onChange={event => setPromptTag(event.target.value)} className="ml-1 min-h-11 rounded border border-glass-border bg-surface px-2">
-          <option value="">全部</option>{Array.from(new Set(OPEN_AI_CANVAS_PROMPTS.filter(entry => entry.promptTask === task).map(entry => entry.promptTag))).filter(Boolean).map(tag => <option key={tag}>{tag}</option>)}
+          <option value="">全部</option>{Array.from(new Set(PROMPT_REFERENCE_TEMPLATES.filter(entry => entry.promptTask === task).map(entry => entry.promptTag))).filter(Boolean).map(tag => <option key={tag}>{tag}</option>)}
         </select></label>}
         {!task?.match(/^(visual-style|camera-motion|multi-view)$/) && <>
         <label className="text-xs text-text-secondary">题材<select aria-label="模板题材" value={topic} onChange={event => setTopic(event.target.value)} className="ml-1 min-h-11 rounded border border-glass-border bg-surface px-2">
