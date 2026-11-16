@@ -11,12 +11,11 @@ describe("static scene prompt layers", () => {
         expect(compileScenePromptLayers({ camera: { focal_length: longLens } })).toBe(`镜头：焦距观感：${longLens}`);
         expect(longLens).not.toMatch(/景深|虚化|柔化/);
     });
-    it("compiles opt-in capture device and image character separately from model resolution", () => {
+    it("compiles opt-in capture device and focal length without a film-texture default", () => {
         expect(compileScenePromptLayers({ camera: {
             capture_device: "手机多摄系统观感；焦段按全画幅等效视角描述",
             focal_length: "85mm 全画幅等效人像焦段，透视压缩适中",
-            image_character: "自然成像，保留适度纹理与细节",
-        } })).toBe("镜头：焦距观感：85mm 全画幅等效人像焦段，透视压缩适中；拍摄设备：手机多摄系统观感；焦段按全画幅等效视角描述；成像质感：自然成像，保留适度纹理与细节");
+        } })).toBe("镜头：焦距观感：85mm 全画幅等效人像焦段，透视压缩适中；拍摄设备：手机多摄系统观感；焦段按全画幅等效视角描述");
     });
     it("keeps the three layers separate and compiles only selected fields", () => {
         expect(compileScenePromptLayers({
@@ -61,9 +60,6 @@ it("advises on plausible shot and lens mismatches without forbidding intentional
     expect(sceneCameraCompatibilityNotes({ camera: {
         viewpoint: "背视", framing: "近景，突出局部结构",
     } })).toEqual(expect.arrayContaining([expect.stringContaining("遮住主体正面特征")]));
-    expect(sceneCameraCompatibilityNotes({ camera: {
-        framing: "细节特写", image_character: "柔焦低反差成像，边缘细节与明暗反差收敛",
-    } })).toEqual(expect.arrayContaining([expect.stringContaining("降低细节边缘辨识度")]));
     expect(sceneCameraCompatibilityNotes({ camera: {
         framing: "特写，呈现材质或物件细节", focal_length: "50mm 全画幅等效标准焦段，空间比例自然",
     } })).toEqual([]);

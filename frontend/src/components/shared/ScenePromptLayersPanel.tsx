@@ -43,7 +43,7 @@ export default function ScenePromptLayersPanel({ value, onChange, fields, lighti
                             <p className="mt-1 text-xs text-text-muted">{String(selected[field.key])}</p>}
                     </fieldset>)}
                     {layer === "camera" && <>
-                        <p className="text-xs text-text-muted">设备与成像质感是视觉描述；输出画幅和分辨率由生成任务与模型参数决定。</p>
+                        <p className="text-xs text-text-muted">设备与等效焦段用于描述镜头观感；颗粒和胶片风格在视觉风格模板中选择。</p>
                         {sceneCameraCompatibilityNotes(value).map(note => <p key={note} role="status" className="text-xs text-amber-300">组合提醒：{note}</p>)}
                     </>}
                     {!fields && layer === "camera" && <fieldset className="space-y-2 rounded border border-glass-border p-3">

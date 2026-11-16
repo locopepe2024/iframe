@@ -57,7 +57,6 @@ class SceneCameraLayer(BaseModel):
     focal_length: str = Field(default="", max_length=500, strict=True)
     depth_of_field: str = Field(default="", max_length=500, strict=True)
     capture_device: str = Field(default="", max_length=500, strict=True)
-    image_character: str = Field(default="", max_length=500, strict=True)
     focus: Optional[SceneFocusPoint] = None
     angles: Optional[SceneLayerAngles] = None
 
@@ -91,7 +90,7 @@ TOOL_LAYER_FIELDS = {
         "season": "季节", "time_of_day": "时段", "source": "光源", "quality": "软硬", "fill": "补光", "contrast": "反差",
         "shadow": "阴影", "rim": "轮廓光", "mood": "氛围", "air": "空气介质",
     },
-    "camera": {"focal_length": "焦距观感", "depth_of_field": "景深", "capture_device": "拍摄设备", "image_character": "成像质感"},
+    "camera": {"focal_length": "焦距观感", "depth_of_field": "景深", "capture_device": "拍摄设备"},
     "composition": {
         "frame_orientation": "画面倾斜", "subject_position": "主体位置",
         "spatial_layers": "空间层次", "leading_relation": "引导关系",

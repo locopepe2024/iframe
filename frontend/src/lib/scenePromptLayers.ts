@@ -3,7 +3,7 @@ import { describeSceneDirection } from "./sceneDirection";
 export interface ScenePromptLayers {
     version?: 1;
     lighting?: Partial<Record<"season" | "time_of_day" | "source" | "direction" | "quality" | "fill" | "contrast" | "mood" | "air" | "color" | "shadow" | "rim", string>> & { angles?: SceneLayerAngles | null };
-    camera?: Partial<Record<"framing" | "viewpoint" | "focal_length" | "depth_of_field" | "capture_device" | "image_character", string>> & { angles?: SceneLayerAngles | null; focus?: SceneFocusPoint | null };
+    camera?: Partial<Record<"framing" | "viewpoint" | "focal_length" | "depth_of_field" | "capture_device", string>> & { angles?: SceneLayerAngles | null; focus?: SceneFocusPoint | null };
     composition?: Partial<Record<"subject_position" | "spatial_layers" | "leading_relation" | "frame_orientation", string>>;
 }
 export interface SceneFocusPoint { target?: string; x?: number | null; y?: number | null; radius?: number | null }
@@ -88,17 +88,12 @@ export const SCENE_LAYER_FIELDS: Record<SceneLayer, readonly SceneLayerField[]> 
         ] },
         { key: "capture_device", label: "拍摄设备", options: [
             ["Super 35 数字电影摄影机", "Super 35 数字电影摄影机观感"], ["大画幅数字电影摄影机", "大画幅数字电影摄影机观感"],
-            ["35mm 胶片电影摄影机", "35mm 胶片电影摄影机观感，保留自然颗粒"], ["16mm 胶片摄影机", "16mm 胶片摄影机观感，颗粒与反差随场景呈现"],
+            ["35mm 胶片电影摄影机", "35mm 胶片电影摄影机"], ["16mm 胶片摄影机", "16mm 胶片摄影机"],
             ["手机多摄系统", "手机多摄系统观感；焦段按全画幅等效视角描述"], ["运动相机", "运动相机观感，通常使用超广视角"],
-            ["监控摄像机", "固定机位监控摄像机观感，成像质感依具体设备而定"],
+            ["监控摄像机", "固定机位监控摄像机观感"],
         ] },
         { key: "depth_of_field", label: "景深", options: [
             ["深景深", "深景深，前中后景均清晰可辨"], ["中等景深", "中等景深，主体清楚，远处逐渐失焦"], ["浅景深", "浅景深，主体清楚，焦外区域失焦"],
-        ] },
-        { key: "image_character", label: "成像质感", options: [
-            ["高解析细节", "高解析成像，主体与材质细节清晰"], ["自然材质", "自然成像，保留适度纹理与细节"],
-            ["细颗粒胶片", "细腻胶片颗粒与平顺影调，主体细节仍清楚"], ["粗颗粒低保真", "粗颗粒、低保真录像质感，弱化精细纹理"],
-            ["柔焦低反差", "柔焦低反差成像，边缘细节与明暗反差收敛"],
         ] },
     ],
     composition: [
@@ -157,12 +152,6 @@ export function sceneCameraCompatibilityNotes(layers: ScenePromptLayers): string
     }
     if (/手机/.test(device) && /浅景深/.test(camera.depth_of_field || "")) {
         notes.push("手机浅景深可能来自长焦模组或计算虚化；若需要自然遮挡边缘，可注明光学虚化优先于人像抠图效果。");
-    }
-    if (/粗颗粒|低保真/.test(camera.image_character || "") && /特写|细节/.test(framing)) {
-        notes.push("粗颗粒低保真会遮蔽细小纹理；若细节特写必须清楚，可降低颗粒强度或改用自然成像。");
-    }
-    if (/柔焦低反差/.test(camera.image_character || "") && /特写|细节/.test(framing)) {
-        notes.push("柔焦低反差会降低细节边缘辨识度；若这条特写用于展示产品或材质纹理，可减弱柔化并保留局部清晰度。");
     }
     return notes;
 }
