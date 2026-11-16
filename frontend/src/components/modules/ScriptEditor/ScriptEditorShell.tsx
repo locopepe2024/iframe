@@ -84,8 +84,7 @@ export default function ScriptEditorShell({
   const productionDisabled = !canPersist || isOffline || navigating || outlineOpen || scriptWritingOpen || Boolean(rewritePassage) || seriesImportOpen || seriesImportSaving;
   const isRootDocument = Boolean(
     scriptDocumentId
-      && authoringParentId === null
-      && writingWorkspace?.root_document_id === scriptDocumentId,
+      && authoringParentId === null,
   );
   const isSingleEpisodeOutline = Boolean(
     scriptDocumentId
