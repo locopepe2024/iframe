@@ -10,7 +10,7 @@ import { useTranslations } from "next-intl";
 interface ImportFileDialogProps {
     isOpen: boolean;
     onClose: () => void;
-    onSuccess?: (result: any) => void;
+    onSuccess?: (result: { series_id?: string; project_id?: string; episode_count: number }) => void;
     initialText?: string;
     initialTitle?: string;
     sourceScriptDocumentId?: string;
@@ -60,7 +60,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialTe
     const [isCreating, setIsCreating] = useState(false);
 
     // Step 3 state
-    const [createdResult, setCreatedResult] = useState<{ series_id: string; episode_count: number } | null>(null);
+    const [createdResult, setCreatedResult] = useState<{ series_id?: string; project_id?: string; episode_count: number } | null>(null);
 
     // Error state
     const [error, setError] = useState<string | null>(null);
@@ -180,8 +180,9 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialTe
                 source_script_document_id: sourceScriptDocumentId,
             });
             setCreatedResult({
-                series_id: result.series?.id || result.series_id,
-                episode_count: result.episodes?.length ?? previewResult.episodes.length,
+                ...(result.project?.id ? { project_id: result.project.id } : {}),
+                ...((result.series?.id || result.series_id) ? { series_id: result.series?.id || result.series_id } : {}),
+                episode_count: result.episode_count ?? result.episodes?.length ?? previewResult.episodes.length,
             });
             setStep(3);
         } catch (err: any) {
@@ -227,7 +228,9 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialTe
     const handleViewSeries = () => {
         if (createdResult) {
             onSuccess?.(createdResult);
-            window.location.hash = `#/series/${createdResult.series_id}`;
+            window.location.hash = createdResult.project_id
+                ? `#/project/${createdResult.project_id}`
+                : `#/series/${createdResult.series_id}`;
         }
         handleClose();
     };
@@ -546,7 +549,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialTe
                                         <Check size={32} className="text-green-400" />
                                     </div>
                                     <div className="text-center">
-                                        <h3 className="text-xl font-bold text-foreground mb-2">{t("createSuccess")}</h3>
+                                        <h3 className="text-xl font-bold text-foreground mb-2">{t(createdResult.project_id ? "independentProjectCreateSuccess" : "createSuccess")}</h3>
                                         <p className="text-text-secondary">
                                             {t("createSuccessDetail", { title: seriesTitle, count: createdResult.episode_count })}
                                         </p>
@@ -556,7 +559,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialTe
                                         className="bg-primary hover:bg-primary/90 text-white px-8 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
                                     >
                                         <BookOpen size={18} />
-                                        {t("viewSeries")}
+                                        {t(createdResult.project_id ? "viewProject" : "viewSeries")}
                                     </button>
                                 </div>
                             )}

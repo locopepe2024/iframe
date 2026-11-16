@@ -89,3 +89,21 @@ it("requires source assignment review before creating episodes", async () => {
     assignments: [expect.objectContaining({ scope: "episode", episodes: [1] })],
   })));
 });
+
+it("creates and opens a standalone project when the import has one episode", async () => {
+  importFilePreview.mockResolvedValue({ import_id: "single-import", episodes: [
+    { episode_number: 1, title: "独幕", summary: "完整故事" },
+  ] });
+  importFileConfirm.mockResolvedValue({ project: { id: "project-single" }, episode_count: 1 });
+  show({ initialText: "独幕正文", initialTitle: "单集剧本", sourceScriptDocumentId: "root-script" });
+
+  fireEvent.click(screen.getByRole("button", { name: "解析并预览分集" }));
+  fireEvent.click(await screen.findByRole("button", { name: /确认创建/ }));
+  fireEvent.click(await screen.findByRole("button", { name: "查看独立项目" }));
+
+  await waitFor(() => expect(window.location.hash).toBe("#/project/project-single"));
+  expect(importFileConfirm).toHaveBeenCalledWith(expect.objectContaining({
+    source_script_document_id: "root-script",
+    episodes: [expect.objectContaining({ episode_number: 1 })],
+  }));
+});

@@ -293,3 +293,30 @@ def test_script_document_series_lookup_returns_existing_series(workspace):
         source_script_document_id=document['id'],
     )
     assert api.get_script_document_series(document['id'], owner) == {'series_id': series.id}
+
+
+def test_single_episode_outline_creates_one_independent_project(workspace):
+    from src.apps.comic_gen.models import ScriptWritingPlanDraft
+
+    owner, root = workspace
+    store = api._authoring_store(owner)
+    current = store.workspace(root['id'])
+    one_episode = ScriptWritingPlanDraft(
+        background='背景', style='', point_of_view='第三视角', characters='', constraints='',
+        episodes=[{'number': 1, 'title': '唯一一集', 'outline': '完整故事'}],
+    )
+    workspace_after_confirm = store.confirm(
+        root['id'], one_episode, None, current['source_hash'],
+    )
+    episode_id = workspace_after_confirm['plan']['episodes'][0]['document_id']
+    api.save_script_document(episode_id, api.UpdateScriptDocumentRequest(content=doc('唯一分集剧本正文')), owner)
+
+    created = asyncio.run(create(owner, root))
+    assert created.source_script_document_id == episode_id
+    assert created.series_id is None
+    assert api.get_script_document_project(root['id'], owner) == {
+        'project_id': created.id, 'series_id': None,
+    }
+    assert asyncio.run(create(owner, root)).id == created.id
+    assert len(api.pipeline.scripts) == 1
+    assert not api.pipeline.series_store

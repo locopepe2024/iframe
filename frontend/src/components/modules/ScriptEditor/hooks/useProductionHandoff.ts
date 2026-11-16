@@ -22,6 +22,7 @@ export function useProductionHandoff({
   const [association, setAssociation] = useState<{ documentId: string; projectId: string | null; seriesId: string | null } | null>(null);
   const [checkingDocumentId, setCheckingDocumentId] = useState<string | null>(scriptDocumentId ?? null);
   const targetProjectId = projectId || (association?.documentId === scriptDocumentId ? association?.projectId : null);
+  const targetSeriesId = association && association.documentId === scriptDocumentId ? association.seriesId : null;
   const isChecking = Boolean(scriptDocumentId && checkingDocumentId === scriptDocumentId);
 
   useEffect(() => {
@@ -78,5 +79,5 @@ export function useProductionHandoff({
     }
   }, [editor, canEnter, projectId, scriptDocumentId, title, save, t, association]);
 
-  return { isEntering, isChecking, targetProjectId, enterProduction };
+  return { isEntering, isChecking, targetProjectId, targetSeriesId, enterProduction };
 }
