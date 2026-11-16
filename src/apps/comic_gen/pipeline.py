@@ -13027,6 +13027,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         owner_user_id: Optional[str] = None,
         owner_profile_id: Optional[str] = None,
         assignments: Optional[List[Dict[str, Any]]] = None,
+        source_script_document_id: Optional[str] = None,
     ) -> Dict:
         """Create a Series with Episodes from import data.
         episodes_data: list of dicts with episode_number, title, start_marker, end_marker."""
@@ -13050,6 +13051,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             description,
             owner_user_id=owner_user_id,
             owner_profile_id=owner_profile_id,
+            source_script_document_id=source_script_document_id,
         )
         series.source_context = series_context
 
@@ -13085,6 +13087,36 @@ class ComicGenPipeline(StudioOwnerMixin):
             "series": series.model_dump(),
             "episodes": created_episodes,
         }
+
+    def create_single_project_from_import(
+        self,
+        title: str,
+        text: str,
+        episode_data: Dict[str, Any],
+        assignments: Optional[List[Dict[str, Any]]] = None,
+        owner_user_id: Optional[str] = None,
+        owner_profile_id: Optional[str] = None,
+        source_script_document_id: Optional[str] = None,
+    ) -> Script:
+        """Create a standalone production project from a one-episode import."""
+        if assignments is not None:
+            series_text, episode_texts, _ = materialize(text, assignments, 1)
+            episode_text = episode_texts[0]
+        else:
+            _, screenplay_text = self._split_import_series_context(text)
+            episode_text = self._split_text_by_markers(screenplay_text, [episode_data])[0]
+            series_text = ""
+        source_text = "\n\n".join(part.strip() for part in (series_text, episode_text) if part.strip())
+        return self.create_project(
+            episode_data.get("title") or title,
+            source_text,
+            True,
+            "r2v",
+            None,
+            owner_user_id,
+            owner_profile_id,
+            source_script_document_id=source_script_document_id,
+        )
 
     def _split_text_by_markers(self, text: str, episodes_data: List[Dict]) -> List[str]:
         """Split text into chunks using start/end markers from LLM.

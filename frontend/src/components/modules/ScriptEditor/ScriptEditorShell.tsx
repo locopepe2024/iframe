@@ -64,6 +64,12 @@ export default function ScriptEditorShell({
   const [seriesImportError, setSeriesImportError] = useState('');
   const [documentLoading, setDocumentLoading] = useState(Boolean(projectId || scriptDocumentId));
   const [documentLoadFailed, setDocumentLoadFailed] = useState(false);
+  const [authoringSeriesId, setAuthoringSeriesId] = useState<string | null>(null);
+  const [authoringProjectId, setAuthoringProjectId] = useState<string | null>(null);
+  const [authoringSeriesChecking, setAuthoringSeriesChecking] = useState(false);
+  const [authoringParentId, setAuthoringParentId] = useState<string | null | undefined>(
+    scriptDocumentId ? undefined : null,
+  );
   const { showHint, analysis, applyFormatting, dismissHint } = usePasteHandler(editor);
   const { showShortcutHelp, closeShortcutHelp } = useKeyboardShortcuts(editor);
   const continuityReport = useContinuityCheck(editor);
@@ -76,9 +82,31 @@ export default function ScriptEditorShell({
   const canPersist = Boolean(documentKey) && !documentLoading && !documentLoadFailed;
   const { save } = useAutoSave(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined, projectTitle);
   const productionDisabled = !canPersist || isOffline || navigating || outlineOpen || scriptWritingOpen || Boolean(rewritePassage) || seriesImportOpen || seriesImportSaving;
-  const { isEntering: creatingProject, isChecking: checkingProduction, targetProjectId: productionProjectId, enterProduction: handleEnterProduction } = useProductionHandoff({
-    editor, projectId, scriptDocumentId, title: projectTitle, canEnter: !productionDisabled, save,
+  const isRootOutline = Boolean(
+    scriptDocumentId
+      && authoringParentId === null
+      && writingWorkspace?.root_document_id === scriptDocumentId
+      && (writingWorkspace.plan || writingWorkspace.interpretation_draft),
+  );
+  const isSingleEpisodeOutline = Boolean(
+    scriptDocumentId
+      && writingWorkspace?.root_document_id === scriptDocumentId
+      && writingWorkspace.plan?.episodes.length === 1,
+  );
+  const productionHandoffAvailable = Boolean(
+    projectId
+      || (scriptDocumentId
+        && !documentLoading
+        && (!isRootOutline || isSingleEpisodeOutline)
+        && (authoringParentId || writingWorkspace?.root_document_id === scriptDocumentId)),
+  );
+  const handoffDocumentId = productionHandoffAvailable ? scriptDocumentId : undefined;
+  const { isEntering: creatingProject, isChecking: checkingProduction, targetProjectId: productionProjectId, targetSeriesId: productionSeriesId, enterProduction: handleEnterProduction } = useProductionHandoff({
+    editor, projectId, scriptDocumentId: handoffDocumentId, title: projectTitle, canEnter: !productionDisabled, save,
   });
+  const hasIndependentProject = Boolean(
+    isSingleEpisodeOutline || authoringProjectId || (productionProjectId && !productionSeriesId),
+  );
   const refreshDerivation = useDerivation(editor);
   useL3Completion(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined);
 
@@ -126,6 +154,11 @@ export default function ScriptEditorShell({
     store.setL3Results(null);
     store.setL3Status('idle');
     store.setL3LastFetchTime(null);
+    setAuthoringParentId(scriptDocumentId ? undefined : null);
+    setAuthoringSeriesId(null);
+    setAuthoringProjectId(null);
+    setAuthoringSeriesChecking(Boolean(scriptDocumentId));
+    setWritingWorkspace(null);
     let cancelled = false;
 
     if (!projectId && !scriptDocumentId) {
@@ -139,6 +172,9 @@ export default function ScriptEditorShell({
     (scriptDocumentId ? scriptEditorApi.loadScriptDocument(scriptDocumentId) : scriptEditorApi.loadDocument(projectId!))
       .then((response) => {
         if (cancelled) return;
+        setAuthoringParentId(scriptDocumentId
+          ? (response as { authoring_parent_id?: string }).authoring_parent_id ?? null
+          : null);
         if (response.title) setProjectTitle(response.title);
         editor.commands.setContent(response.content, { emitUpdate: false });
         refreshDerivation();
@@ -257,6 +293,17 @@ export default function ScriptEditorShell({
     return () => { cancelled = true; };
   }, [scriptDocumentId, documentLoading, documentLoadFailed]);
 
+  useEffect(() => {
+    if (!scriptDocumentId || documentLoading || documentLoadFailed) return;
+    let cancelled = false;
+    setAuthoringSeriesChecking(true);
+    api.getScriptDocumentSeries(scriptDocumentId)
+      .then(({ series_id }) => { if (!cancelled) setAuthoringSeriesId(series_id); })
+      .catch(() => { if (!cancelled) setAuthoringSeriesId(null); })
+      .finally(() => { if (!cancelled) setAuthoringSeriesChecking(false); });
+    return () => { cancelled = true; };
+  }, [scriptDocumentId, documentLoading, documentLoadFailed]);
+
   const handleApplyScriptDraft = useCallback(async (draftMode: ScriptWritingMode, draft: string) => {
     if (!editor || !canPersist) throw new Error(t('toolbar.saveFailed'));
     const file = new File([draft], `${projectTitle || '剧本'}.fountain`, { type: 'text/plain' });
@@ -368,17 +415,25 @@ export default function ScriptEditorShell({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {scriptDocumentId && editor && !documentLoading && (
+            {scriptDocumentId && editor && !documentLoading && productionHandoffAvailable && (
               <>
                 <button type="button" onClick={() => { void backToLibrary(); }} disabled={creatingProject}
                   className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50">
                   <Library size={14} /> {t('document.library')}
                 </button>
-                <button type="button" onClick={() => { void handleEnterProduction(); }}
+                <button type="button" onClick={() => {
+                    if (isSingleEpisodeOutline && authoringProjectId) {
+                      window.location.hash = `#/project/${authoringProjectId}`;
+                    } else void handleEnterProduction();
+                  }}
                   disabled={productionDisabled || creatingProject || checkingProduction || (!productionProjectId && wordCount === 0)}
                   aria-busy={creatingProject || checkingProduction}
                   className="flex items-center gap-1 rounded border border-primary/50 bg-primary/15 px-2 py-1 text-xs text-foreground hover:bg-primary/25 disabled:opacity-50">
-                  <FolderPlus size={14} /> {t(creatingProject || checkingProduction ? 'panels.productionEntering' : productionProjectId ? 'panels.enterPipeline' : 'panels.productionCreate')}
+                  <FolderPlus size={14} /> {t(creatingProject || checkingProduction
+                    ? 'panels.productionEntering'
+                    : hasIndependentProject
+                      ? (productionProjectId || authoringProjectId ? 'panels.enterIndependentProject' : 'panels.createIndependentProject')
+                      : productionProjectId ? 'panels.enterPipeline' : 'panels.productionCreate')}
                 </button>
               </>
             )}
@@ -396,12 +451,15 @@ export default function ScriptEditorShell({
                   title={t('writing.continueTitle')}>
                   <TextCursorInput size={14} /> {t('writing.continue')}
                 </button>
-                <button type="button" onClick={() => { void beginSeriesImport(); }}
-                  disabled={seriesImportSaving}
+                {!isSingleEpisodeOutline && <button type="button" onClick={() => {
+                    if (authoringSeriesId) window.location.hash = `#/series/${authoringSeriesId}`;
+                    else void beginSeriesImport();
+                  }}
+                  disabled={seriesImportSaving || authoringSeriesChecking}
                   className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50"
                   title="按当前编辑内容预览并创建系列">
-                  <ListPlus size={14} /> 创建系列
-                </button>
+                  <ListPlus size={14} /> {authoringSeriesId ? '进入系列' : authoringSeriesChecking ? '检查系列…' : '创建系列'}
+                </button>}
               </>
             )}
             <span className="text-xs text-text-muted">
@@ -540,6 +598,7 @@ export default function ScriptEditorShell({
               productionProjectId={productionProjectId ?? undefined}
               productionDisabled={productionDisabled || checkingProduction}
               productionPending={creatingProject || checkingProduction}
+              productionAvailable={productionHandoffAvailable}
             />
           </aside>
         )}
@@ -614,7 +673,11 @@ export default function ScriptEditorShell({
         />
       )}
       <ImportFileDialog isOpen={seriesImportOpen} onClose={() => setSeriesImportOpen(false)}
-        initialText={seriesSourceText} initialTitle={projectTitle} />
+        onSuccess={(result) => {
+          setAuthoringSeriesId(result.series_id ?? null);
+          setAuthoringProjectId(result.project_id ?? null);
+        }}
+        initialText={seriesSourceText} initialTitle={projectTitle} sourceScriptDocumentId={scriptDocumentId} />
     </div>
   );
 }

@@ -49,6 +49,16 @@ it('finds and opens the existing episode after a refresh, even with an empty aut
   expect(window.location.hash).toBe('#/series/repaired-series/episode/existing');
 });
 
+it('opens an existing independent project from its series entry without a series route', async () => {
+  getScriptDocumentProject.mockResolvedValue({ project_id: 'standalone', series_id: null });
+  createProject.mockResolvedValue({ id: 'standalone' });
+  const { result } = setup();
+  await waitFor(() => expect(result.current.targetProjectId).toBe('standalone'));
+  await act(async () => { await result.current.enterProduction(); });
+  expect(window.location.hash).toBe('#/project/standalone');
+  expect(createProject).toHaveBeenCalledOnce();
+});
+
 it('returns from a production editor to the same project without creating another', async () => {
   const { result } = setup({ scriptDocumentId: undefined, projectId: 'existing' });
   await act(async () => { await result.current.enterProduction(); });

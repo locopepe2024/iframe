@@ -173,7 +173,8 @@ def test_confirm_uses_persistent_import_text_and_deletes_only_after_success(tmp_
     api._store_import_text("owner", import_id, "full script")
     request = api.ConfirmImportRequest(
         title="Series", import_id=import_id,
-        episodes=[{"episode_number": 1, "title": "Episode"}],
+        episodes=[{"episode_number": 1, "title": "Episode 1"},
+                  {"episode_number": 2, "title": "Episode 2"}],
     )
 
     result = asyncio.run(api.import_file_confirm(request, owner))
@@ -184,3 +185,30 @@ def test_confirm_uses_persistent_import_text_and_deletes_only_after_success(tmp_
     jobs.forget_result.assert_called_once_with(
         "owner", "series-import", "import_id", import_id
     )
+
+
+def test_confirm_creates_standalone_project_for_single_episode(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from src.apps.comic_gen import api
+
+    owner = UserContext("user", "owner", "", "")
+    project = SimpleNamespace(model_dump=lambda: {"id": "project-one"})
+    create = Mock(return_value=project)
+    pipeline = SimpleNamespace(create_single_project_from_import=create, _import_cache={})
+    monkeypatch.setattr(api, "pipeline", pipeline)
+    monkeypatch.setattr(api, "get_user_data_dir", lambda: str(tmp_path / "iframe"))
+    monkeypatch.setattr(api, "signed_response", lambda value: value)
+    import_id = "b" * 32
+    api._store_import_text("owner", import_id, "single episode source")
+    request = api.ConfirmImportRequest(
+        title="Single", import_id=import_id,
+        episodes=[{"episode_number": 1, "title": "Only Episode"}],
+    )
+
+    result = asyncio.run(api.import_file_confirm(request, owner))
+
+    assert result == {"project": {"id": "project-one"}, "episode_count": 1}
+    assert create.call_args.args[:3] == (
+        "Single", "single episode source", {"episode_number": 1, "title": "Only Episode"},
+    )
+    assert api._load_import_text("owner", import_id) is None

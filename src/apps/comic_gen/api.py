@@ -608,8 +608,19 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
     script_model_token = None
     try:
         # Freeze the account's screenplay model before any background job is
-        # queued. copy_context() keeps this choice for the entire operation.
-        if path.startswith(("/projects", "/series", "/script-documents", "/video/polish_")) or path in {"/script-writing/generate", "/script-writing/rewrite"}:
+        # queued. Read-only authoring lookups and project creation with
+        # skip_analysis do not call an LLM, so they must remain usable before
+        # the user has configured a personal provider key.
+        needs_script_model = (
+            path.startswith(("/projects", "/series", "/video/polish_"))
+            or path in {"/script-writing/generate", "/script-writing/rewrite"}
+        )
+        if path == "/projects" and request.method == "POST" and request.query_params.get("skip_analysis", "").lower() == "true":
+            needs_script_model = False
+        if (path.endswith(("/production-project", "/production-series"))
+                and path.startswith("/script-documents/") and request.method == "GET"):
+            needs_script_model = False
+        if needs_script_model:
             try:
                 model = await asyncio.to_thread(_script_model_for_request, user, None)
             except HTTPException as exc:
@@ -1260,12 +1271,43 @@ def _find_script_document_project(document_id: str, user: UserContext):
                  if project.source_script_document_id == document_id), None)
 
 
+def _single_authoring_episode_id(document_id: str, user: UserContext) -> Optional[str]:
+    metadata = _script_document_metadata(_script_document_dir(user.owner_profile_id, document_id))
+    if metadata.get("authoring_parent_id"):
+        return None
+    workspace = _authoring_store(user).workspace(document_id)
+    episodes = (workspace["plan"] or {}).get("episodes", [])
+    return episodes[0]["document_id"] if len(episodes) == 1 else None
+
+
+def _find_script_document_entry_project(document_id: str, user: UserContext):
+    project = _find_script_document_project(document_id, user)
+    if project is not None:
+        return project
+    episode_id = _single_authoring_episode_id(document_id, user)
+    return _find_script_document_project(episode_id, user) if episode_id else None
+
+
+def _find_script_document_series(document_id: str, user: UserContext):
+    return next((series for series in pipeline.list_series(user.owner_profile_id)
+                 if series.source_script_document_id == document_id), None)
+
+
 def _create_script_document_project(request: CreateProjectRequest, user: UserContext):
     # Use the persistence lock for lookup + creation, including simultaneous
     # requests from separate tabs. Reentry never overwrites production edits.
     with pipeline._save_lock:
-        source = load_script_document(request.source_script_document_id, user)
-        existing = _find_script_document_project(request.source_script_document_id, user)
+        requested_source = load_script_document(request.source_script_document_id, user)
+        source = requested_source
+        source_document_id = requested_source["id"]
+        existing = _find_script_document_project(source_document_id, user)
+        if not requested_source.get("authoring_parent_id"):
+            workspace = _authoring_store(user).workspace(requested_source["id"])
+            episodes = (workspace["plan"] or {}).get("episodes", [])
+            if len(episodes) == 1:
+                source_document_id = episodes[0]["document_id"]
+                source = load_script_document(source_document_id, user)
+                existing = _find_script_document_project(source_document_id, user) or existing
 
         def node_text(node):
             if node.get("type") == "hardBreak":
@@ -1281,10 +1323,12 @@ def _create_script_document_project(request: CreateProjectRequest, user: UserCon
         authoring = None
         if source.get("authoring_parent_id"):
             authoring = _authoring_store(user).workspace(source["id"])
+            episode_plan = (authoring["plan"] or {}).get("episodes", [])
+            if not episode_plan or not any(item["document_id"] == source_document_id for item in episode_plan):
+                raise HTTPException(status_code=409, detail="请先确认当前分集的编剧规划")
+        if authoring and len(episode_plan) > 1:
             episode_numbers = {episode["document_id"]: episode["number"]
                                for episode in (authoring["plan"] or {}).get("episodes", [])}
-            if source["id"] not in episode_numbers:
-                raise HTTPException(status_code=409, detail="请先确认当前分集的编剧规划")
 
             def ensure_series():
                 try:
@@ -1299,12 +1343,13 @@ def _create_script_document_project(request: CreateProjectRequest, user: UserCon
         if existing is not None:
             return existing
         project = pipeline.create_project(
-            source["title"] if authoring else request.title, text, True, request.workflow_mode, series_id,
+            source["title"] if source.get("authoring_parent_id") else request.title,
+            text, True, request.workflow_mode, series_id,
             user.user_id, user.owner_profile_id,
-            source_script_document_id=request.source_script_document_id,
+            source_script_document_id=source_document_id,
         )
         save_document(project.id, SaveDocumentRequest(content=source["content"], create_snapshot=True))
-        if authoring:
+        if authoring and len(episode_plan) > 1:
             ensure_series()
         return project
 
@@ -2546,6 +2591,7 @@ class ConfirmImportRequest(BaseModel):
     text: Optional[str] = None
     episodes: List[Dict[str, Any]]  # episode_number, title, start_marker, end_marker, ...
     assignments: Optional[List[Dict[str, Any]]] = None
+    source_script_document_id: Optional[str] = None
 
 
 @app.post("/series/import/confirm")
@@ -2573,6 +2619,40 @@ async def import_file_confirm(
         if not text:
             raise ValueError("No text available. Provide import_id or text.")
         loop = asyncio.get_event_loop()
+        if len(request.episodes) == 1:
+            if request.source_script_document_id:
+                _script_document_dir(user.owner_profile_id, request.source_script_document_id)
+                existing_project = _find_script_document_entry_project(request.source_script_document_id, user)
+                if existing_project is not None:
+                    return signed_response({"project": existing_project.model_dump(), "episode_count": 1})
+            result = await loop.run_in_executor(
+                None,
+                partial(
+                    pipeline.create_single_project_from_import,
+                    request.title, text, request.episodes[0], request.assignments,
+                    user.user_id, user.owner_profile_id,
+                    request.source_script_document_id,
+                ),
+            )
+            if request.import_id:
+                _delete_import_text(user.owner_profile_id, request.import_id)
+                pipeline._import_cache.pop(request.import_id, None)
+                extraction_jobs.forget_result(
+                    user.owner_profile_id, "series-import", "import_id", request.import_id
+                )
+            return signed_response({"project": result.model_dump(), "episode_count": 1})
+        if request.source_script_document_id:
+            _script_document_dir(user.owner_profile_id, request.source_script_document_id)
+            existing = _find_script_document_series(request.source_script_document_id, user)
+            if existing is not None:
+                return signed_response({
+                    "series": existing.model_dump(),
+                    "episodes": [
+                        {"id": episode.id, "title": episode.title,
+                         "episode_number": episode.episode_number}
+                        for episode in pipeline.get_series_episodes(existing.id)
+                    ],
+                })
         result = await loop.run_in_executor(
             None,
             partial(
@@ -2584,6 +2664,7 @@ async def import_file_confirm(
                 user.user_id,
                 user.owner_profile_id,
                 request.assignments,
+                request.source_script_document_id,
             )
         )
         if request.import_id:
@@ -9991,8 +10072,19 @@ def load_script_document(document_id: str, user: UserContext = Depends(require_s
 def get_script_document_project(document_id: str, user: UserContext = Depends(require_studio_user)):
     _script_document_dir(user.owner_profile_id, document_id)
     with pipeline._save_lock:
-        project = _find_script_document_project(document_id, user)
-        return {"project_id": project.id if project is not None else None}
+        project = _find_script_document_entry_project(document_id, user)
+        return {
+            "project_id": project.id if project is not None else None,
+            "series_id": project.series_id if project is not None else None,
+        }
+
+
+@app.get("/script-documents/{document_id}/production-series")
+def get_script_document_series(document_id: str, user: UserContext = Depends(require_studio_user)):
+    _script_document_dir(user.owner_profile_id, document_id)
+    with pipeline._save_lock:
+        series = _find_script_document_series(document_id, user)
+        return {"series_id": series.id if series is not None else None}
 
 
 @app.delete("/script-documents/{document_id}")

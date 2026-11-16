@@ -171,7 +171,7 @@ def create(owner, episode):
 
 def test_reentry_reuses_project_and_preserves_production_changes(workspace):
     owner, episode = workspace
-    assert api.get_script_document_project(episode['id'], owner) == {'project_id': None}
+    assert api.get_script_document_project(episode['id'], owner) == {'project_id': None, 'series_id': None}
     first = asyncio.run(create(owner, episode))
     assert first.original_text == '第一集正文'
     assert first.source_script_document_id == episode['id']
@@ -184,7 +184,7 @@ def test_reentry_reuses_project_and_preserves_production_changes(workspace):
     assert second.id == first.id
     assert second.original_text == '制作端正文'
     assert api.load_document(first.id)['content'] == doc('制作端编辑稿')
-    assert api.get_script_document_project(episode['id'], owner) == {'project_id': first.id}
+    assert api.get_script_document_project(episode['id'], owner) == {'project_id': first.id, 'series_id': first.series_id}
     assert len(api.pipeline.scripts) == 1
 
 
@@ -208,7 +208,7 @@ def test_each_episode_gets_its_own_project_and_deleted_project_can_be_recreated(
     a = asyncio.run(create(owner, first))
     b = asyncio.run(create(owner, second))
     assert a.id != b.id
-    assert api.get_script_document_project(second['id'], owner) == {'project_id': b.id}
+    assert api.get_script_document_project(second['id'], owner) == {'project_id': b.id, 'series_id': b.series_id}
     del api.pipeline.scripts[a.id]
     replacement = asyncio.run(create(owner, first))
     assert replacement.id not in {a.id, b.id}
@@ -234,7 +234,7 @@ def test_lookup_never_returns_a_foreign_project(workspace):
     project = asyncio.run(create(owner, episode))
     project.owner_user_id = 'user-b'
     project.owner_profile_id = 'profile-b'
-    assert api.get_script_document_project(episode['id'], owner) == {'project_id': None}
+    assert api.get_script_document_project(episode['id'], owner) == {'project_id': None, 'series_id': None}
     own_project = asyncio.run(create(owner, episode))
     assert own_project.id != project.id
     assert own_project.owner_profile_id == owner.owner_profile_id
@@ -250,14 +250,73 @@ def test_http_create_and_lookup_are_owner_scoped(workspace, monkeypatch):
                         (other if authorization == 'Bearer other' else owner, False))
     client = TestClient(api.app)
     path = f"/script-documents/{episode['id']}/production-project"
-    assert client.get(path).json() == {'project_id': None}
+    assert client.get(path).json() == {'project_id': None, 'series_id': None}
     request = {'title': episode['title'], 'text': 'ignored', 'source_script_document_id': episode['id']}
     first = client.post('/projects?skip_analysis=true', json=request)
     assert first.status_code == 200
     second = client.post('/projects?skip_analysis=true', json=request)
     assert second.status_code == 200
     assert second.json()['id'] == first.json()['id']
-    assert client.get(path).json() == {'project_id': first.json()['id']}
+    assert client.get(path).json() == {'project_id': first.json()['id'], 'series_id': first.json()['series_id']}
     headers = {'Authorization': 'Bearer other'}
     assert client.get(path, headers=headers).status_code == 404
     assert client.post('/projects?skip_analysis=true', json=request, headers=headers).status_code == 404
+
+
+def test_handoff_does_not_require_provider_model(workspace, monkeypatch):
+    """Creating/linking a production project is local and must precede model setup."""
+    from fastapi.testclient import TestClient
+
+    owner, episode = workspace
+    monkeypatch.setattr(api, '_resolve_request_context', lambda *_args: (owner, False))
+
+    def missing_model(*_args, **_kwargs):
+        raise HTTPException(409, 'UniArt API key is not configured for this user')
+
+    monkeypatch.setattr(api, '_script_model_for_request', missing_model)
+    client = TestClient(api.app)
+    path = f'/script-documents/{episode["id"]}/production-project'
+    assert client.get(path).status_code == 200
+    created = client.post('/projects?skip_analysis=true', json={
+        'title': episode['title'], 'text': 'ignored',
+        'source_script_document_id': episode['id'],
+    })
+    assert created.status_code == 200
+    assert created.json()['source_script_document_id'] == episode['id']
+
+
+def test_script_document_series_lookup_returns_existing_series(workspace):
+    owner, document = workspace
+    series = api.pipeline.create_series(
+        '剧本系列', owner_user_id=owner.user_id,
+        owner_profile_id=owner.owner_profile_id,
+        source_script_document_id=document['id'],
+    )
+    assert api.get_script_document_series(document['id'], owner) == {'series_id': series.id}
+
+
+def test_single_episode_outline_creates_one_independent_project(workspace):
+    from src.apps.comic_gen.models import ScriptWritingPlanDraft
+
+    owner, root = workspace
+    store = api._authoring_store(owner)
+    current = store.workspace(root['id'])
+    one_episode = ScriptWritingPlanDraft(
+        background='背景', style='', point_of_view='第三视角', characters='', constraints='',
+        episodes=[{'number': 1, 'title': '唯一一集', 'outline': '完整故事'}],
+    )
+    workspace_after_confirm = store.confirm(
+        root['id'], one_episode, None, current['source_hash'],
+    )
+    episode_id = workspace_after_confirm['plan']['episodes'][0]['document_id']
+    api.save_script_document(episode_id, api.UpdateScriptDocumentRequest(content=doc('唯一分集剧本正文')), owner)
+
+    created = asyncio.run(create(owner, root))
+    assert created.source_script_document_id == episode_id
+    assert created.series_id is None
+    assert api.get_script_document_project(root['id'], owner) == {
+        'project_id': created.id, 'series_id': None,
+    }
+    assert asyncio.run(create(owner, root)).id == created.id
+    assert len(api.pipeline.scripts) == 1
+    assert not api.pipeline.series_store

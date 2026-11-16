@@ -34,3 +34,9 @@ it('hides navigation in embedded mode', () => {
   render(<PipelinePanel onEnterPipeline={vi.fn()} />);
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
+
+it('does not offer a production project from the series outline', () => {
+  render(<PipelinePanel onEnterPipeline={vi.fn()} productionAvailable={false} />);
+  expect(screen.getByText('panels.productionOutlineHint')).toBeInTheDocument();
+  expect(screen.queryByRole('button')).not.toBeInTheDocument();
+});

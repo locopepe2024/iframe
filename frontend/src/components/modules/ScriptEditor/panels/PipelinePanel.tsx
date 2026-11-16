@@ -9,9 +9,10 @@ export interface PipelinePanelProps {
   onEnterPipeline?: () => void;
   disabled?: boolean;
   isEntering?: boolean;
+  productionAvailable?: boolean;
 }
 
-export default function PipelinePanel({ projectId, onEnterPipeline, disabled = false, isEntering = false }: PipelinePanelProps) {
+export default function PipelinePanel({ projectId, onEnterPipeline, disabled = false, isEntering = false, productionAvailable = true }: PipelinePanelProps) {
   const t = useTranslations('scriptEditor');
   const wordCount = useEditorStore((s) => s.wordCount);
   const editorMode = useEditorStore((s) => s.editorMode);
@@ -22,7 +23,7 @@ export default function PipelinePanel({ projectId, onEnterPipeline, disabled = f
       <div>
         <h3 className="text-sm font-medium text-foreground">{t('panels.productionTitle')}</h3>
         <p className="mt-2 text-sm leading-6 text-text-secondary">
-          {t(projectId ? 'panels.productionExistingHint' : 'panels.productionNewHint')}
+          {t(!productionAvailable ? 'panels.productionOutlineHint' : projectId ? 'panels.productionExistingHint' : 'panels.productionNewHint')}
         </p>
       </div>
 
@@ -31,7 +32,7 @@ export default function PipelinePanel({ projectId, onEnterPipeline, disabled = f
         <span className="text-text-secondary">{t('panels.productionBodyCount', { count: wordCount })}</span>
       </div>
 
-      {!isEmbedded && (
+      {!isEmbedded && productionAvailable && (
         <div className="space-y-2">
           <button type="button" onClick={onEnterPipeline}
             disabled={disabled || isEntering || (!projectId && wordCount === 0) || !onEnterPipeline}

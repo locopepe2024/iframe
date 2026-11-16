@@ -763,8 +763,12 @@ async function submitPolishJob(scriptId: string, mode: "video" | "r2v", payload:
 }
 
 export const api = {
-    getScriptDocumentProject: async (documentId: string): Promise<{ project_id: string | null }> => {
+    getScriptDocumentProject: async (documentId: string): Promise<{ project_id: string | null; series_id: string | null }> => {
         const res = await axios.get(`${API_URL}/script-documents/${documentId}/production-project`);
+        return res.data;
+    },
+    getScriptDocumentSeries: async (documentId: string): Promise<{ series_id: string | null }> => {
+        const res = await axios.get(`${API_URL}/script-documents/${documentId}/production-series`);
         return res.data;
     },
 
@@ -3075,7 +3079,7 @@ export const api = {
     importFilePreview: async (file: File, suggestedEpisodes: number = 3): Promise<SeriesImportPreview> => {
         return runImportPreview<SeriesImportPreview>(API_URL, file, suggestedEpisodes);
     },
-    importFileConfirm: async (data: { title: string; description?: string; import_id?: string; text?: string; episodes: any[]; assignments?: import("./seriesImportAnalysis").SeriesImportPreview["assignments"] }) => {
+    importFileConfirm: async (data: { title: string; description?: string; import_id?: string; text?: string; episodes: any[]; assignments?: import("./seriesImportAnalysis").SeriesImportPreview["assignments"]; source_script_document_id?: string }) => {
         const response = await axios.post(`${API_URL}/series/import/confirm`, data);
         return response.data;
     },
