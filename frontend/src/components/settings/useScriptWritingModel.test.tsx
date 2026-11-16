@@ -36,3 +36,19 @@ it('keeps the saved model after a failed update and allows retrying an initial l
   expect(screen.getByLabelText('label')).toHaveValue('llm-nf-all');
   expect(screen.getByLabelText('label')).toBeEnabled();
 });
+
+it('uses gateway choices and requires an explicit change of an unavailable saved model', async () => {
+  vi.mocked(scriptEditorApi.getWritingSettings).mockResolvedValue({
+    model: 'llm-nf-all', models: ['deepseek-v4.1-flash', 'kimi-k3'],
+  });
+  vi.mocked(scriptEditorApi.setWritingModel).mockResolvedValue({ model: 'kimi-k3' });
+  render(<ScreenplayModelSettings />);
+  await waitFor(() => expect(screen.getByLabelText('label')).toHaveValue('llm-nf-all'));
+  expect(screen.getByRole('option', { name: /llm-nf-all/ })).toBeDisabled();
+  expect(screen.getByRole('alert')).toHaveTextContent('chooseAvailable');
+  expect(scriptEditorApi.setWritingModel).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText('label'), { target: { value: 'kimi-k3' } });
+  await waitFor(() => expect(screen.getByLabelText('label')).toHaveValue('kimi-k3'));
+  expect(screen.queryByRole('option', { name: /llm-nf-all/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});

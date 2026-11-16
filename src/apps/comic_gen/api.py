@@ -9627,14 +9627,32 @@ class ScriptWritingModelSettings(BaseModel):
     model: ScriptWritingModel
 
 
+def _script_model_options(user: UserContext) -> tuple[str | None, list[str]]:
+    from ..user_config import get_user_config_store
+
+    provider = get_user_config_store().get_public(user).get("catalog_name")
+    models = ["deepseek-v4.1-flash", "kimi-k3"] if provider == "uniart" else [
+        "llm-nf-all", "deepseek-v4.1-flash", "kimi-k3",
+    ]
+    return provider, models
+
+
+def _validate_script_model(model: str | None) -> None:
+    if model == "uniart/llm-nf-all":
+        raise HTTPException(422, "UniArt 未发布 llm-nf-all，请在剧本模型设置中选择 DeepSeek 或 Kimi 后重试。")
+
+
 @app.get("/script-writing/settings")
 def get_script_writing_settings(user: UserContext = Depends(require_studio_user)):
-    return {"model": _authoring_store(user).writing_model() or "llm-nf-all"}
+    _, models = _script_model_options(user)
+    return {"model": _authoring_store(user).writing_model() or models[0], "models": models}
 
 
 @app.put("/script-writing/settings")
 def update_script_writing_settings(request: ScriptWritingModelSettings,
                                    user: UserContext = Depends(require_studio_user)):
+    provider, _ = _script_model_options(user)
+    _validate_script_model(f"{provider}/{request.model}")
     _authoring_store(user).set_writing_model(request.model)
     return {"model": request.model}
 
@@ -9644,10 +9662,8 @@ def _script_model_for_request(user: UserContext, requested: ScriptWritingModel |
 
     if not requested and studio_script_model():
         return studio_script_model()
-    model = requested or _authoring_store(user).writing_model() or "llm-nf-all"
-    from ..user_config import get_user_config_store
-
-    provider = get_user_config_store().get_public(user).get("catalog_name")
+    provider, models = _script_model_options(user)
+    model = requested or _authoring_store(user).writing_model() or models[0]
     return f"{provider}/{model}" if provider in {"greena", "uniart"} else model
 
 
@@ -9689,6 +9705,7 @@ def start_outline_analysis(document_id: str, request: ScriptWritingModelSettings
         raise HTTPException(422, "总纲最多支持80000字，请先整理原文")
     llm = pipeline.script_processor.llm
     model = _script_model_for_request(user, request.model if request else None)
+    _validate_script_model(model)
     def generate_draft():
         result = analyze_outline(llm, workspace["source_text"], model=model,
             cache_dir=_authoring_store(user).directory(document_id) / "outline-analysis-cache")
@@ -9796,6 +9813,7 @@ def start_script_writing(
     normalized = request.model_copy(update={"title": title})
     llm = pipeline.script_processor.llm
     model = _script_model_for_request(user, request.model)
+    _validate_script_model(model)
     fingerprint = hashlib.sha256(json.dumps([
         normalized.mode, resource_key, normalized.title, normalized.source_text,
         normalized.target_word_count, normalized.instruction,
@@ -9844,6 +9862,7 @@ def start_script_rewrite(request: ScriptRewriteRequest, user: UserContext = Depe
     # Preview passages need not exist in the saved document. Ownership is checked
     # above; source/range staleness is checked by the editor before adoption.
     model = _script_model_for_request(user, request.model)
+    _validate_script_model(model)
     return extraction_jobs.start(
         user.owner_profile_id, "script-writing:" + resource_key, uuid.uuid4().hex,
         lambda: generate_passage_rewrite(

@@ -213,6 +213,28 @@ def test_explicit_model_retries_transient_gateway_502_once(monkeypatch):
     assert attempts == [None, 0]
 
 
+@pytest.mark.parametrize('gateway,label', [('uniart', 'UniArt'), ('greena', 'GreenA')])
+def test_explicit_gateway_error_uses_actual_provider_and_never_switches_model(monkeypatch, caplog, gateway, label):
+    monkeypatch.setenv('LLM_PROVIDER', 'openai')
+    attempts = []
+
+    class NotPublished(Exception):
+        status_code = 404
+
+    def create(**kwargs):
+        attempts.append(kwargs['model'])
+        raise NotPublished('model llm-nf-all is not published for user access')
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    adapter = LLMAdapter()
+    monkeypatch.setattr(adapter, '_get_client', lambda **kw: client)
+    with pytest.raises(RuntimeError, match=label + ' API error status=404'):
+        adapter.chat([{'role': 'user', 'content': 'private source'}], model=gateway + '/llm-nf-all')
+    assert attempts == ['llm-nf-all']
+    assert 'provider=' + label in caplog.text
+    assert 'private source' not in caplog.text
+
+
 def test_chat_assembles_streamed_json_and_closes_response(monkeypatch):
     captured = {}
 

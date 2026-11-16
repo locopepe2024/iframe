@@ -110,7 +110,8 @@ def test_model_choice_is_owner_scoped_and_routes_all_writing_operations(client, 
         calls.append(kwargs) or (json.dumps(plan()) if '规划助手' in kwargs['messages'][0]['content'] else '正文草稿'))
     assert client.put('/script-writing/settings', json={'model': selected_model}).json()['model'] == selected_model
     assert client.get('/script-writing/settings').json()['model'] == selected_model
-    assert client.get('/script-writing/settings', headers={'Authorization': 'Bearer other'}).json()['model'] == 'llm-nf-all'
+    default_model = 'deepseek-v4.1-flash' if provider == 'uniart' else 'llm-nf-all'
+    assert client.get('/script-writing/settings', headers={'Authorization': 'Bearer other'}).json()['model'] == default_model
     assert client.put('/script-writing/settings', json={'model': 'deepseek-v4.1-flash-peak'}).status_code == 422
     assert client.get('/script-writing/settings').json()['model'] == selected_model
 
@@ -121,9 +122,10 @@ def test_model_choice_is_owner_scoped_and_routes_all_writing_operations(client, 
     assert client.post('/script-writing/generate', json=payload).status_code == 202
     assert calls[-1]['model'] == f'{provider}/{selected_model}'
     client.put(f'/script-documents/{child}', json={'content': content('已保存正文')})
-    response = client.post('/script-writing/generate', json={**payload, 'mode': 'continue', 'model': 'llm-nf-all'})
+    override = 'kimi-k3' if provider == 'uniart' else 'llm-nf-all'
+    response = client.post('/script-writing/generate', json={**payload, 'mode': 'continue', 'model': override})
     assert response.status_code == 202 and response.json()['result']['mode'] == 'continue'
-    assert calls[-1]['model'] == f'{provider}/llm-nf-all'
+    assert calls[-1]['model'] == f'{provider}/{override}'
     assert calls[-1]['stream'] is True
     assert client.get('/script-writing/settings').json()['model'] == selected_model
     assert api.pipeline.script_processor.llm.default_model == original_default
@@ -148,6 +150,44 @@ def test_queued_outline_keeps_the_model_selected_when_started(client, monkeypatc
     pending[0]()
     assert calls[-1]['model'] == 'greena/deepseek-v4.1-flash'
     assert client.post(f'/script-documents/{root}/outline-analysis', json={'model': 'invalid'}).status_code == 422
+
+
+def test_uniart_settings_exclude_unpublished_model_without_replacing_saved_preference(client, monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps import user_config
+    from src.apps.identity import UserContext
+
+    monkeypatch.setattr(user_config, 'get_user_config_store', lambda: SimpleNamespace(
+        get_public=lambda _user: {'catalog_name': 'uniart'}))
+    settings = client.get('/script-writing/settings').json()
+    assert settings['model'] == 'deepseek-v4.1-flash'
+    assert settings['models'] == ['deepseek-v4.1-flash', 'kimi-k3']
+    assert client.put('/script-writing/settings', json={'model': 'llm-nf-all'}).status_code == 422
+    owner = UserContext('writer', 'writer-profile', 'Writer', '')
+    api._authoring_store(owner).set_writing_model('llm-nf-all')
+    settings = client.get('/script-writing/settings').json()
+    assert settings['model'] == 'llm-nf-all'
+    assert 'llm-nf-all' not in settings['models']
+
+
+def test_uniart_unpublished_model_fails_before_outline_job_but_documents_remain_accessible(client, monkeypatch):
+    from src.apps.comic_gen import api
+    from src.apps import user_config
+    from src.apps.identity import UserContext
+
+    monkeypatch.setattr(user_config, 'get_user_config_store', lambda: SimpleNamespace(
+        get_public=lambda _user: {'catalog_name': 'uniart'}))
+    root, _, _ = create_plan(client)
+    owner = UserContext('writer', 'writer-profile', 'Writer', '')
+    api._authoring_store(owner).set_writing_model('llm-nf-all')
+    queued = []
+    monkeypatch.setattr(api.extraction_jobs, 'start', lambda *args, **kw: queued.append(args))
+    result = client.post(f'/script-documents/{root}/outline-analysis')
+    assert result.status_code == 422
+    assert 'UniArt' in result.json()['detail'] and 'llm-nf-all' in result.json()['detail']
+    assert not queued
+    assert client.get('/script-documents').status_code == 200
+    assert client.get(f'/script-documents/{root}/writing-plan').status_code == 200
 
 
 def test_independent_episode_documents_snapshots_and_reconfirmation(client):
@@ -331,7 +371,9 @@ def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_k
     monkeypatch.setattr(api.extraction_jobs, 'start', queue)
     paths = ['/projects/project/director-profile-jobs', '/projects/project/storyboard-analysis-jobs']
     fingerprints = []
-    for model in ['deepseek-v4.1-flash', 'llm-nf-all', 'kimi-k3']:
+    models = ['deepseek-v4.1-flash', 'llm-nf-all', 'kimi-k3'] if provider == 'greena' else [
+        'deepseek-v4.1-flash', 'kimi-k3', 'deepseek-v4.1-flash']
+    for model in models:
         assert client.put('/script-writing/settings', json={'model': model}).status_code == 200
         for path in paths:
             response = client.post(path, json={'text': 'source'} if 'storyboard' in path else {})
@@ -339,16 +381,18 @@ def test_shared_selection_freezes_director_and_storyboard_jobs_and_their_cache_k
             fingerprints.append(pending[-1][0])
     assert fingerprints[0] != fingerprints[2]
     assert fingerprints[1] != fingerprints[3]
-    # The preference is now Kimi; earlier queued operations keep their models.
+    # Earlier queued operations keep their models after preference changes.
     results = [work() for _, work in pending]
     assert results[0]['profile']['model'] == 'deepseek-v4.1-flash'
     assert results[1]['frames']['model'] == 'deepseek-v4.1-flash'
-    assert results[2]['profile']['model'] == 'llm-nf-all'
-    assert results[3]['frames']['model'] == 'llm-nf-all'
+    assert results[2]['profile']['model'] == models[1]
+    assert results[3]['frames']['model'] == models[1]
     assert results[0]['profile']['source_cache'] != results[2]['profile']['source_cache']
-    assert results[4]['profile']['model'] == 'kimi-k3'
-    assert results[5]['frames']['model'] == 'kimi-k3'
-    assert len(set(fingerprints)) == 6
+    assert results[4]['profile']['model'] == models[2]
+    assert results[5]['frames']['model'] == models[2]
+    assert len(set(fingerprints)) == 2 * len(set(models))
+    if provider == 'uniart':
+        assert fingerprints[:2] == fingerprints[4:]
     assert calls == [{'gateway': provider}] * 6
     assert source.prompt_config.polish_model == ''
     assert processor.llm.default_model is None

@@ -9,7 +9,7 @@ export default function ScreenplayModelSettings() {
   const t = useTranslations('scriptEditor.model');
   const settings = useScriptWritingModel();
   return <div className="space-y-2">
-    <ScriptModelSelect model={settings.model} modelBusy={settings.saving} modelError={settings.error}
+    <ScriptModelSelect model={settings.model} models={settings.models} modelBusy={settings.saving} modelError={settings.error}
       onModelChange={model => { void settings.selectModel(model); }} onModelReload={settings.reload} />
     <p className="text-xs text-text-muted">{t('hint')}</p>
     <p role="status" aria-live="polite" className="text-xs text-text-secondary">
