@@ -789,13 +789,14 @@ export default function Home() {
     return <SeriesDetailPage seriesId={seriesId} />;
   }
 
-  // A series list request can fail independently from the project list (for
-  // example during API-key session renewal). Keep episode projects visible
-  // instead of silently dropping every project that has a series_id.
-  const knownSeriesIds = new Set(seriesList.map((series) => series.id));
-  const standaloneProjects = projects.filter((p) => !p.series_id || !knownSeriesIds.has(p.series_id));
+  // series_id is the project's persisted membership; a missing series
+  // list entry must never turn one of its episodes into an independent project.
+  const standaloneProjects = projects.filter(project => !project.series_id);
+  const knownSeriesIds = new Set(seriesList.map(series => series.id));
+  const pendingSeriesIds = new Set(projects.filter(project =>
+    project.series_id && !knownSeriesIds.has(project.series_id)).map(project => project.series_id));
 
-  const totalCount = seriesList.length + standaloneProjects.length;
+  const totalCount = seriesList.length + pendingSeriesIds.size + standaloneProjects.length;
 
   const handleTabChange = (tab: GlobalTab) => {
     setActiveTab(tab);
@@ -1026,6 +1027,9 @@ export default function Home() {
 
         {/* Scrollable content area */}
         <div className="flex-1 overflow-y-auto px-7 pb-10 pt-3">
+          {pendingSeriesIds.size > 0 && <p role="status" className="mb-4 text-sm text-text-secondary">
+            {t("seriesMetadataPending", { count: pendingSeriesIds.size })}
+          </p>}
           {totalCount === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
