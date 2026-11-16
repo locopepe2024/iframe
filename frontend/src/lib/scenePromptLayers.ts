@@ -120,6 +120,7 @@ export function sceneCameraCompatibilityNotes(layers: ScenePromptLayers): string
     const framing = camera.framing || "";
     const viewpoint = camera.viewpoint || "";
     const device = camera.capture_device || "";
+    const elevation = camera.angles?.elevation;
     if (/14mm|24mm|广角|鱼眼/.test(focal) && /近景|特写|细节/.test(framing)) {
         notes.push("广角或鱼眼靠近主体会强化近大远小和边缘变形；若要自然人脸比例，可退远拍摄再裁切。若要夸张透视，这种组合可以保留。");
     }
@@ -132,8 +133,14 @@ export function sceneCameraCompatibilityNotes(layers: ScenePromptLayers): string
     if (/高机位|俯视|正俯视/.test(viewpoint) && /近景|特写|细节/.test(framing)) {
         notes.push("俯视近景会改变面部与物体的可见比例；若身份或形状辨识优先，确认俯角仍能呈现关键特征。俯拍特写本身可以是有意选择。");
     }
+    if (typeof elevation === "number" && elevation >= 45 && /近景|特写|细节/.test(framing)) {
+        notes.push("明显高机位近景会改变面部与物体的可见比例；若身份或形状辨识优先，确认俯角仍能呈现关键特征。俯拍特写本身可以是有意选择。");
+    }
     if (/低机位|仰视/.test(viewpoint) && /14mm|24mm|广角/.test(focal)) {
         notes.push("低机位广角会加强垂直线汇聚和近处透视夸张；若建筑线条需保持端正，可改高机位/标准焦段，或明确要求透视校正。");
+    }
+    if (typeof elevation === "number" && elevation <= -30 && /14mm|24mm|广角/.test(focal)) {
+        notes.push("明显低机位广角会加强垂直线汇聚和近处透视夸张；若建筑线条需保持端正，可明确要求透视校正。刻意夸张的透视可以保留。");
     }
     if (/背视/.test(viewpoint) && /近景|特写|细节/.test(framing)) {
         notes.push("背视近景会遮住主体正面特征；若本镜需要确认面部身份或表情，改为侧前方机位或明确只拍后脑/背部细节。");

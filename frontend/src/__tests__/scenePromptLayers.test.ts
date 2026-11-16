@@ -65,6 +65,18 @@ it("advises on plausible shot and lens mismatches without forbidding intentional
     } })).toEqual([]);
 });
 
+it("advises on clearly elevated or low numeric camera angles only at useful thresholds", () => {
+    const closeUp = { framing: "近景，突出局部结构", angles: { azimuth: 0, elevation: 45 } };
+    expect(sceneCameraCompatibilityNotes({ camera: closeUp })).toEqual(expect.arrayContaining([expect.stringContaining("明显高机位近景")]));
+    expect(sceneCameraCompatibilityNotes({ camera: { ...closeUp, angles: { azimuth: 0, elevation: 44 } } })).toEqual([]);
+    expect(sceneCameraCompatibilityNotes({ camera: { ...closeUp, framing: "大全景", angles: { azimuth: 0, elevation: 60 } } })).toEqual([]);
+
+    const wide = { focal_length: "14mm 全画幅等效超广角，近大远小的透视关系明显", angles: { azimuth: 90, elevation: -30 } };
+    expect(sceneCameraCompatibilityNotes({ camera: wide })).toEqual(expect.arrayContaining([expect.stringContaining("明显低机位广角")]));
+    expect(sceneCameraCompatibilityNotes({ camera: { ...wide, angles: { azimuth: 90, elevation: -29 } } })).toEqual([]);
+    expect(sceneCameraCompatibilityNotes({ camera: { ...wide, focal_length: "50mm 全画幅等效标准焦段，空间比例自然" } })).toEqual([]);
+});
+
 it("compiles explicit focus targets and image-relative coordinates without implying world distance", () => {
     expect(compileScenePromptLayers({ camera: { focus: { target: "门口石狮", x: 30, y: 65, radius: 18 } } }))
         .toBe("镜头：对焦目标：门口石狮；对焦点：画面坐标 x=30%、y=65%（左上角为原点，向右为 X，向下为 Y），清晰区域半径约 18%；保持该区域清晰");
