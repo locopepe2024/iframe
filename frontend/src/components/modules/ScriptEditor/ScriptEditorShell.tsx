@@ -66,7 +66,6 @@ export default function ScriptEditorShell({
   const [documentLoading, setDocumentLoading] = useState(Boolean(projectId || scriptDocumentId));
   const [documentLoadFailed, setDocumentLoadFailed] = useState(false);
   const [authoringSeriesId, setAuthoringSeriesId] = useState<string | null>(null);
-  const [authoringProjectId, setAuthoringProjectId] = useState<string | null>(null);
   const [authoringSeriesChecking, setAuthoringSeriesChecking] = useState(false);
   const [authoringParentId, setAuthoringParentId] = useState<string | null | undefined>(
     scriptDocumentId ? undefined : null,
@@ -86,11 +85,6 @@ export default function ScriptEditorShell({
   const isRootDocument = Boolean(
     scriptDocumentId
       && authoringParentId === null,
-  );
-  const isSingleEpisodeOutline = Boolean(
-    scriptDocumentId
-      && writingWorkspace?.root_document_id === scriptDocumentId
-      && writingWorkspace.plan?.episodes.length === 1,
   );
   const productionHandoffAvailable = Boolean(
     projectId
@@ -152,7 +146,6 @@ export default function ScriptEditorShell({
     store.setL3LastFetchTime(null);
     setAuthoringParentId(scriptDocumentId ? undefined : null);
     setAuthoringSeriesId(null);
-    setAuthoringProjectId(null);
     setAuthoringSeriesChecking(Boolean(scriptDocumentId));
     setWritingWorkspace(null);
     setWritingWorkspaceLoading(Boolean(scriptDocumentId));
@@ -419,11 +412,7 @@ export default function ScriptEditorShell({
                   className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50">
                   <Library size={14} /> {t('document.library')}
                 </button>
-                <button type="button" onClick={() => {
-                    if (isSingleEpisodeOutline && authoringProjectId) {
-                      window.location.hash = `#/project/${authoringProjectId}`;
-                    } else void handleEnterProduction();
-                  }}
+                <button type="button" onClick={() => { void handleEnterProduction(); }}
                   disabled={productionDisabled || creatingProject || checkingProduction || (!productionProjectId && wordCount === 0)}
                   aria-busy={creatingProject || checkingProduction}
                   className="flex items-center gap-1 rounded border border-primary/50 bg-primary/15 px-2 py-1 text-xs text-foreground hover:bg-primary/25 disabled:opacity-50">
@@ -447,7 +436,7 @@ export default function ScriptEditorShell({
                   title={t('writing.continueTitle')}>
                   <TextCursorInput size={14} /> {t('writing.continue')}
                 </button>
-                {isRootDocument && !writingWorkspaceLoading && !isSingleEpisodeOutline && <button type="button" onClick={() => {
+                {isRootDocument && !writingWorkspaceLoading && <button type="button" onClick={() => {
                     if (authoringSeriesId) window.location.hash = `#/series/${authoringSeriesId}`;
                     else void beginSeriesImport();
                   }}
@@ -671,7 +660,6 @@ export default function ScriptEditorShell({
       <ImportFileDialog isOpen={seriesImportOpen} onClose={() => setSeriesImportOpen(false)}
         onSuccess={(result) => {
           setAuthoringSeriesId(result.series_id ?? null);
-          setAuthoringProjectId(result.project_id ?? null);
         }}
         initialText={seriesSourceText} initialTitle={projectTitle} sourceScriptDocumentId={scriptDocumentId} />
     </div>

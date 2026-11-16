@@ -1271,21 +1271,10 @@ def _find_script_document_project(document_id: str, user: UserContext):
                  if project.source_script_document_id == document_id), None)
 
 
-def _single_authoring_episode_id(document_id: str, user: UserContext) -> Optional[str]:
-    metadata = _script_document_metadata(_script_document_dir(user.owner_profile_id, document_id))
-    if metadata.get("authoring_parent_id"):
-        return None
-    workspace = _authoring_store(user).workspace(document_id)
-    episodes = (workspace["plan"] or {}).get("episodes", [])
-    return episodes[0]["document_id"] if len(episodes) == 1 else None
-
-
 def _find_script_document_entry_project(document_id: str, user: UserContext):
-    project = _find_script_document_project(document_id, user)
-    if project is not None:
-        return project
-    episode_id = _single_authoring_episode_id(document_id, user)
-    return _find_script_document_project(episode_id, user) if episode_id else None
+    # Root outlines and episodes are independent authoring documents. A root
+    # lookup must never be redirected to its only episode's project.
+    return _find_script_document_project(document_id, user)
 
 
 def _find_script_document_series(document_id: str, user: UserContext):
@@ -1297,17 +1286,9 @@ def _create_script_document_project(request: CreateProjectRequest, user: UserCon
     # Use the persistence lock for lookup + creation, including simultaneous
     # requests from separate tabs. Reentry never overwrites production edits.
     with pipeline._save_lock:
-        requested_source = load_script_document(request.source_script_document_id, user)
-        source = requested_source
-        source_document_id = requested_source["id"]
+        source = load_script_document(request.source_script_document_id, user)
+        source_document_id = source["id"]
         existing = _find_script_document_project(source_document_id, user)
-        if not requested_source.get("authoring_parent_id"):
-            workspace = _authoring_store(user).workspace(requested_source["id"])
-            episodes = (workspace["plan"] or {}).get("episodes", [])
-            if len(episodes) == 1:
-                source_document_id = episodes[0]["document_id"]
-                source = load_script_document(source_document_id, user)
-                existing = _find_script_document_project(source_document_id, user) or existing
 
         def node_text(node):
             if node.get("type") == "hardBreak":
