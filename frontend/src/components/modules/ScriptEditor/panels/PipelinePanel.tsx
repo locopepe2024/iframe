@@ -23,7 +23,7 @@ export default function PipelinePanel({ projectId, onEnterPipeline, disabled = f
       <div>
         <h3 className="text-sm font-medium text-foreground">{t('panels.productionTitle')}</h3>
         <p className="mt-2 text-sm leading-6 text-text-secondary">
-          {t(!productionAvailable ? 'panels.productionOutlineHint' : projectId ? 'panels.productionExistingHint' : 'panels.productionNewHint')}
+          {t(!productionAvailable ? 'panels.productionUnavailableHint' : projectId ? 'panels.productionExistingHint' : 'panels.productionNewHint')}
         </p>
       </div>
 
@@ -39,7 +39,7 @@ export default function PipelinePanel({ projectId, onEnterPipeline, disabled = f
             aria-busy={isEntering}
             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">
             {isEntering && <Loader2 size={16} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
-            {t(isEntering ? 'panels.productionEntering' : projectId ? 'panels.enterPipeline' : 'panels.productionCreate')}
+            {t(isEntering ? 'panels.productionEntering' : projectId ? 'panels.productionEnter' : 'panels.productionCreate')}
             {!isEntering && <ArrowRight size={16} aria-hidden="true" />}
           </button>
           <p className="text-xs leading-5 text-text-secondary">
