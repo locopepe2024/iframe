@@ -3304,6 +3304,7 @@
       "productionBodyCount": "当前正文 {count} 字",
       "productionEntering": "正在打开…",
       "productionCreate": "创建制作项目",
+      "productionEnter": "进入制作项目",
       "createIndependentProject": "创建独立项目",
       "enterIndependentProject": "进入独立项目",
       "productionEmpty": "请先完成当前分集的剧本正文。",

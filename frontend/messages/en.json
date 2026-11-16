@@ -3304,6 +3304,7 @@
       "productionBodyCount": "Current script: {count} characters",
       "productionEntering": "Opening…",
       "productionCreate": "Create production project",
+      "productionEnter": "Open production project",
       "createIndependentProject": "Create standalone project",
       "enterIndependentProject": "Open standalone project",
       "productionEmpty": "Write this episode’s script first.",

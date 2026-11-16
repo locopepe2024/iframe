@@ -97,16 +97,12 @@ export default function ScriptEditorShell({
       || (scriptDocumentId
         && !documentLoading
         && !writingWorkspaceLoading
-        && (!isRootDocument || isSingleEpisodeOutline)
         && (authoringParentId || writingWorkspace?.root_document_id === scriptDocumentId)),
   );
   const handoffDocumentId = productionHandoffAvailable ? scriptDocumentId : undefined;
-  const { isEntering: creatingProject, isChecking: checkingProduction, targetProjectId: productionProjectId, targetSeriesId: productionSeriesId, enterProduction: handleEnterProduction } = useProductionHandoff({
+  const { isEntering: creatingProject, isChecking: checkingProduction, targetProjectId: productionProjectId, enterProduction: handleEnterProduction } = useProductionHandoff({
     editor, projectId, scriptDocumentId: handoffDocumentId, title: projectTitle, canEnter: !productionDisabled, save,
   });
-  const hasIndependentProject = Boolean(
-    isSingleEpisodeOutline || authoringProjectId || (productionProjectId && !productionSeriesId),
-  );
   const refreshDerivation = useDerivation(editor);
   useL3Completion(editor, canPersist ? projectId ?? null : null, canPersist ? scriptDocumentId : undefined);
 
@@ -433,9 +429,7 @@ export default function ScriptEditorShell({
                   className="flex items-center gap-1 rounded border border-primary/50 bg-primary/15 px-2 py-1 text-xs text-foreground hover:bg-primary/25 disabled:opacity-50">
                   <FolderPlus size={14} /> {t(creatingProject || checkingProduction
                     ? 'panels.productionEntering'
-                    : hasIndependentProject
-                      ? (productionProjectId || authoringProjectId ? 'panels.enterIndependentProject' : 'panels.createIndependentProject')
-                      : productionProjectId ? 'panels.enterPipeline' : 'panels.productionCreate')}
+                    : productionProjectId ? 'panels.productionEnter' : 'panels.productionCreate')}
                 </button>
               </>
             )}
