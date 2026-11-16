@@ -19,7 +19,7 @@ export function useProductionHandoff({
   const t = useTranslations('scriptEditor');
   const [isEntering, setIsEntering] = useState(false);
   const enteringRef = useRef(false);
-  const [association, setAssociation] = useState<{ documentId: string; projectId: string | null } | null>(null);
+  const [association, setAssociation] = useState<{ documentId: string; projectId: string | null; seriesId: string | null } | null>(null);
   const [checkingDocumentId, setCheckingDocumentId] = useState<string | null>(scriptDocumentId ?? null);
   const targetProjectId = projectId || (association?.documentId === scriptDocumentId ? association?.projectId : null);
   const isChecking = Boolean(scriptDocumentId && checkingDocumentId === scriptDocumentId);
@@ -29,8 +29,8 @@ export function useProductionHandoff({
     let cancelled = false;
     setCheckingDocumentId(scriptDocumentId);
     api.getScriptDocumentProject(scriptDocumentId)
-      .then(({ project_id }) => {
-        if (!cancelled) setAssociation({ documentId: scriptDocumentId, projectId: project_id });
+      .then(({ project_id, series_id }) => {
+        if (!cancelled) setAssociation({ documentId: scriptDocumentId, projectId: project_id, seriesId: series_id });
       })
       // A failed lookup is retried on click; it must never imply creation.
       .catch(() => {})
@@ -44,9 +44,13 @@ export function useProductionHandoff({
     setIsEntering(true);
     try {
       let targetProjectId = projectId;
-      let targetSeriesId: string | undefined;
+      let targetSeriesId: string | undefined = association && association.documentId === scriptDocumentId
+        ? association.seriesId ?? undefined
+        : undefined;
       if (!targetProjectId && scriptDocumentId) {
-        targetProjectId = (await api.getScriptDocumentProject(scriptDocumentId)).project_id ?? undefined;
+        const result = await api.getScriptDocumentProject(scriptDocumentId);
+        targetProjectId = result.project_id ?? undefined;
+        targetSeriesId = result.series_id ?? undefined;
       }
       const text = editor.getText({ blockSeparator: '\n' });
       if (!targetProjectId && !text.trim()) return;
@@ -60,7 +64,7 @@ export function useProductionHandoff({
         targetProjectId = project.id;
         targetSeriesId = project.series_id;
       }
-      if (scriptDocumentId) setAssociation({ documentId: scriptDocumentId, projectId: targetProjectId! });
+      if (scriptDocumentId) setAssociation({ documentId: scriptDocumentId, projectId: targetProjectId!, seriesId: targetSeriesId ?? null });
       window.location.hash = targetSeriesId
         ? `#/series/${targetSeriesId}/episode/${targetProjectId}`
         : `#/project/${targetProjectId}`;
@@ -72,7 +76,7 @@ export function useProductionHandoff({
       enteringRef.current = false;
       setIsEntering(false);
     }
-  }, [editor, canEnter, projectId, scriptDocumentId, title, save, t]);
+  }, [editor, canEnter, projectId, scriptDocumentId, title, save, t, association]);
 
   return { isEntering, isChecking, targetProjectId, enterProduction };
 }

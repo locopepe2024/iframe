@@ -64,6 +64,8 @@ export default function ScriptEditorShell({
   const [seriesImportError, setSeriesImportError] = useState('');
   const [documentLoading, setDocumentLoading] = useState(Boolean(projectId || scriptDocumentId));
   const [documentLoadFailed, setDocumentLoadFailed] = useState(false);
+  const [authoringSeriesId, setAuthoringSeriesId] = useState<string | null>(null);
+  const [authoringSeriesChecking, setAuthoringSeriesChecking] = useState(false);
   const [authoringParentId, setAuthoringParentId] = useState<string | null | undefined>(
     scriptDocumentId ? undefined : null,
   );
@@ -144,6 +146,8 @@ export default function ScriptEditorShell({
     store.setL3Status('idle');
     store.setL3LastFetchTime(null);
     setAuthoringParentId(scriptDocumentId ? undefined : null);
+    setAuthoringSeriesId(null);
+    setAuthoringSeriesChecking(Boolean(scriptDocumentId));
     setWritingWorkspace(null);
     let cancelled = false;
 
@@ -276,6 +280,17 @@ export default function ScriptEditorShell({
     scriptEditorApi.getWritingPlan(scriptDocumentId).then(workspace => {
       if (!cancelled) setWritingWorkspace(workspace);
     }).catch(() => { if (!cancelled) setWritingWorkspace(null); });
+    return () => { cancelled = true; };
+  }, [scriptDocumentId, documentLoading, documentLoadFailed]);
+
+  useEffect(() => {
+    if (!scriptDocumentId || documentLoading || documentLoadFailed) return;
+    let cancelled = false;
+    setAuthoringSeriesChecking(true);
+    api.getScriptDocumentSeries(scriptDocumentId)
+      .then(({ series_id }) => { if (!cancelled) setAuthoringSeriesId(series_id); })
+      .catch(() => { if (!cancelled) setAuthoringSeriesId(null); })
+      .finally(() => { if (!cancelled) setAuthoringSeriesChecking(false); });
     return () => { cancelled = true; };
   }, [scriptDocumentId, documentLoading, documentLoadFailed]);
 
@@ -418,11 +433,14 @@ export default function ScriptEditorShell({
                   title={t('writing.continueTitle')}>
                   <TextCursorInput size={14} /> {t('writing.continue')}
                 </button>
-                <button type="button" onClick={() => { void beginSeriesImport(); }}
-                  disabled={seriesImportSaving}
+                <button type="button" onClick={() => {
+                    if (authoringSeriesId) window.location.hash = `#/series/${authoringSeriesId}`;
+                    else void beginSeriesImport();
+                  }}
+                  disabled={seriesImportSaving || authoringSeriesChecking}
                   className="flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-xs text-foreground hover:bg-white/10 disabled:opacity-50"
                   title="按当前编辑内容预览并创建系列">
-                  <ListPlus size={14} /> 创建系列
+                  <ListPlus size={14} /> {authoringSeriesId ? '进入系列' : authoringSeriesChecking ? '检查系列…' : '创建系列'}
                 </button>
               </>
             )}
@@ -637,7 +655,8 @@ export default function ScriptEditorShell({
         />
       )}
       <ImportFileDialog isOpen={seriesImportOpen} onClose={() => setSeriesImportOpen(false)}
-        initialText={seriesSourceText} initialTitle={projectTitle} />
+        onSuccess={(result) => setAuthoringSeriesId(result.series_id)}
+        initialText={seriesSourceText} initialTitle={projectTitle} sourceScriptDocumentId={scriptDocumentId} />
     </div>
   );
 }

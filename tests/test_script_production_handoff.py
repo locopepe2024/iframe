@@ -171,7 +171,7 @@ def create(owner, episode):
 
 def test_reentry_reuses_project_and_preserves_production_changes(workspace):
     owner, episode = workspace
-    assert api.get_script_document_project(episode['id'], owner) == {'project_id': None}
+    assert api.get_script_document_project(episode['id'], owner) == {'project_id': None, 'series_id': None}
     first = asyncio.run(create(owner, episode))
     assert first.original_text == '第一集正文'
     assert first.source_script_document_id == episode['id']
@@ -184,7 +184,7 @@ def test_reentry_reuses_project_and_preserves_production_changes(workspace):
     assert second.id == first.id
     assert second.original_text == '制作端正文'
     assert api.load_document(first.id)['content'] == doc('制作端编辑稿')
-    assert api.get_script_document_project(episode['id'], owner) == {'project_id': first.id}
+    assert api.get_script_document_project(episode['id'], owner) == {'project_id': first.id, 'series_id': first.series_id}
     assert len(api.pipeline.scripts) == 1
 
 
@@ -208,7 +208,7 @@ def test_each_episode_gets_its_own_project_and_deleted_project_can_be_recreated(
     a = asyncio.run(create(owner, first))
     b = asyncio.run(create(owner, second))
     assert a.id != b.id
-    assert api.get_script_document_project(second['id'], owner) == {'project_id': b.id}
+    assert api.get_script_document_project(second['id'], owner) == {'project_id': b.id, 'series_id': b.series_id}
     del api.pipeline.scripts[a.id]
     replacement = asyncio.run(create(owner, first))
     assert replacement.id not in {a.id, b.id}
@@ -234,7 +234,7 @@ def test_lookup_never_returns_a_foreign_project(workspace):
     project = asyncio.run(create(owner, episode))
     project.owner_user_id = 'user-b'
     project.owner_profile_id = 'profile-b'
-    assert api.get_script_document_project(episode['id'], owner) == {'project_id': None}
+    assert api.get_script_document_project(episode['id'], owner) == {'project_id': None, 'series_id': None}
     own_project = asyncio.run(create(owner, episode))
     assert own_project.id != project.id
     assert own_project.owner_profile_id == owner.owner_profile_id
@@ -250,14 +250,14 @@ def test_http_create_and_lookup_are_owner_scoped(workspace, monkeypatch):
                         (other if authorization == 'Bearer other' else owner, False))
     client = TestClient(api.app)
     path = f"/script-documents/{episode['id']}/production-project"
-    assert client.get(path).json() == {'project_id': None}
+    assert client.get(path).json() == {'project_id': None, 'series_id': None}
     request = {'title': episode['title'], 'text': 'ignored', 'source_script_document_id': episode['id']}
     first = client.post('/projects?skip_analysis=true', json=request)
     assert first.status_code == 200
     second = client.post('/projects?skip_analysis=true', json=request)
     assert second.status_code == 200
     assert second.json()['id'] == first.json()['id']
-    assert client.get(path).json() == {'project_id': first.json()['id']}
+    assert client.get(path).json() == {'project_id': first.json()['id'], 'series_id': first.json()['series_id']}
     headers = {'Authorization': 'Bearer other'}
     assert client.get(path, headers=headers).status_code == 404
     assert client.post('/projects?skip_analysis=true', json=request, headers=headers).status_code == 404
@@ -283,3 +283,13 @@ def test_handoff_does_not_require_provider_model(workspace, monkeypatch):
     })
     assert created.status_code == 200
     assert created.json()['source_script_document_id'] == episode['id']
+
+
+def test_script_document_series_lookup_returns_existing_series(workspace):
+    owner, document = workspace
+    series = api.pipeline.create_series(
+        '剧本系列', owner_user_id=owner.user_id,
+        owner_profile_id=owner.owner_profile_id,
+        source_script_document_id=document['id'],
+    )
+    assert api.get_script_document_series(document['id'], owner) == {'series_id': series.id}

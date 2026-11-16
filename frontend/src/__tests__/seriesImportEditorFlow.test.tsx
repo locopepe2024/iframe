@@ -75,7 +75,7 @@ it("requires source assignment review before creating episodes", async () => {
   ], assignments: [{ start_line: 1, end_line: 1, scope: "unassigned", episodes: [],
     preview: "甲到达", source: "甲到达" }] });
   importFileConfirm.mockResolvedValue({ series: { id: "series-1" }, episodes: [{ id: "episode-1" }] });
-  show({ initialText: "甲到达", initialTitle: "编辑稿" });
+  show({ initialText: "甲到达", initialTitle: "编辑稿", sourceScriptDocumentId: "root-script" });
 
   fireEvent.click(screen.getByRole("button", { name: "解析并预览分集" }));
   fireEvent.click(await screen.findByRole("button", { name: /确认创建/ }));
@@ -85,6 +85,7 @@ it("requires source assignment review before creating episodes", async () => {
   fireEvent.click(screen.getByRole("button", { name: /确认创建/ }));
   await waitFor(() => expect(importFileConfirm).toHaveBeenCalledWith(expect.objectContaining({
     title: "编辑稿", import_id: "import-1",
+    source_script_document_id: "root-script",
     assignments: [expect.objectContaining({ scope: "episode", episodes: [1] })],
   })));
 });

@@ -13027,6 +13027,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         owner_user_id: Optional[str] = None,
         owner_profile_id: Optional[str] = None,
         assignments: Optional[List[Dict[str, Any]]] = None,
+        source_script_document_id: Optional[str] = None,
     ) -> Dict:
         """Create a Series with Episodes from import data.
         episodes_data: list of dicts with episode_number, title, start_marker, end_marker."""
@@ -13050,6 +13051,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             description,
             owner_user_id=owner_user_id,
             owner_profile_id=owner_profile_id,
+            source_script_document_id=source_script_document_id,
         )
         series.source_context = series_context
 

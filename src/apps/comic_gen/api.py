@@ -617,7 +617,8 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
         )
         if path == "/projects" and request.method == "POST" and request.query_params.get("skip_analysis", "").lower() == "true":
             needs_script_model = False
-        if path.endswith("/production-project") and path.startswith("/script-documents/") and request.method == "GET":
+        if (path.endswith(("/production-project", "/production-series"))
+                and path.startswith("/script-documents/") and request.method == "GET"):
             needs_script_model = False
         if needs_script_model:
             try:
@@ -1268,6 +1269,11 @@ class CreateProjectRequest(BaseModel):
 def _find_script_document_project(document_id: str, user: UserContext):
     return next((project for project in pipeline.list_scripts(user.owner_profile_id)
                  if project.source_script_document_id == document_id), None)
+
+
+def _find_script_document_series(document_id: str, user: UserContext):
+    return next((series for series in pipeline.list_series(user.owner_profile_id)
+                 if series.source_script_document_id == document_id), None)
 
 
 def _create_script_document_project(request: CreateProjectRequest, user: UserContext):
@@ -2556,6 +2562,7 @@ class ConfirmImportRequest(BaseModel):
     text: Optional[str] = None
     episodes: List[Dict[str, Any]]  # episode_number, title, start_marker, end_marker, ...
     assignments: Optional[List[Dict[str, Any]]] = None
+    source_script_document_id: Optional[str] = None
 
 
 @app.post("/series/import/confirm")
@@ -2583,6 +2590,18 @@ async def import_file_confirm(
         if not text:
             raise ValueError("No text available. Provide import_id or text.")
         loop = asyncio.get_event_loop()
+        if request.source_script_document_id:
+            _script_document_dir(user.owner_profile_id, request.source_script_document_id)
+            existing = _find_script_document_series(request.source_script_document_id, user)
+            if existing is not None:
+                return signed_response({
+                    "series": existing.model_dump(),
+                    "episodes": [
+                        {"id": episode.id, "title": episode.title,
+                         "episode_number": episode.episode_number}
+                        for episode in pipeline.get_series_episodes(existing.id)
+                    ],
+                })
         result = await loop.run_in_executor(
             None,
             partial(
@@ -2594,6 +2613,7 @@ async def import_file_confirm(
                 user.user_id,
                 user.owner_profile_id,
                 request.assignments,
+                request.source_script_document_id,
             )
         )
         if request.import_id:
@@ -10002,7 +10022,18 @@ def get_script_document_project(document_id: str, user: UserContext = Depends(re
     _script_document_dir(user.owner_profile_id, document_id)
     with pipeline._save_lock:
         project = _find_script_document_project(document_id, user)
-        return {"project_id": project.id if project is not None else None}
+        return {
+            "project_id": project.id if project is not None else None,
+            "series_id": project.series_id if project is not None else None,
+        }
+
+
+@app.get("/script-documents/{document_id}/production-series")
+def get_script_document_series(document_id: str, user: UserContext = Depends(require_studio_user)):
+    _script_document_dir(user.owner_profile_id, document_id)
+    with pipeline._save_lock:
+        series = _find_script_document_series(document_id, user)
+        return {"series_id": series.id if series is not None else None}
 
 
 @app.delete("/script-documents/{document_id}")

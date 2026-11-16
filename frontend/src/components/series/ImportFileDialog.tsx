@@ -13,6 +13,7 @@ interface ImportFileDialogProps {
     onSuccess?: (result: any) => void;
     initialText?: string;
     initialTitle?: string;
+    sourceScriptDocumentId?: string;
 }
 
 interface EpisodePreview {
@@ -42,7 +43,7 @@ interface PreviewResult {
 
 type Step = 1 | 2 | 3;
 
-export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialText, initialTitle }: ImportFileDialogProps) {
+export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialText, initialTitle, sourceScriptDocumentId }: ImportFileDialogProps) {
     // Step state
     const [step, setStep] = useState<Step>(1);
 
@@ -176,6 +177,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess, initialTe
                 import_id: previewResult.import_id,
                 episodes: previewResult.episodes,
                 assignments: previewResult.assignments,
+                source_script_document_id: sourceScriptDocumentId,
             });
             setCreatedResult({
                 series_id: result.series?.id || result.series_id,
