@@ -483,6 +483,11 @@ def test_scene_tool_snapshot_projects_into_shot_design_layers(tmp_path):
     assert camera["focal_length"] == "24mm 广角"
     assert camera["capture_device"] == "监控摄像机观感"
 
+    camera_projection.selected_fields = ["camera"]
+    clauses = reference_projection_prompt_clauses(camera_projection, target, scene)
+    assert any("参考结构化镜头" in clause and "capture_device：监控摄像机观感" in clause
+               and "focal_length：24mm 广角" in clause for clause in clauses)
+
 
 def test_generated_frame_reference_keeps_its_plan_scope_after_source_edits(tmp_path):
     pipeline, script, source_scene, target_scene = make_pipeline(tmp_path)

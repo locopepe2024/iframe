@@ -37,6 +37,21 @@ it("shows conditional compatibility advice while keeping the selected settings i
     expect(screen.getByRole("button", { name: "14mm 超广角" })).toHaveAttribute("aria-pressed", "true");
 });
 
+it("shows back-view advice for the stored button value and clears it when the viewpoint changes", () => {
+    render(<Harness />);
+    open("镜头");
+    fireEvent.click(screen.getByRole("button", { name: "近景" }));
+    fireEvent.click(screen.getByRole("button", { name: "背视" }));
+    expect(screen.getByTestId("prompt")).toHaveTextContent("机位：背面机位");
+    expect(screen.getByText(/^组合提醒：/)).toHaveTextContent("遮住主体正面特征");
+    expect(screen.getByRole("button", { name: "背视" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "平视" }));
+    expect(screen.queryByText(/遮住主体正面特征/)).not.toBeInTheDocument();
+    expect(screen.getByTestId("prompt")).toHaveTextContent("景别：近景");
+    expect(screen.getByTestId("prompt")).toHaveTextContent("机位：平视机位");
+});
+
 it("replaces only the chosen layer direction and can clear sphere settings", async () => {
     render(<Harness />);
     open("光影");
