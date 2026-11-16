@@ -50,6 +50,14 @@ class EpisodeBatch(BaseModel):
     suggestions: list[str] = Field(default_factory=list, max_length=100)
 
 
+class SourceMapValidationError(RuntimeError):
+    """Safe contract diagnostics; returned model values are never logged."""
+
+    def __init__(self, message: str, issues: list[dict[str, Any]]):
+        self.issues = issues[:12]
+        super().__init__(message)
+
+
 class EpisodeBatchValidationError(RuntimeError):
     """Bounded contract diagnostics, containing field paths and codes only."""
 
@@ -98,7 +106,9 @@ def validate_source_map(value: dict, blocks: list[dict[str, str]]) -> SourceMap:
     try:
         result = SourceMap.model_validate(value)
     except ValidationError as exc:
-        raise RuntimeError('原文归属格式无效，请重新解析') from exc
+        issues = [{'field': '.'.join(map(str, error['loc'])), 'type': error['type']}
+                  for error in exc.errors(include_input=False, include_context=False, include_url=False)]
+        raise SourceMapValidationError('原文归属格式无效，请重新解析', issues) from exc
     known = {block['id'] for block in blocks}
     used = set(result.ignored_refs)
     for refs in result.settings.model_dump().values():
@@ -106,10 +116,35 @@ def validate_source_map(value: dict, blocks: list[dict[str, str]]) -> SourceMap:
     for episode in result.episodes:
         used.update(episode.source_refs)
     if used - known:
-        raise RuntimeError('原文引用包含不存在的段落，请重新解析')
+        raise SourceMapValidationError('原文引用包含不存在的段落，请重新解析',
+                                       [{'field': 'source_refs', 'type': 'source_unknown'}])
     if known - used:
-        raise RuntimeError(f'有 {len(known - used)} 个原文段落未归属，请重新解析')
+        raise SourceMapValidationError(f'有 {len(known - used)} 个原文段落未归属，请重新解析',
+            [{'field': 'source_refs', 'type': 'source_unassigned', 'refs': sorted(known - used)[:32]}])
     return result
+
+
+def _map_source_batch(llm: Any, system: str, data: dict, model: str | None,
+                      checkpoints: Checkpoints, name: str) -> tuple[dict, SourceMap]:
+    value = checkpoints.get(name) or _chat(llm, system, data, model)
+    try:
+        return value, validate_source_map(value, data['source_blocks'])
+    except SourceMapValidationError as exc:
+        logger.warning('Outline source contract rejected: fragment=%s issues=%s',
+                       data['fragment'], json.dumps(exc.issues))
+        repair_data = {**data, 'contract_errors': exc.issues}
+    # Correct this fragment once using the same gateway/model and original
+    # evidence. Never guess ownership locally or checkpoint incomplete maps.
+    # Transport, refusal and JSON failures do not enter this correction path.
+    value = _chat(llm, system + '\n上次本段返回未通过原文归属校验。根据contract_errors和source_blocks重新归属本段，'
+                  '逐一核对本段全部ID，不能遗漏或引用本段以外的ID；有实质内容的段落不能为通过校验放入ignored_refs。',
+                  repair_data, model)
+    try:
+        return value, validate_source_map(value, data['source_blocks'])
+    except SourceMapValidationError as exc:
+        logger.warning('Outline source correction rejected: fragment=%s issues=%s',
+                       data['fragment'], json.dumps(exc.issues))
+        raise
 
 
 def validate_episode_batch(value: dict, numbers: list[int]) -> list[dict]:
@@ -247,10 +282,10 @@ def analyze_chunked_outline(llm: Any, text: str, *, model: str | None = None,
     for index, batch in enumerate(batches, 1):
         name = f'map-{index:04d}'
         try:
-            value = checkpoints.get(name) or _chat(llm, map_system,
+            value, mapped = _map_source_batch(llm, map_system,
                 {'stage': 'map_source', 'fragment': index, 'fragments': len(batches),
-                 'preceding_context': prior_blocks[-2:], 'preceding_episode_numbers': prior_episodes, 'source_blocks': batch}, model)
-            mapped = validate_source_map(value, batch)
+                 'preceding_context': prior_blocks[-2:], 'preceding_episode_numbers': prior_episodes, 'source_blocks': batch},
+                model, checkpoints, name)
             checkpoints.put(name, value)
         except Exception as exc:
             raise _stage_failure(f'总纲第 {index}/{len(batches)} 段解析', exc) from exc
