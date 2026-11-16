@@ -608,8 +608,18 @@ async def enforce_studio_owner_boundary(request: Request, call_next):
     script_model_token = None
     try:
         # Freeze the account's screenplay model before any background job is
-        # queued. copy_context() keeps this choice for the entire operation.
-        if path.startswith(("/projects", "/series", "/script-documents", "/video/polish_")) or path in {"/script-writing/generate", "/script-writing/rewrite"}:
+        # queued. Read-only authoring lookups and project creation with
+        # skip_analysis do not call an LLM, so they must remain usable before
+        # the user has configured a personal provider key.
+        needs_script_model = (
+            path.startswith(("/projects", "/series", "/video/polish_"))
+            or path in {"/script-writing/generate", "/script-writing/rewrite"}
+        )
+        if path == "/projects" and request.method == "POST" and request.query_params.get("skip_analysis", "").lower() == "true":
+            needs_script_model = False
+        if path.endswith("/production-project") and path.startswith("/script-documents/") and request.method == "GET":
+            needs_script_model = False
+        if needs_script_model:
             try:
                 model = await asyncio.to_thread(_script_model_for_request, user, None)
             except HTTPException as exc:

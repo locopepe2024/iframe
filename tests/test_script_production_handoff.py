@@ -261,3 +261,25 @@ def test_http_create_and_lookup_are_owner_scoped(workspace, monkeypatch):
     headers = {'Authorization': 'Bearer other'}
     assert client.get(path, headers=headers).status_code == 404
     assert client.post('/projects?skip_analysis=true', json=request, headers=headers).status_code == 404
+
+
+def test_handoff_does_not_require_provider_model(workspace, monkeypatch):
+    """Creating/linking a production project is local and must precede model setup."""
+    from fastapi.testclient import TestClient
+
+    owner, episode = workspace
+    monkeypatch.setattr(api, '_resolve_request_context', lambda *_args: (owner, False))
+
+    def missing_model(*_args, **_kwargs):
+        raise HTTPException(409, 'UniArt API key is not configured for this user')
+
+    monkeypatch.setattr(api, '_script_model_for_request', missing_model)
+    client = TestClient(api.app)
+    path = f'/script-documents/{episode["id"]}/production-project'
+    assert client.get(path).status_code == 200
+    created = client.post('/projects?skip_analysis=true', json={
+        'title': episode['title'], 'text': 'ignored',
+        'source_script_document_id': episode['id'],
+    })
+    assert created.status_code == 200
+    assert created.json()['source_script_document_id'] == episode['id']
