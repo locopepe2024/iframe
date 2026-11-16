@@ -852,6 +852,7 @@
     "statusFilterAria": "Project status",
     "noMatchTitle": "No matching projects",
     "standaloneGroup": "Standalone Projects",
+    "seriesMetadataPending": "Information for {count} series has not loaded. Click Sync to retry. Their episodes remain in their series.",
     "emptyQuote": "“Every city hides a story yet to be told.”"
   },
   "settings": {

@@ -852,6 +852,7 @@
     "statusFilterAria": "项目状态",
     "noMatchTitle": "没有匹配的项目",
     "standaloneGroup": "独立项目",
+    "seriesMetadataPending": "有 {count} 个系列的信息尚未加载，请点击同步重试。分集仍保留在所属系列中。",
     "emptyQuote": "“每一座城市，都藏着一个还没被讲出来的故事。”"
   },
   "settings": {
