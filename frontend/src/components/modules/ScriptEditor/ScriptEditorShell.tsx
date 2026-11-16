@@ -599,7 +599,6 @@ export default function ScriptEditorShell({
               productionDisabled={productionDisabled || checkingProduction}
               productionPending={creatingProject || checkingProduction}
               productionAvailable={productionHandoffAvailable}
-              productionMode={isSingleEpisodeOutline ? 'standalone' : isRootOutline ? 'series' : 'episode'}
             />
           </aside>
         )}

@@ -10,27 +10,20 @@ export interface PipelinePanelProps {
   disabled?: boolean;
   isEntering?: boolean;
   productionAvailable?: boolean;
-  productionMode?: 'series' | 'episode' | 'standalone';
 }
 
-export default function PipelinePanel({ projectId, onEnterPipeline, disabled = false, isEntering = false, productionAvailable = true, productionMode = 'episode' }: PipelinePanelProps) {
+export default function PipelinePanel({ projectId, onEnterPipeline, disabled = false, isEntering = false, productionAvailable = true }: PipelinePanelProps) {
   const t = useTranslations('scriptEditor');
   const wordCount = useEditorStore((s) => s.wordCount);
   const editorMode = useEditorStore((s) => s.editorMode);
   const isEmbedded = editorMode === 'embedded';
-  const isStandalone = productionMode === 'standalone';
-  const titleKey = isStandalone ? 'panels.independentProductionTitle' : 'panels.productionTitle';
-  const existingHintKey = isStandalone ? 'panels.independentExistingHint' : 'panels.productionExistingHint';
-  const newHintKey = isStandalone ? 'panels.independentNewHint' : 'panels.productionNewHint';
-  const existingActionKey = isStandalone ? 'panels.enterIndependentProject' : 'panels.enterPipeline';
-  const newActionKey = isStandalone ? 'panels.createIndependentProject' : 'panels.productionCreate';
 
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h3 className="text-sm font-medium text-foreground">{t(titleKey)}</h3>
+        <h3 className="text-sm font-medium text-foreground">{t('panels.productionTitle')}</h3>
         <p className="mt-2 text-sm leading-6 text-text-secondary">
-          {t(!productionAvailable ? 'panels.productionOutlineHint' : projectId ? existingHintKey : newHintKey)}
+          {t(!productionAvailable ? 'panels.productionOutlineHint' : projectId ? 'panels.productionExistingHint' : 'panels.productionNewHint')}
         </p>
       </div>
 
@@ -46,7 +39,7 @@ export default function PipelinePanel({ projectId, onEnterPipeline, disabled = f
             aria-busy={isEntering}
             className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">
             {isEntering && <Loader2 size={16} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
-            {t(isEntering ? 'panels.productionEntering' : projectId ? existingActionKey : newActionKey)}
+            {t(isEntering ? 'panels.productionEntering' : projectId ? 'panels.enterPipeline' : 'panels.productionCreate')}
             {!isEntering && <ArrowRight size={16} aria-hidden="true" />}
           </button>
           <p className="text-xs leading-5 text-text-secondary">
