@@ -84,6 +84,13 @@ def test_reentry_repairs_existing_standalone_siblings_without_rewriting_them(pla
     assert api.pipeline.get_series(result.series_id, owner.owner_profile_id).episode_ids == [p.id for p in existing]
 
 
+def test_lookup_reuses_legacy_series_episode_without_source_link(planned_episodes):
+    owner, _, episodes = planned_episodes
+    project = asyncio.run(create(owner, episodes[0]))
+    project.source_script_document_id = None
+    assert api.get_script_document_project(episodes[0]['id'], owner)['project_id'] == project.id
+
+
 def test_concurrent_sibling_handoffs_create_one_series(planned_episodes):
     owner, _, episodes = planned_episodes
 

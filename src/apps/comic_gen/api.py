@@ -1274,7 +1274,24 @@ def _find_script_document_project(document_id: str, user: UserContext):
 def _find_script_document_entry_project(document_id: str, user: UserContext):
     # Root outlines and episodes are independent authoring documents. A root
     # lookup must never be redirected to its only episode's project.
-    return _find_script_document_project(document_id, user)
+    project = _find_script_document_project(document_id, user)
+    if project is not None:
+        return project
+
+    metadata = _script_document_metadata(_script_document_dir(user.owner_profile_id, document_id))
+    parent_id = metadata.get("authoring_parent_id")
+    if not parent_id:
+        return None
+    workspace = _authoring_store(user).workspace(parent_id)
+    episode = next((item for item in (workspace["plan"] or {}).get("episodes", [])
+                    if item.get("document_id") == document_id), None)
+    series = _find_script_document_series(parent_id, user)
+    if episode is None or series is None:
+        return None
+    episode_ids = set(series.episode_ids or [])
+    return next((candidate for candidate in pipeline.list_scripts(user.owner_profile_id)
+                 if candidate.id in episode_ids
+                 and candidate.episode_number == episode.get("number")), None)
 
 
 def _find_script_document_series(document_id: str, user: UserContext):
