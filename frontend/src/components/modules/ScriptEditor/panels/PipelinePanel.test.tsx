@@ -23,6 +23,20 @@ it('blocks new projects for empty text but permits opening existing ones', () =>
   expect(screen.getByRole('button', { name: 'panels.enterPipeline' })).toBeEnabled();
 });
 
+it('uses standalone project actions for a single-episode outline', () => {
+  const enter = vi.fn();
+  render(<PipelinePanel productionMode="standalone" onEnterPipeline={enter} />);
+  expect(screen.getByRole('heading', { name: 'panels.independentProductionTitle' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'panels.createIndependentProject' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: 'panels.createIndependentProject' }));
+  expect(enter).toHaveBeenCalledOnce();
+});
+
+it('uses standalone open action for an existing single-episode project', () => {
+  render(<PipelinePanel productionMode="standalone" projectId="project-1" onEnterPipeline={vi.fn()} />);
+  expect(screen.getByRole('button', { name: 'panels.enterIndependentProject' })).toBeEnabled();
+});
+
 it('shows a disabled busy button while opening', () => {
   render(<PipelinePanel onEnterPipeline={vi.fn()} isEntering />);
   expect(screen.getByRole('button')).toBeDisabled();
