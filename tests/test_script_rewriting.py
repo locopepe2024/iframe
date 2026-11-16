@@ -79,6 +79,13 @@ def test_rewrite_job_preserves_account_model_and_preview_selection(rewrite_clien
     assert owner == 'writer-profile' and resource == 'script-writing:document:' + document
     assert run()['draft'] == '局部新稿'
     assert calls[0]['model'] == provider + '/deepseek-v4.1-flash'
+    system = calls[0]['messages'][0]['content']
+    for dimension in ('01 场景与情境', '03 天气与身体状态', '04 服装与连续性',
+                      '06 动作与空间关系', '07 表情、眼神与情绪变化'):
+        assert dimension in system
+    assert '前后文仅用于衔接，不是改写范围' in system
+    assert '只按剧情需要选用' in system
+    assert '单集大纲扩写技能' not in system
     prompt = calls[0]['messages'][1]['content']
     assert payload['selected_text'] in prompt and '绝不发送整份总纲' not in prompt
     assert client.get(f'/script-documents/{document}').json()['content']['content'][0]['content'][0]['text'] == '绝不发送整份总纲'
