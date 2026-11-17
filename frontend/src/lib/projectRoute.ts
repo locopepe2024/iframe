@@ -15,7 +15,7 @@ export function projectRouteHash(projectId: string, step?: string): string {
 }
 
 export function parseProjectRouteHash(hash: string): { projectId: string; step: ProjectStep | null } | null {
-    const match = hash.match(/^#\/project\/([^/?#]+)(?:\?([^#]*))?$/);
+    const match = hash.match(/^#\/project\/([^/?#]+)(?:\?([^#]*))?(?:#([^#]*))?$/);
     if (!match) return null;
 
     let projectId: string;
@@ -24,7 +24,7 @@ export function parseProjectRouteHash(hash: string): { projectId: string; step: 
     } catch {
         return null;
     }
-    const requestedStep = new URLSearchParams(match[2] || "").get("step");
+    const requestedStep = new URLSearchParams(match[2] || "").get("step") || match[3] || null;
     const step = requestedStep && PROJECT_STEPS.has(requestedStep as ProjectStep)
         ? requestedStep as ProjectStep
         : null;

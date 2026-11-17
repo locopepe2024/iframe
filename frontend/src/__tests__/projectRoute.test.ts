@@ -15,10 +15,11 @@ describe("project route hashes", () => {
         expect(parseProjectRouteHash(hash)).toEqual({ projectId: "owner/episode 1", step: "assets" });
     });
 
-    it("ignores unsupported steps and old second-fragment routes", () => {
+    it("ignores unsupported steps and recovers the old second-fragment format", () => {
         expect(parseProjectRouteHash("#/project/episode-12?step=unknown"))
             .toEqual({ projectId: "episode-12", step: null });
-        expect(parseProjectRouteHash("#/project/episode-12#storyboard")).toBeNull();
+        expect(parseProjectRouteHash("#/project/episode-12#storyboard"))
+            .toEqual({ projectId: "episode-12", step: "storyboard" });
         expect(parseProjectRouteHash("#/project/episode%ZZ")).toBeNull();
     });
 });
