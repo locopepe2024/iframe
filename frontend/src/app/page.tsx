@@ -19,6 +19,7 @@ import type { GlobalTab } from "@/components/layout/GlobalSidebar";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
 import { shouldGuardEditingRouteChange } from "@/lib/editingNavigationGuard";
+import { parseProjectRouteHash } from "@/lib/projectRoute";
 import { useTranslations } from "next-intl";
 import TauriMenuListener from "@/components/layout/TauriMenuListener";
 
@@ -480,6 +481,7 @@ export default function Home() {
   const [wsStatus, setWsStatus] = useState<DerivedStatus | "all">("all");
   const [viewMode, setViewMode] = useState<"gallery" | "list">("gallery");
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectStep, setProjectStep] = useState<string | null>(null);
   const [scriptDocumentId, setScriptDocumentId] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
@@ -687,14 +689,16 @@ export default function Home() {
         setCurrentView('project-editor');
         return;
       }
-      if (hash.startsWith('#/project/')) {
-        const id = hash.replace('#/project/', '');
-        setProjectId(id);
+      const projectRoute = parseProjectRouteHash(hash);
+      if (projectRoute) {
+        setProjectId(projectRoute.projectId);
+        setProjectStep(projectRoute.step);
         setSeriesId(null);
         setEpisodeId(null);
         setCurrentView('project');
         return;
       }
+      setProjectStep(null);
       if (hash === '#/library') {
         setCurrentView('library');
         setActiveTab('library');
@@ -776,7 +780,7 @@ export default function Home() {
 
   // 项目详情页 — 全屏，无 GlobalSidebar
   if (currentView === 'project' && projectId) {
-    return <ProjectClient id={projectId} />;
+    return <ProjectClient id={projectId} initialStep={projectStep || undefined} />;
   }
 
   // 系列集数编辑 — 全屏，BreadcrumbBar 内嵌在 ProjectClient

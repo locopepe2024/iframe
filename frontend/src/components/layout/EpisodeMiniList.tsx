@@ -11,6 +11,7 @@ import clsx from "clsx";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { debugLog } from "@/lib/debugLog";
+import { projectRouteHash } from "@/lib/projectRoute";
 
 interface EpisodeListItem {
     id?: string;
@@ -47,8 +48,7 @@ function navigateToSeriesAddEpisode(seriesId: string): void {
 }
 
 function navigateToProject(projectId: string, activeStep: string): void {
-    const stepFragment = activeStep ? `#${activeStep}` : "";
-    window.location.hash = `/project/${projectId}${stepFragment}`;
+    window.location.hash = projectRouteHash(projectId, activeStep);
 }
 
 export default function EpisodeMiniList({
