@@ -1362,7 +1362,14 @@ def get_project_authoring_context(
     project = pipeline.get_script(script_id, user.owner_profile_id)
     if project is None:
         raise HTTPException(status_code=404, detail="Project not found")
-    source_document_id = project.source_script_document_id
+    project_source_document_id = project.source_script_document_id
+    source_document_id = project_source_document_id
+    # Older episode projects may have been linked to their Series before the
+    # source-document field was introduced. The Series root is the canonical
+    # recovery path for those projects.
+    series = pipeline.get_series(project.series_id, user.owner_profile_id) if project.series_id else None
+    if not source_document_id and series:
+        source_document_id = series.source_script_document_id
     if not source_document_id:
         return {"available": False, "root": None, "series": None, "episodes": []}
 
@@ -1375,11 +1382,20 @@ def get_project_authoring_context(
         workspace = _authoring_store(user).workspace(root_document_id)
     except HTTPException:
         # A deleted or legacy source document should not make the production
-        # workspace unusable; it simply has no authoring navigation context.
-        return {"available": False, "root": None, "series": None, "episodes": []}
+        # workspace unusable. Try the persisted Series root once more when the
+        # episode's source document was stale or missing.
+        fallback_root_id = series.source_script_document_id if series else None
+        if not fallback_root_id or fallback_root_id == source_document_id:
+            return {"available": False, "root": None, "series": None, "episodes": []}
+        try:
+            root_document_id = fallback_root_id
+            root_dir = _script_document_dir(user.owner_profile_id, root_document_id)
+            root_metadata = _script_document_metadata(root_dir)
+            workspace = _authoring_store(user).workspace(root_document_id)
+        except HTTPException:
+            return {"available": False, "root": None, "series": None, "episodes": []}
 
     plan_episodes = list((workspace.get("plan") or {}).get("episodes") or [])
-    series = pipeline.get_series(project.series_id, user.owner_profile_id) if project.series_id else None
     series = series or _find_script_document_series(root_document_id, user)
     root_project, episode_projects = _authoring_context_projects(
         root_document_id, plan_episodes, series, user,
@@ -1409,7 +1425,7 @@ def get_project_authoring_context(
 
     return {
         "available": True,
-        "current_role": "root" if source_document_id == root_document_id else "episode",
+        "current_role": "root" if project_source_document_id == root_document_id else "episode",
         "root": {
             "document_id": root_document_id,
             "title": root_metadata.get("title") or root_document_id,

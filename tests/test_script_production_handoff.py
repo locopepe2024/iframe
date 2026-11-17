@@ -367,3 +367,17 @@ def test_authoring_context_links_outline_and_episode_projects(planned_episodes):
     assert episode_context["current_role"] == "episode"
     assert episode_context["root"]["project_id"] == outline_project.id
     assert [item["project_id"] for item in episode_context["episodes"]] == [first.id, second.id]
+
+
+def test_authoring_context_recovers_legacy_episode_without_source_link(planned_episodes):
+    owner, root, episodes = planned_episodes
+    outline_project = asyncio.run(create(owner, root))
+    first = asyncio.run(create(owner, episodes[0]))
+    second = asyncio.run(create(owner, episodes[1]))
+    first.source_script_document_id = None
+
+    context = api.get_project_authoring_context(first.id, owner)
+    assert context["available"] is True
+    assert context["current_role"] == "episode"
+    assert context["root"]["project_id"] == outline_project.id
+    assert [item["project_id"] for item in context["episodes"]] == [first.id, second.id]
