@@ -238,10 +238,11 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
                     breadcrumbSegments={segments}
                     headerActions={settingsActions}
                     topSlot={
-                        currentProject?.series_id ? (
+                        currentProject?.source_script_document_id || currentProject?.series_id ? (
                             <EpisodeMiniList
                                 seriesId={currentProject.series_id}
                                 currentProjectId={id}
+                                sourceScriptDocumentId={currentProject.source_script_document_id}
                                 activeStep={activeStep}
                             />
                         ) : null

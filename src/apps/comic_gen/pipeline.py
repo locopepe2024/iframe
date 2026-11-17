@@ -12182,9 +12182,22 @@ class ComicGenPipeline(StudioOwnerMixin):
             series = matches[0] if matches else None
             if requested_series_id and (not series or series.id != requested_series_id):
                 raise ValueError("分集必须进入总纲对应的制作系列")
+            source_repairs = {}
+            if series:
+                # Older handoffs stored series membership but no source document
+                # id. Validate the proposed links before changing or saving any
+                # project so rejected handoffs cannot leave partial repairs.
+                by_number = {number: document_id for document_id, number in episode_numbers.items()}
+                for script in self.scripts.values():
+                    if (script.owner_profile_id == owner_profile_id
+                            and script.id in series.episode_ids
+                            and not script.source_script_document_id
+                            and script.episode_number in by_number):
+                        source_repairs[script.id] = by_number[script.episode_number]
             episodes = [script for script in self.list_scripts(owner_profile_id)
-                        if script.source_script_document_id in episode_numbers]
-            if len({script.source_script_document_id for script in episodes}) != len(episodes):
+                        if source_repairs.get(script.id, script.source_script_document_id) in episode_numbers]
+            if len({source_repairs.get(script.id, script.source_script_document_id)
+                    for script in episodes}) != len(episodes):
                 raise ValueError("同一分集关联了多个制作项目，请先整理分集归属")
             for script in episodes:
                 if (script.series_id and script.series_id != (series.id if series else None)
@@ -12205,6 +12218,9 @@ class ComicGenPipeline(StudioOwnerMixin):
                 )
             changed = False
             for script in episodes:
+                if script.id in source_repairs:
+                    script.source_script_document_id = source_repairs[script.id]
+                    changed = True
                 number = episode_numbers[script.source_script_document_id]
                 if (script.series_id != series.id or script.episode_number != number
                         or script.id not in series.episode_ids):

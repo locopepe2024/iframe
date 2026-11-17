@@ -546,6 +546,7 @@ export interface Project {
     assembly_plan?: AssemblyEditPlan | null;
     series_id?: string;
     episode_number?: number;
+    source_script_document_id?: string;
     episode_understanding?: EpisodeUnderstandingHandoff | null;
     episode_person_asset_bindings?: Record<string, string>;
     episode_character_uses?: EpisodeCharacterUse[];

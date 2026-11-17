@@ -84,6 +84,46 @@ def test_reentry_repairs_existing_standalone_siblings_without_rewriting_them(pla
     assert api.pipeline.get_series(result.series_id, owner.owner_profile_id).episode_ids == [p.id for p in existing]
 
 
+def test_lookup_reuses_legacy_series_episode_without_source_link(planned_episodes):
+    owner, _, episodes = planned_episodes
+    project = asyncio.run(create(owner, episodes[0]))
+    project.source_script_document_id = None
+    assert api.get_script_document_project(episodes[0]['id'], owner)['project_id'] == project.id
+
+
+def test_handoff_repairs_legacy_series_links_before_duplicate_check(planned_episodes):
+    owner, _, episodes = planned_episodes
+    first = asyncio.run(create(owner, episodes[0]))
+    second = asyncio.run(create(owner, episodes[1]))
+    first.source_script_document_id = None
+    second.source_script_document_id = None
+    result = asyncio.run(create(owner, episodes[0]))
+    assert result.id == first.id
+    assert first.source_script_document_id == episodes[0]['id']
+    assert second.source_script_document_id == episodes[1]['id']
+
+
+def test_legacy_link_conflict_does_not_mutate_or_save_projects(planned_episodes, monkeypatch):
+    owner, _, episodes = planned_episodes
+    legacy = asyncio.run(create(owner, episodes[0]))
+    legacy.source_script_document_id = None
+    api.pipeline.create_project(
+        '已有分集项目', '制作端编辑正文', True, 'r2v', None,
+        owner.user_id, owner.owner_profile_id,
+        source_script_document_id=episodes[0]['id'],
+    )
+    before = {key: value.model_dump() for key, value in api.pipeline.scripts.items()}
+    saves = []
+    monkeypatch.setattr(api.pipeline, '_save_data', lambda: saves.append(True))
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(create(owner, episodes[0]))
+
+    assert exc.value.status_code == 409
+    assert {key: value.model_dump() for key, value in api.pipeline.scripts.items()} == before
+    assert saves == []
+
+
 def test_concurrent_sibling_handoffs_create_one_series(planned_episodes):
     owner, _, episodes = planned_episodes
 
@@ -295,7 +335,7 @@ def test_script_document_series_lookup_returns_existing_series(workspace):
     assert api.get_script_document_series(document['id'], owner) == {'series_id': series.id}
 
 
-def test_single_episode_outline_creates_one_independent_project(workspace):
+def test_single_episode_outline_and_episode_create_separate_projects(workspace):
     from src.apps.comic_gen.models import ScriptWritingPlanDraft
 
     owner, root = workspace
@@ -311,12 +351,54 @@ def test_single_episode_outline_creates_one_independent_project(workspace):
     episode_id = workspace_after_confirm['plan']['episodes'][0]['document_id']
     api.save_script_document(episode_id, api.UpdateScriptDocumentRequest(content=doc('唯一分集剧本正文')), owner)
 
-    created = asyncio.run(create(owner, root))
-    assert created.source_script_document_id == episode_id
-    assert created.series_id is None
+    outline_project = asyncio.run(create(owner, root))
+    episode_project = asyncio.run(create(owner, {
+        'id': episode_id,
+        'title': '唯一一集',
+    }))
+    assert outline_project.source_script_document_id == root['id']
+    assert episode_project.source_script_document_id == episode_id
+    assert outline_project.id != episode_project.id
+    assert outline_project.series_id is None
+    assert episode_project.series_id is None
     assert api.get_script_document_project(root['id'], owner) == {
-        'project_id': created.id, 'series_id': None,
+        'project_id': outline_project.id, 'series_id': None,
     }
-    assert asyncio.run(create(owner, root)).id == created.id
-    assert len(api.pipeline.scripts) == 1
+    assert api.get_script_document_project(episode_id, owner) == {
+        'project_id': episode_project.id, 'series_id': None,
+    }
+    assert asyncio.run(create(owner, root)).id == outline_project.id
+    assert len(api.pipeline.scripts) == 2
     assert not api.pipeline.series_store
+
+
+def test_authoring_context_links_outline_and_episode_projects(planned_episodes):
+    owner, root, episodes = planned_episodes
+    outline_project = asyncio.run(create(owner, root))
+    first = asyncio.run(create(owner, episodes[0]))
+    second = asyncio.run(create(owner, episodes[1]))
+
+    root_context = api.get_project_authoring_context(outline_project.id, owner)
+    assert root_context["available"] is True
+    assert root_context["current_role"] == "root"
+    assert root_context["root"]["project_id"] == outline_project.id
+    assert [item["project_id"] for item in root_context["episodes"]] == [first.id, second.id]
+
+    episode_context = api.get_project_authoring_context(first.id, owner)
+    assert episode_context["current_role"] == "episode"
+    assert episode_context["root"]["project_id"] == outline_project.id
+    assert [item["project_id"] for item in episode_context["episodes"]] == [first.id, second.id]
+
+
+def test_authoring_context_recovers_legacy_episode_without_source_link(planned_episodes):
+    owner, root, episodes = planned_episodes
+    outline_project = asyncio.run(create(owner, root))
+    first = asyncio.run(create(owner, episodes[0]))
+    second = asyncio.run(create(owner, episodes[1]))
+    first.source_script_document_id = None
+
+    context = api.get_project_authoring_context(first.id, owner)
+    assert context["available"] is True
+    assert context["current_role"] == "episode"
+    assert context["root"]["project_id"] == outline_project.id
+    assert [item["project_id"] for item in context["episodes"]] == [first.id, second.id]

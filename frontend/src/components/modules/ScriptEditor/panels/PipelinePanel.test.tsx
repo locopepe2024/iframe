@@ -20,8 +20,9 @@ it('blocks new projects for empty text but permits opening existing ones', () =>
   const { rerender } = render(<PipelinePanel onEnterPipeline={vi.fn()} />);
   expect(screen.getByRole('button')).toBeDisabled();
   rerender(<PipelinePanel projectId="production-1" onEnterPipeline={vi.fn()} />);
-  expect(screen.getByRole('button', { name: 'panels.enterPipeline' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'panels.productionEnter' })).toBeEnabled();
 });
+
 
 it('shows a disabled busy button while opening', () => {
   render(<PipelinePanel onEnterPipeline={vi.fn()} isEntering />);
@@ -35,8 +36,8 @@ it('hides navigation in embedded mode', () => {
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
 
-it('does not offer a production project from the series outline', () => {
+it('keeps the production entry unavailable while document classification is pending', () => {
   render(<PipelinePanel onEnterPipeline={vi.fn()} productionAvailable={false} />);
-  expect(screen.getByText('panels.productionOutlineHint')).toBeInTheDocument();
+  expect(screen.getByText('panels.productionUnavailableHint')).toBeInTheDocument();
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });

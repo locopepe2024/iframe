@@ -2844,6 +2844,8 @@
     "episodeLocalTooltip": "Local to this episode only. Edits don't affect other episodes."
   },
   "episodeMiniList": {
+    "outline": "Outline",
+    "outlineMark": "OUT",
     "title": "Series · {count} eps",
     "addEpisode": "Add episode"
   },
@@ -3296,14 +3298,15 @@
       "durationSeconds": "{count}s",
       "durationMinSec": "{min}m{sec}s",
       "durationMin": "{min}m",
-      "enterPipeline": "Open episode",
+      "enterPipeline": "Open production project",
       "productionTitle": "Production project",
-      "productionExistingHint": "This episode already has a production project. Open it to continue.",
-      "productionNewHint": "Create a production project for this episode on the first visit.",
-      "productionOutlineHint": "The outline plans the series. Select an episode before entering production.",
+      "productionExistingHint": "This document already has a production project. Open it to continue.",
+      "productionNewHint": "Create a production project for this document on the first visit.",
+      "productionUnavailableHint": "The production project entry is still preparing. Try again shortly.",
       "productionBodyCount": "Current script: {count} characters",
       "productionEntering": "Opening…",
       "productionCreate": "Create production project",
+      "productionEnter": "Open production project",
       "createIndependentProject": "Create standalone project",
       "enterIndependentProject": "Open standalone project",
       "productionEmpty": "Write this episode’s script first.",

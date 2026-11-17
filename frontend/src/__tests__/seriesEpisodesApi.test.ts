@@ -26,6 +26,26 @@ it("exposes episode script text to the series overview", async () => {
   expect(axios.get).toHaveBeenCalledWith(`${API_URL}/series/series-1/episodes`);
 });
 
+it("loads the shared outline and episode production context", async () => {
+  vi.mocked(axios.get).mockResolvedValue({
+    data: {
+      available: true,
+      root: { document_id: "root-doc", title: "柳如烟剧情", project_id: "outline-project" },
+      series: { id: "series-1", title: "柳如烟剧情" },
+      episodes: [{ document_id: "ep-doc", title: "第一集", episode_number: 1, project_id: "episode-1" }],
+    },
+  });
+
+  await expect(api.getProjectAuthoringContext("episode-1")).resolves.toMatchObject({
+    available: true,
+    root: { project_id: "outline-project" },
+    episodes: [{ project_id: "episode-1" }],
+  });
+  expect(axios.get).toHaveBeenCalledWith(`${API_URL}/projects/episode-1/authoring-context`, {
+    headers: { "Cache-Control": "no-cache" },
+  });
+});
+
 it("shares concurrent series reads but fetches fresh data after completion", async () => {
   let finish: (value: any) => void = () => {};
   vi.mocked(axios.get).mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
