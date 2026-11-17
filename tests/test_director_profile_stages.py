@@ -82,6 +82,128 @@ def test_three_bounded_streamed_requests_complete_without_mutating_user_drafts()
     assert result["source_audit"]["admission_status"] == "confirmable"
 
 
+def prose_event_response():
+    story = copy.deepcopy(responses()[1])
+    original = copy.deepcopy(story["story_map"]["phases"])
+    for phase in story["story_map"]["phases"]:
+        phase["events"] = [event["description"] for event in phase["events"]]
+    return story, {"story_map": {"phases": original}}
+
+
+def test_string_events_are_corrected_once_and_resume_without_repeating_paid_steps():
+    pipeline, script, processor = setup_pipeline()
+    original = script.model_dump()
+    partial, correction = prose_event_response()
+    cache = {}
+    processor.llm.chat.side_effect = [json.dumps(step) for step in
+                                    (responses()[0], partial, correction, responses()[2])]
+    result = generate(pipeline, save_step=checkpoint_store(cache))
+    assert len(cache) == 4 and processor.llm.chat.call_count == 4
+    assert script.model_dump() == original
+    saved = cache[2]["frames"]
+    assert json.loads(saved["raw_response"]) == partial
+    assert json.loads(saved["field_completion"]["raw_response"]) == correction
+    assert saved["field_completion"]["paths"] == ["story_map.phases"]
+    event = result["profile"]["story_map"]["phases"][0]["events"][0]
+    assert event["description"] == partial["story_map"]["phases"][0]["events"][0]
+    assert event["event_id"] == correction["story_map"]["phases"][0]["events"][0]["event_id"]
+    assert result["profile"]["timeline"] == partial["timeline"]
+    prompt = processor.llm.chat.call_args_list[2].kwargs["messages"][0]["content"]
+    assert "事件原文逐字保留" in prompt
+    assert prompt.count(script.original_text) == 1
+    schema = json.loads(prompt.split("<director_output_contract>")[1].split("</director_output_contract>")[0])
+    assert schema["required"] == ["story_map"]
+    assert schema["$defs"]["DirectorStoryMap"]["required"] == ["phases"]
+    processor.llm.chat.reset_mock(side_effect=True)
+    processor.llm.chat.side_effect = AssertionError("must reuse admitted steps")
+    assert generate(pipeline, cached=cache)["profile"] == result["profile"]
+    processor.llm.chat.assert_not_called()
+
+
+@pytest.mark.parametrize("mutation", ["text", "phase", "drop", "extra", "reference", "still_string"])
+def test_event_correction_cannot_change_text_structure_or_bypass_validation(mutation):
+    pipeline, _, processor = setup_pipeline()
+    partial, correction = prose_event_response()
+    phases = correction["story_map"]["phases"]
+    if mutation == "text":
+        phases[0]["events"][0]["description"] = "invented replacement"
+    elif mutation == "phase":
+        phases[0]["label"] = "changed phase"
+    elif mutation == "drop":
+        phases[0]["events"] = []
+    elif mutation == "extra":
+        correction["timeline"] = []
+    elif mutation == "reference":
+        phases[0]["events"][0]["event_id"] = "unknown-event"
+    else:
+        phases[0]["events"][0] = partial["story_map"]["phases"][0]["events"][0]
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (responses()[0], partial, correction)]
+    cache = {}
+    with pytest.raises(ValueError):
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert list(cache) == [0, 1] and processor.llm.chat.call_count == 3
+
+
+@pytest.mark.parametrize("bad", [None, 1, [], "", "   "])
+def test_non_text_event_shapes_are_not_sent_for_correction(bad):
+    pipeline, _, processor = setup_pipeline()
+    partial, _ = prose_event_response()
+    partial["story_map"]["phases"][0]["events"][0] = bad
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (responses()[0], partial)]
+    cache = {}
+    with pytest.raises(ValueError):
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert list(cache) == [0, 1] and processor.llm.chat.call_count == 2
+
+
+def test_other_invalid_story_fields_prevent_event_correction():
+    pipeline, _, processor = setup_pipeline()
+    partial, _ = prose_event_response()
+    partial["story_map"]["phases"][0]["order"] = -1
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (responses()[0], partial)]
+    with pytest.raises(ValueError):
+        generate(pipeline)
+    assert processor.llm.chat.call_count == 2
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("provider refused"), "{bad json", "x" * 24000])
+def test_event_correction_failure_keeps_prior_checkpoints_and_resumes(failure):
+    pipeline, _, processor = setup_pipeline()
+    partial, _ = prose_event_response()
+    processor.llm.chat.side_effect = [json.dumps(responses()[0]), json.dumps(partial), failure]
+    cache = {}
+    with pytest.raises((RuntimeError, ValueError)) as caught:
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert list(cache) == [0, 1] and processor.llm.chat.call_count == 3
+    assert caught.value.director_audit["failure_stage"] == "story"
+    processor.llm.chat.reset_mock(side_effect=True)
+    processor.llm.chat.side_effect = [json.dumps(step) for step in responses()[1:]]
+    generate(pipeline, cached=cache, save_step=checkpoint_store(cache))
+    assert len(cache) == 4 and processor.llm.chat.call_count == 2
+
+
+@pytest.mark.parametrize("mutate_existing", [False, True])
+def test_event_correction_preserves_existing_object_events(mutate_existing):
+    pipeline, _, processor = setup_pipeline()
+    partial, correction = prose_event_response()
+    existing = copy.deepcopy(correction["story_map"]["phases"][0]["events"][0])
+    existing["event_id"] = "event-already-valid"
+    existing["order"] += 1
+    partial["story_map"]["phases"][0]["events"].append(copy.deepcopy(existing))
+    correction["story_map"]["phases"][0]["events"].append(copy.deepcopy(existing))
+    if mutate_existing:
+        correction["story_map"]["phases"][0]["events"][-1]["description"] = "changed"
+    processor.llm.chat.side_effect = [json.dumps(step) for step in
+                                    (responses()[0], partial, correction, responses()[2])]
+    if mutate_existing:
+        with pytest.raises(ValueError, match="改变了已有事件"):
+            generate(pipeline)
+        assert processor.llm.chat.call_count == 3
+    else:
+        result = generate(pipeline)
+        assert result["profile"]["story_map"]["phases"][0]["events"][-1]["description"] == existing["description"]
+
+
 @pytest.mark.parametrize("sample", [
     {"Opening": "开场", "Core_Action": "主要动作", "Transition": "转场", "Climax": "高潮"},
     {"Scene_1_Flow": "第一场", "Scene_2_Flow": "第二场", "Scene_3_Flow": "第三场", "Scene_4_Flow": "第四场"},
