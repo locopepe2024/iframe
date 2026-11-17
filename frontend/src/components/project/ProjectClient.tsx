@@ -35,7 +35,7 @@ const PROJECT_STEPS = [
     { id: "assembly", label: "6. Assembly", icon: Film },
 ];
 
-export default function ProjectClient({ id, breadcrumbSegments, standaloneDirectorMindMap = false }: { id: string; breadcrumbSegments?: BreadcrumbSegment[]; standaloneDirectorMindMap?: boolean }) {
+export default function ProjectClient({ id, initialStep, breadcrumbSegments, standaloneDirectorMindMap = false }: { id: string; initialStep?: string; breadcrumbSegments?: BreadcrumbSegment[]; standaloneDirectorMindMap?: boolean }) {
     const [activeStep, setActiveStep] = useState("script");
     const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
     const [envDialogOpen, setEnvDialogOpen] = useState(false);
@@ -128,6 +128,14 @@ export default function ProjectClient({ id, breadcrumbSegments, standaloneDirect
     useEffect(() => {
         selectProject(id);
     }, [id, selectProject]);
+
+    useEffect(() => {
+        if (initialStep && steps.some((step) => step.id === initialStep)) {
+            setActiveStep(initialStep);
+        } else {
+            setActiveStep(steps[0]?.id || "script");
+        }
+    }, [id, initialStep]);
 
     if (!currentProject) {
         return (

@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({ getSeries: vi.fn(), selectProject: vi.fn() }))
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("next/dynamic", () => ({ default: () => () => null }));
 vi.mock("@/lib/api", () => ({ api: { getSeries: mocks.getSeries } }));
-vi.mock("@/components/layout/PipelineSidebar", () => ({ default: ({ steps, onStepChange }: any) =>
-    <nav aria-label="Pipeline">{steps.map((step: any) => <button key={step.id} onClick={() => onStepChange(step.id)}>{step.label}</button>)}</nav> }));
+vi.mock("@/components/layout/PipelineSidebar", () => ({ default: ({ steps, activeStep, onStepChange }: any) =>
+    <nav aria-label="Pipeline">{steps.map((step: any) => <button key={step.id} aria-current={activeStep === step.id ? "step" : undefined} onClick={() => onStepChange(step.id)}>{step.label}</button>)}</nav> }));
 vi.mock("@/components/layout/EpisodeMiniList", () => ({ default: () => null }));
 vi.mock("@/components/modules/ScriptProcessor", () => ({ default: () => <div>Script workbench</div> }));
 vi.mock("@/components/modules/ConsistencyVault", () => ({ default: () => <div>Canonical asset workbench</div> }));
@@ -48,4 +48,9 @@ it("keeps one renumbered Assets stage in freeform series", async () => {
     expect(screen.queryByRole("button", { name: /Script|Cast/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "2. Assets" }));
     expect(screen.getByText("Canonical asset workbench")).toBeInTheDocument();
+});
+
+it("restores the selected pipeline stage from a project route", async () => {
+    render(<ProjectClient id="episode" initialStep="storyboard" />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "4. Storyboard" })).toHaveAttribute("aria-current", "step"));
 });
