@@ -86,6 +86,22 @@ class DirectorStepFieldsError(ValueError):
 STORY_MAP_FIELDS = ("schema_version", "phases", "relationship_arcs", "story_threads")
 
 
+def _relocate_story_arrays(patch):
+    """Move unambiguous known arrays without discarding or generating content."""
+    if not isinstance(patch, dict) or not isinstance(patch.get("story_map"), dict):
+        return patch, None
+    extra = set(patch) - set(STAGES[2][2])
+    movable = ("relationship_arcs", "story_threads")
+    if not extra or not extra.issubset(movable):
+        return patch, None
+    if any(name in patch["story_map"] or not isinstance(patch[name], list) for name in extra):
+        return patch, None
+    names = [name for name in movable if name in extra]
+    relocated = {name: value for name, value in patch.items() if name not in extra}
+    relocated["story_map"] = {**patch["story_map"], **{name: patch[name] for name in names}}
+    return relocated, [{"from": name, "to": "story_map." + name} for name in names]
+
+
 def _missing_story_map_fields(value):
     if not isinstance(value, dict):
         raise ValueError("故事结构步骤的 story_map 必须为对象")
@@ -277,6 +293,7 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
             audit.pop("raw_response_sha256", None)
             audit.pop("field_completion", None)
             audit.pop("field_contract", None)
+            audit.pop("field_relocation", None)
             entry = (cached or {}).get(index, {})
             saved = entry.get("frames", {})
             reused = (entry.get("source_ref") == key and isinstance(saved, dict)
@@ -324,6 +341,11 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                 patch = json.loads(_strip_markdown_json(raw))
             category = "validation"
             completion = saved.get("field_completion") if reused else None
+            relocation = saved.get("field_relocation") if reused else None
+            if key == "story" and not reused:
+                patch, relocation = _relocate_story_arrays(patch)
+            if relocation:
+                audit["field_relocation"] = relocation
             # Only a nonempty subset with valid existing fields can be
             # completed. Never synthesize a story map, retry malformed JSON,
             # erase unknown keys, or rewrite fields already returned.
@@ -434,6 +456,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                 saved = {"identity": identity, "stage": key, "profile": normalized_patch, "raw_response": raw}
                 if completion:
                     saved["field_completion"] = completion
+                if relocation:
+                    saved["field_relocation"] = relocation
                 if save_step:
                     category = "checkpoint"
                     if save_step(index, key, saved) is False:
@@ -445,6 +469,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                                    "raw_response": raw, "raw_response_sha256": hashlib.sha256(raw.encode()).hexdigest()})
             if completion:
                 audit["steps"][-1]["field_completion"] = completion
+            if relocation:
+                audit["steps"][-1]["field_relocation"] = relocation
         audit.update(parse_status="parsed", normalization_status="normalized", admission_status="confirmable",
                      raw_response_received=True)
         return {"profile": profile, "source_audit": audit}

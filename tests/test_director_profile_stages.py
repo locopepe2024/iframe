@@ -90,6 +90,58 @@ def prose_event_response():
     return story, {"story_map": {"phases": original}}
 
 
+@pytest.mark.parametrize("moved", [("story_threads",), ("relationship_arcs",),
+                                   ("relationship_arcs", "story_threads")])
+def test_misplaced_story_arrays_keep_payload_and_resume_without_model_correction(moved):
+    pipeline, script, processor = setup_pipeline()
+    original = script.model_dump()
+    story = copy.deepcopy(responses()[1])
+    for name in moved:
+        story[name] = story["story_map"].pop(name)
+    cache = {}
+    processor.llm.chat.side_effect = [json.dumps(step) for step in
+                                    (responses()[0], story, responses()[2])]
+    result = generate(pipeline, save_step=checkpoint_store(cache))
+    assert len(cache) == 4 and processor.llm.chat.call_count == 3
+    assert script.model_dump() == original
+    saved = cache[2]["frames"]
+    assert json.loads(saved["raw_response"]) == story
+    assert "field_completion" not in saved
+    expected_paths = [{"from": name, "to": "story_map." + name} for name in moved]
+    assert saved["field_relocation"] == expected_paths
+    assert result["source_audit"]["steps"][1]["field_relocation"] == expected_paths
+    reference_pipeline, _, _ = setup_pipeline()
+    assert result["profile"] == generate(reference_pipeline)["profile"]
+    processor.llm.chat.reset_mock(side_effect=True)
+    processor.llm.chat.side_effect = AssertionError("must reuse corrected checkpoint")
+    replay = generate(pipeline, cached=cache)
+    assert replay["profile"] == result["profile"]
+    assert replay["source_audit"]["steps"][1]["field_relocation"] == expected_paths
+    processor.llm.chat.assert_not_called()
+
+
+@pytest.mark.parametrize("invalid", ["collision", "unknown", "non_list", "bad_reference", "no_map"])
+def test_misplaced_story_arrays_do_not_admit_ambiguous_or_invalid_data(invalid):
+    pipeline, _, processor = setup_pipeline()
+    story = copy.deepcopy(responses()[1])
+    story["story_threads"] = story["story_map"].pop("story_threads")
+    if invalid == "collision":
+        story["story_map"]["story_threads"] = copy.deepcopy(story["story_threads"])
+    elif invalid == "unknown":
+        story["out_of_scope"] = []
+    elif invalid == "non_list":
+        story["story_threads"] = {"invalid": "shape"}
+    elif invalid == "bad_reference":
+        story["story_threads"][0]["milestones"][0]["event_id"] = "unknown-event"
+    else:
+        story.pop("story_map")
+    processor.llm.chat.side_effect = [json.dumps(step) for step in (responses()[0], story)]
+    cache = {}
+    with pytest.raises(ValueError):
+        generate(pipeline, save_step=checkpoint_store(cache))
+    assert list(cache) == [0, 1] and processor.llm.chat.call_count == 2
+
+
 def test_string_events_are_corrected_once_and_resume_without_repeating_paid_steps():
     pipeline, script, processor = setup_pipeline()
     original = script.model_dump()
