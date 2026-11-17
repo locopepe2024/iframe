@@ -103,6 +103,27 @@ def test_handoff_repairs_legacy_series_links_before_duplicate_check(planned_epis
     assert second.source_script_document_id == episodes[1]['id']
 
 
+def test_legacy_link_conflict_does_not_mutate_or_save_projects(planned_episodes, monkeypatch):
+    owner, _, episodes = planned_episodes
+    legacy = asyncio.run(create(owner, episodes[0]))
+    legacy.source_script_document_id = None
+    api.pipeline.create_project(
+        '已有分集项目', '制作端编辑正文', True, 'r2v', None,
+        owner.user_id, owner.owner_profile_id,
+        source_script_document_id=episodes[0]['id'],
+    )
+    before = {key: value.model_dump() for key, value in api.pipeline.scripts.items()}
+    saves = []
+    monkeypatch.setattr(api.pipeline, '_save_data', lambda: saves.append(True))
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(create(owner, episodes[0]))
+
+    assert exc.value.status_code == 409
+    assert {key: value.model_dump() for key, value in api.pipeline.scripts.items()} == before
+    assert saves == []
+
+
 def test_concurrent_sibling_handoffs_create_one_series(planned_episodes):
     owner, _, episodes = planned_episodes
 
