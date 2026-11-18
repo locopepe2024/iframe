@@ -258,6 +258,7 @@ class ImageVariant(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
     id: str = Field(..., description="Unique identifier for the variant")
     display_name: Optional[str] = Field(None, max_length=120, description="User-reviewed semantic label for finding this variant")
+    design_page_id: Optional[str] = Field(None, description="Character design page that produced this image; retained after closing the page")
     # ``url`` is retained as the API/browser projection for compatibility.
     # Durable asset identity is ``storage_key`` and must not be a signed URL.
     url: str = Field(..., description="Delivery URL projection (legacy field)")
@@ -418,6 +419,19 @@ class AssetLibraryReference(BaseModel):
         "reference_only", "parameters_only", "parameters_with_media", "parameters_with_video"
     ]] = None
     applied_fields: List[str] = Field(default_factory=list, max_length=16)
+
+
+class CharacterDesignPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,80}$")
+    name: str = Field(default="新设计", min_length=1, max_length=120)
+    prompt: str = Field(default="", max_length=30000)
+    negative_prompt: str = Field(default="", max_length=10000)
+    mode: Literal["text", "reference"] = "text"
+    references: List[AssetLibraryReference] = Field(default_factory=list, max_length=9)
+    prompt_source: str = Field(default="", max_length=240)
+    reference_prompts: Dict[str, str] = Field(default_factory=dict)
+    selected_variant_id: Optional[str] = None
 
 
 class SceneLightingInheritance(BaseModel):
@@ -695,6 +709,7 @@ class ExtraShotInstance(BaseModel):
 
 
 class Character(BaseModel):
+    custom_design_pages: List[Dict[str, Any]] = Field(default_factory=list, description="Independent user-authored costume/action image pages")
     id: str = Field(..., description="Unique identifier for the character")
     asset_revision: int = Field(0, ge=0)
     asset_revisions: List[AssetRevision] = Field(default_factory=list)

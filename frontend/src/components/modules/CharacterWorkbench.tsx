@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, ChevronDown, Video, Sparkles, Search } from "lucide-react";
 import { agentRequest, api, type AssetImageReviewRequest, type AssetLibraryReference, type AssetReferenceIndexEntry, type ChatModel } from "@/lib/api";
 
+import CustomCharacterDesignPages from "./CustomCharacterDesignPages";
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
@@ -57,7 +58,7 @@ import { faceShapePanelPrompt, faceShapePrompt, type FaceShape } from "@/lib/whi
 import type { CharacterSpatialConstraints } from "@/lib/assetSpatialConstraints";
 
 type CharacterImagePanel = "full_body" | "three_view" | "headshot";
-type CharacterWorkbenchPanel = CharacterImagePanel | "face_model" | "video";
+type CharacterWorkbenchPanel = CharacterImagePanel | "face_model" | "video" | `design:${string}`;
 type AppliedPlatformPrompt = {
     resourceId: string;
     revision: number;
@@ -342,6 +343,7 @@ interface CharacterWorkbenchProps {
 export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateDescription, onUpdateAttributes, onRename, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, planEntries = [] }: CharacterWorkbenchProps) {
     const tc = useTranslations("character");
     const [activePanel, setActivePanel] = useState<CharacterWorkbenchPanel>("full_body");
+    const [designTabsHost, setDesignTabsHost] = useState<HTMLDivElement | null>(null);
     const [isPlanOpen, setIsPlanOpen] = useState(false);
     const savedDesign = (asset.character_design?.design_draft || asset.character_design?.design_revisions?.at(-1)?.design || {}) as DesignDraft;
     const savedInput = savedDesign.design_input;
@@ -1490,7 +1492,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                 <div className="min-h-0 flex-1 flex flex-col lg:flex-row overflow-hidden">
 
                     <div className="min-h-0 min-w-0 flex-1 flex flex-col">
-                        {promptsNeedDesignApply && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
+                        {!activePanel.startsWith("design:") && promptsNeedDesignApply && <div className="mx-3 mt-3 flex flex-col gap-2 rounded-md border border-primary/30 bg-primary/5 p-3 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
                                 <p className="text-xs font-medium text-foreground">{designTab === "ai" ? "AI 优化结果" : "角色设计"}尚未应用到图片提示词</p>
                                 <p className="mt-0.5 text-[11px] leading-4 text-text-muted">将应用当前页签的版本，更新全身、三视图和肖像提示词；此操作不保存设计或创建版本，之后仍可编辑提示词。</p>
@@ -1512,11 +1514,12 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                                 {([["full_body", tc("masterAsset")], ["three_view", tc("threeViews")], ["headshot", tc("avatar")], ["face_model", "面容白模"]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={activePanel === id} tabIndex={activePanel === id ? 0 : -1} onClick={() => setActivePanel(id)} onKeyDown={(event) => {
                                     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
                                     event.preventDefault();
-                                    const tabs = Array.from(event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
+                                    const tabs = Array.from(event.currentTarget.closest('[role="tablist"]')?.querySelectorAll<HTMLElement>('[role="tab"]') || []);
                                     const next = tabs[(tabs.indexOf(event.currentTarget) + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
                                     next?.click();
                                     next?.focus();
                                 }} className={`min-h-11 shrink-0 border-b-2 px-3 text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${activePanel === id ? "border-primary text-primary" : "border-transparent text-text-secondary hover:text-foreground"}`}>{label}</button>)}
+                                <div ref={setDesignTabsHost} className="flex shrink-0 items-center" />
                             </div>
                             {(activePanel === "full_body" || activePanel === "headshot") && <CharacterPresentationSwitch
                                 mode={activePanel === "full_body" ? fullBodyMode : headshotMode}
@@ -1554,6 +1557,13 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                                 }} />
                         </div>
                     </div>}
+
+                    <CustomCharacterDesignPages asset={asset} project={seriesId ? null : currentProject} seriesId={seriesId}
+                        modelName={seriesId || currentProject?.series_id ? undefined : resolveAssetGenerationModel(currentProject?.model_settings?.t2i_model)}
+                        activeId={activePanel} onActivate={setActivePanel} tabHost={designTabsHost} Panel={WorkbenchPanel}
+                        referenceIndex={assetIndex} candidates={referenceCandidates} onDiscover={discoverReference} onRefreshReferences={refreshReferences}
+                        onSave={onUpdateAttributes} onGenerate={onGenerate} generatingTypes={generatingTypes} previewLocator={characterPreviewLocator}
+                        onDelete={(id) => handleDeleteVariant("full_body", id)} onFavorite={(id, favorite) => handleFavoriteVariant("full_body", id, favorite)} onRename={handleRenameVariant} />
 
                     {/* Panel 1: Full Body (Master) */}
                     {activePanel === "full_body" &&

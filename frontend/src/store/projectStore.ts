@@ -17,6 +17,7 @@ export type {
 } from '@/lib/modelCatalog';
 
 export interface ImageVariant {
+    design_page_id?: string | null;
     id: string;
     display_name?: string | null;
     is_favorited?: boolean;
@@ -79,6 +80,7 @@ export interface GenerationLineage {
 }
 
 export interface Character {
+    custom_design_pages?: import("@/lib/characterDesignPages").CharacterDesignPage[];
     asset_revision?: number;
     id: string;
     name: string;

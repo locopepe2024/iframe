@@ -1593,6 +1593,26 @@ class ComicGenPipeline(StudioOwnerMixin):
         return requested_model or script.model_settings.t2i_model
 
     @staticmethod
+    def _validate_character_design_pages(attributes: Dict[str, Any], asset_type: str) -> Dict[str, Any]:
+        if "custom_design_pages" not in attributes:
+            return attributes
+        from .models import CharacterDesignPage
+        pages = attributes["custom_design_pages"]
+        if asset_type != "character" or not isinstance(pages, list) or len(pages) > 50:
+            raise ValueError("Character design pages must be a list of at most 50 pages")
+        normalized = [CharacterDesignPage.model_validate(page).model_dump() for page in pages]
+        if len({page["id"] for page in normalized}) != len(normalized):
+            raise ValueError("Character design page IDs must be unique")
+        return {**attributes, "custom_design_pages": normalized}
+
+    @staticmethod
+    def _validate_character_design_page(asset: Any, asset_type: str, generation_type: str) -> None:
+        if generation_type.startswith("design:"):
+            page_id = generation_type.removeprefix("design:")
+            if asset_type != "character" or not any(page["id"] == page_id for page in asset.custom_design_pages):
+                raise ValueError("Character design page is closed or unavailable")
+
+    @staticmethod
     def _confirmed_asset_design_revision(asset: Any, asset_type: str) -> Optional[int]:
         record = (asset.character_design if asset_type == "character" else asset.asset_design) or {}
         revisions = record.get("design_revisions") or []
@@ -1678,6 +1698,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             asset, _source = self._find_asset_with_source(owner, asset_id, asset_type)
             if asset is None:
                 raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+        self._validate_character_design_page(asset, asset_type, generation_type)
         normalized_reference = None
         if reference is not None:
             _url, normalized_reference = self._resolve_asset_library_reference(owner, reference)
@@ -1723,7 +1744,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             if is_series else aspect_ratio or getattr(owner.model_settings, f"{asset_type}_aspect_ratio")
         )
         snapshot = self._asset_submission_snapshot(
-            asset, asset_type, prompt=self._reference_semantic_prompt(owner, prompt, ([normalized_reference] if normalized_reference else []) + normalized_references), negative_prompt=negative_prompt,
+            asset, asset_type, prompt=(prompt if generation_type.startswith("design:") else self._reference_semantic_prompt(owner, prompt, ([normalized_reference] if normalized_reference else []) + normalized_references)), negative_prompt=negative_prompt,
             model_id=effective_model, aspect_ratio=effective_aspect,
             generation_type=generation_type, image_generation_mode=image_generation_mode,
             batch_size=batch_size, reference=normalized_reference, references=normalized_references,
@@ -1785,7 +1806,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 reference_provenance_list.append(provenance)
         
         semantic_references = ([reference_provenance] if reference_provenance else []) + reference_provenance_list
-        if prompt:
+        if prompt and not generation_type.startswith("design:"):
             prompt = self._reference_semantic_prompt(script, prompt, semantic_references)
 
         # Get effective model names from project settings if not overridden
@@ -1973,6 +1994,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+        self._validate_character_design_page(target_asset, asset_type, generation_type)
         normalized_scene_tool = None
         normalized_tool_references = []
         if scene_tool is not None:
@@ -2242,7 +2264,8 @@ class ComicGenPipeline(StudioOwnerMixin):
 
         semantic_references = ([reference_provenance] if reference_provenance else []) + reference_provenance_list
         if prompt:
-            prompt = self._reference_semantic_prompt(series, prompt, semantic_references)
+            if not generation_type.startswith("design:"):
+                prompt = self._reference_semantic_prompt(series, prompt, semantic_references)
         else:
             positive_prompt = self._reference_semantic_prompt(series, positive_prompt or "", semantic_references)
 
@@ -3269,6 +3292,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         ):
             raise ValueError("Confirmed character asset pack can only change through reviewed anchor operations")
 
+        attributes = self._validate_character_design_pages(attributes, asset_type)
         if "name" in attributes:
             attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
 
@@ -13265,6 +13289,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 })
             ):
                 raise ValueError("Confirmed character asset pack can only change through reviewed anchor operations")
+            attributes = self._validate_character_design_pages(attributes, asset_type)
             if "name" in attributes:
                 attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
             for key, value in attributes.items():
@@ -13288,6 +13313,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         series = self.get_series(series_id)
         if not series:
             raise ValueError("Series not found")
+
+        _series, target = self._find_series_asset(series_id, asset_id, asset_type)
+        self._validate_character_design_page(target, asset_type, generation_type)
 
         if references and (reference is not None or reference_image_url):
             raise InvalidAssetReference("multiple structured references cannot be combined with a singular legacy reference")
