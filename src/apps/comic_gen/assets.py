@@ -15,7 +15,7 @@ from ...models.image import WanxImageModel, ImageGenModel
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 from ...utils.managed_media_root import ManagedMediaRoot
-from ..studio_access import studio_media_dir, studio_uniart_config, studio_nsfw_new_one_config
+from ..studio_access import studio_media_dir, studio_gateway_config
 
 logger = get_logger(__name__)
 
@@ -75,10 +75,10 @@ class AssetGenerator:
         """Route to the correct image adapter based on model name."""
         from ...models.nsfw_new_one import SEEDREAM_IDS, NSFWNewOneImageModel
         if model_name in SEEDREAM_IDS:
-            return NSFWNewOneImageModel(studio_nsfw_new_one_config())
+            return NSFWNewOneImageModel(studio_gateway_config("greena"))
         if model_name and model_name.startswith("uniart/"):
             from ...models.uniart import UniArtImageModel
-            return UniArtImageModel(studio_uniart_config())
+            return UniArtImageModel(studio_gateway_config("uniart"))
         if model_name and model_name.startswith("gpt-image"):
             if self._mulerouter_image_model is None:
                 from ...models.mulerouter import MuleRouterImageModel

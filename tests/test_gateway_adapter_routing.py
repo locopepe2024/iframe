@@ -133,3 +133,44 @@ def test_llm_reloads_saved_gateway_after_owner_and_settings_switch(monkeypatch, 
         finally:
             reset_studio_user(token)
     assert calls == [(key, f"https://{key}.example/v1", "shared-model") for key in ("a-green", "b-uni", "a-rotated")]
+
+@pytest.mark.parametrize('provider,model_id', [('greena', 'nsfw/seedream_5.0Pro_nsfw'), ('uniart', 'uniart/gpt-image-2')])
+def test_asset_image_namespace_uses_own_gateway_when_other_is_active(monkeypatch, tmp_path, provider, model_id):
+    from src.apps import studio_access as access, user_config
+    from src.apps.comic_gen.assets import AssetGenerator
+    from src.models.uniart import UniArtImageModel
+    from src.models.nsfw_new_one import GreenAImageModel
+    store = UserConfigStore(str(tmp_path / 'users.db'))
+    owner = UserContext('user', 'owner', '', '')
+    other = 'uniart' if provider == 'greena' else 'greena'
+    store.update(owner, UserConfigUpdate(catalog_name=other, UNIART_API_KEY='wrong-key', UNIART_BASE_URL='https://wrong.example/v1'))
+    store.update_provider_profile(owner, provider, api_key='right-key', base_url='https://right.example/v1')
+    monkeypatch.setattr(user_config, 'get_user_config_store', lambda: store)
+    token = set_studio_user(owner)
+    configured = access.set_studio_uniart_config(store.get_runtime_uniart(owner))
+    try:
+        adapter = AssetGenerator()._get_model_for(model_id)
+        assert isinstance(adapter, GreenAImageModel if provider == 'greena' else UniArtImageModel)
+        assert adapter.config['base_url'] == 'https://right.example/v1'
+        assert adapter.config['api_key'] == 'right-key'
+    finally:
+        access.reset_studio_uniart_config(configured)
+        reset_studio_user(token)
+
+
+def test_asset_image_missing_uniart_profile_does_not_send_gpt_model_to_greena(monkeypatch, tmp_path):
+    from src.apps import studio_access as access, user_config
+    from src.apps.comic_gen.assets import AssetGenerator
+    store = UserConfigStore(str(tmp_path / 'users.db'))
+    owner = UserContext('user', 'owner', '', '')
+    store.update(owner, UserConfigUpdate(catalog_name='greena', UNIART_API_KEY='green-key', UNIART_BASE_URL='https://green.example/v1'))
+    monkeypatch.setattr(user_config, 'get_user_config_store', lambda: store)
+    token = set_studio_user(owner)
+    configured = access.set_studio_uniart_config(store.get_runtime_uniart(owner))
+    try:
+        with pytest.raises(HTTPException) as error:
+            AssetGenerator()._get_model_for('uniart/gpt-image-2')
+        assert error.value.status_code == 409
+    finally:
+        access.reset_studio_uniart_config(configured)
+        reset_studio_user(token)
