@@ -4,6 +4,8 @@ import hashlib
 import json
 import re
 
+from pydantic import ValidationError
+
 VERSION = "director-profile-stages-v2"
 STAGES = (
     ("source", "来源整理", ()),
@@ -29,6 +31,8 @@ GUIDANCE = {
         "按叙事因果合并事件，不逐句展开；最多8个phase、16个event、8条relationship arc、4条story thread。"
         "description/dramatic_function/note/关系状态各最多80字。"
         "phase_id、event_id、relationship_id、thread_id 在本结果内唯一且非空。"
+        "phases[].events 必须是对象数组，不能是事件描述字符串数组；每项含event_id、order、title、description、"
+        "character_refs、dramatic_function、source_fact_ids、evidence_status。"
         "人物用 character_refs/person_refs 字符串数组引用原文名称，内部ID由服务端绑定。"
         "所有 source_fact_ids=[]；evidence_status仅 interpretation/uncertain/conflicted，不能伪装已确认事实。"
         "关系 states 使用实际phase_id，trigger_event_ids使用实际event_id；只有文字关系时用legacy_summary，states=[]。"
@@ -82,6 +86,22 @@ class DirectorStepFieldsError(ValueError):
 STORY_MAP_FIELDS = ("schema_version", "phases", "relationship_arcs", "story_threads")
 
 
+def _relocate_story_arrays(patch):
+    """Move unambiguous known arrays without discarding or generating content."""
+    if not isinstance(patch, dict) or not isinstance(patch.get("story_map"), dict):
+        return patch, None
+    extra = set(patch) - set(STAGES[2][2])
+    movable = ("relationship_arcs", "story_threads")
+    if not extra or not extra.issubset(movable):
+        return patch, None
+    if any(name in patch["story_map"] or not isinstance(patch[name], list) for name in extra):
+        return patch, None
+    names = [name for name in movable if name in extra]
+    relocated = {name: value for name, value in patch.items() if name not in extra}
+    relocated["story_map"] = {**patch["story_map"], **{name: patch[name] for name in names}}
+    return relocated, [{"from": name, "to": "story_map." + name} for name in names]
+
+
 def _missing_story_map_fields(value):
     if not isinstance(value, dict):
         raise ValueError("故事结构步骤的 story_map 必须为对象")
@@ -132,6 +152,40 @@ def _displaced_story_arrays(value):
     if not moved or any(name in value for name in moved):
         raise ValueError("故事结构错位字段不明确，请重新生成")
     return {"phases": groups["phases"], **{name: groups[name] for name in moved}}
+
+
+def _string_event_errors_only(patch, error):
+    """Admit only the specific event-text shape, never arbitrary bad output."""
+    phases = patch["story_map"]["phases"]
+    expected = set()
+    for i, phase in enumerate(phases):
+        if not isinstance(phase, dict) or not isinstance(phase.get("events"), list):
+            return False
+        for j, event in enumerate(phase["events"]):
+            if isinstance(event, dict):
+                continue
+            if not isinstance(event, str) or not event.strip():
+                return False
+            expected.add(("story_map", "phases", i, "events", j))
+    errors = error.errors(include_input=False, include_url=False)
+    return bool(expected) and {tuple(item["loc"]) for item in errors} == expected and all(
+        item["type"] in ("model_type", "dict_type") for item in errors)
+
+
+def _require_lossless_event_correction(original, corrected):
+    if not isinstance(corrected, list) or len(corrected) != len(original):
+        raise ValueError("事件格式修正改变了故事阶段，请重新生成")
+    for before, after in zip(original, corrected):
+        if not isinstance(after, dict) or {k: v for k, v in before.items() if k != "events"} != {
+                k: v for k, v in after.items() if k != "events"}:
+            raise ValueError("事件格式修正改变了故事阶段，请重新生成")
+        events = after.get("events")
+        if not isinstance(events, list) or len(events) != len(before["events"]):
+            raise ValueError("事件格式修正改变了事件数量，请重新生成")
+        for old, new in zip(before["events"], events):
+            if (isinstance(old, dict) and old != new) or (isinstance(old, str) and (
+                    not isinstance(new, dict) or new.get("description") != old)):
+                raise ValueError("事件格式修正改变了已有事件或原文，请重新生成")
 
 
 def build_step_prompt(key, source_context, is_digest, entities, style, profile, *, output_fields=None, completed_fields=None, story_map_fields=None, displaced_arrays=None):
@@ -239,6 +293,7 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
             audit.pop("raw_response_sha256", None)
             audit.pop("field_completion", None)
             audit.pop("field_contract", None)
+            audit.pop("field_relocation", None)
             entry = (cached or {}).get(index, {})
             saved = entry.get("frames", {})
             reused = (entry.get("source_ref") == key and isinstance(saved, dict)
@@ -286,6 +341,11 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                 patch = json.loads(_strip_markdown_json(raw))
             category = "validation"
             completion = saved.get("field_completion") if reused else None
+            relocation = saved.get("field_relocation") if reused else None
+            if key == "story" and not reused:
+                patch, relocation = _relocate_story_arrays(patch)
+            if relocation:
+                audit["field_relocation"] = relocation
             # Only a nonempty subset with valid existing fields can be
             # completed. Never synthesize a story map, retry malformed JSON,
             # erase unknown keys, or rewrite fields already returned.
@@ -344,7 +404,43 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                 has_events = any(phase["events"] for phase in profile.get("story_map", {}).get("phases", []))
                 if has_events and not patch.get("scene_summaries"):
                     raise ValueError("场景连续性缺少原文场景记录，请重试。")
-            candidate = validate_profile({**profile, **patch})
+            try:
+                candidate = validate_profile({**profile, **patch})
+            except ValidationError as exc:
+                if key != "story" or reused or completion or not _string_event_errors_only(patch, exc):
+                    raise
+                # One lossless shape correction, not a retry of the whole
+                # analysis. Provider refusals and other invalid shapes never
+                # enter this path; accepted checkpoints remain reusable.
+                completion = {"fields": ["story_map"], "paths": ["story_map.phases"], "raw_response": ""}
+                audit["field_completion"] = completion
+                prompt = build_step_prompt(key, source_context, is_digest, entities, style, profile,
+                    output_fields=("story_map",), completed_fields=patch, story_map_fields=("phases",))
+                prompt += ("\n本次仅将phases[].events中的字符串按Schema转换为事件对象，事件原文逐字保留在description。"
+                           "阶段顺序、阶段元数据、事件数量与顺序、已有事件对象全部原样保留。"
+                           "不添加剧情、人物或动机；使用实际事件ID保持已有关系和故事线引用有效。"
+                           "只返回{\"story_map\":{\"phases\":[...]}}，不返回其他字段。")
+                category = "provider"
+                corrected_raw = (processor.llm.chat(
+                    messages=[{"role": "system", "content": prompt},
+                              {"role": "user", "content": "只修正事件对象格式，保留原文和已有对象。"}],
+                    response_format={"type": "json_object"}, stream=True,
+                    timeout_seconds=DIRECTOR_PROFILE_TIMEOUT_SECONDS,
+                    max_retries=DIRECTOR_PROFILE_MAX_RETRIES,
+                ) or "").strip()
+                completion["raw_response"] = corrected_raw[:MAX_RESPONSE_CHARS]
+                category = "parse"
+                if not corrected_raw or len(raw) + len(corrected_raw) > MAX_RESPONSE_CHARS:
+                    raise ValueError("事件格式修正输出为空或超过预算，请重试。")
+                corrected = json.loads(_strip_markdown_json(corrected_raw))
+                category = "validation"
+                if (not isinstance(corrected, dict) or set(corrected) != {"story_map"}
+                        or not isinstance(corrected["story_map"], dict) or set(corrected["story_map"]) != {"phases"}):
+                    raise ValueError("事件格式修正返回了本次范围之外的字段")
+                phases = corrected["story_map"]["phases"]
+                _require_lossless_event_correction(patch["story_map"]["phases"], phases)
+                patch = {**patch, "story_map": {**patch["story_map"], "phases": phases}}
+                candidate = validate_profile({**profile, **patch})
             if key == "story":
                 story = candidate["story_map"]
                 if (len(story["phases"]) > 8 or sum(len(p["events"]) for p in story["phases"]) > 16
@@ -360,6 +456,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                 saved = {"identity": identity, "stage": key, "profile": normalized_patch, "raw_response": raw}
                 if completion:
                     saved["field_completion"] = completion
+                if relocation:
+                    saved["field_relocation"] = relocation
                 if save_step:
                     category = "checkpoint"
                     if save_step(index, key, saved) is False:
@@ -371,6 +469,8 @@ def analyze_in_stages(processor, text, entities, style, *, source_mode="auto",
                                    "raw_response": raw, "raw_response_sha256": hashlib.sha256(raw.encode()).hexdigest()})
             if completion:
                 audit["steps"][-1]["field_completion"] = completion
+            if relocation:
+                audit["steps"][-1]["field_relocation"] = relocation
         audit.update(parse_status="parsed", normalization_status="normalized", admission_status="confirmable",
                      raw_response_received=True)
         return {"profile": profile, "source_audit": audit}
