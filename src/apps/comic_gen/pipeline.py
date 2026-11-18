@@ -1769,7 +1769,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Structured identity always wins over the legacy URL. Resolve it
             # again during execution so a queued task cannot use a deleted or
             # cross-owner variant.
-            reference_image_url, reference_provenance = self._resolve_asset_library_reference(
+            reference_image_url, reference_provenance = self._resolve_asset_generation_reference(
                 script,
                 reference,
             )
@@ -1780,7 +1780,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if references:
             normalized_references = self._normalize_asset_references(references)
             for structured_reference in normalized_references:
-                resolved, provenance = self._resolve_asset_library_reference(script, structured_reference)
+                resolved, provenance = self._resolve_asset_generation_reference(script, structured_reference)
                 resolved_references.append(resolved)
                 reference_provenance_list.append(provenance)
         
@@ -2227,7 +2227,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         image_generation_mode = params.get("image_generation_mode", "text")
         reference_provenance = None
         if params.get("reference") is not None:
-            reference_image_url, reference_provenance = self._resolve_asset_library_reference(
+            reference_image_url, reference_provenance = self._resolve_asset_generation_reference(
                 series,
                 params["reference"],
             )
@@ -2236,7 +2236,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         if params.get("references"):
             normalized_references = self._normalize_asset_references(params["references"])
             for structured_reference in normalized_references:
-                resolved, provenance = self._resolve_asset_library_reference(series, structured_reference)
+                resolved, provenance = self._resolve_asset_generation_reference(series, structured_reference)
                 resolved_references.append(resolved)
                 reference_provenance_list.append(provenance)
 
@@ -3052,6 +3052,25 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not os.path.isfile(candidate):
             raise InvalidAssetReference("reference variant media is missing")
         return candidate
+
+    def _resolve_asset_generation_reference(
+        self, container: Any, reference: Any,
+    ) -> Tuple[str, Dict[str, str]]:
+        """Keep stable provenance while preparing platform bytes for delivery.
+
+        Catalog images are shared. Provider signing requires owner-local media,
+        so materialize the validated revision only when a task executes.
+        """
+        source, normalized = self._resolve_asset_library_reference(container, reference)
+        if normalized["asset_type"] != "platform_reference":
+            return source, normalized
+        from ..reference_materials import materialize_image, reference_context
+
+        owner = container.owner_profile_id
+        context = reference_context(normalized, owner, output_root=self.output_root)
+        material = materialize_image(owner, source, label=context["title"] if context else "",
+                                     output_root=self.output_root, context=context)
+        return self._local_output_path(material["storage_key"]), normalized
 
     def _resolve_asset_library_reference(
         self,
