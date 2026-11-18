@@ -112,3 +112,8 @@ def test_provider_frame_mode_aliases_are_projected_for_the_selector():
     model = normalize_uniart_catalog({"data": [{"id": "minimax-h3-discount",
         "video_capability": {"modes": [{"id": mode} for mode in ["text2video", "image2video", "frames2video", "omni_reference"]]}}]})[0]
     assert model["capabilities"] == ["t2v", "i2v", "f2v", "r2v"]
+
+
+def test_unknown_image_capacity_is_not_published_as_zero():
+    model = normalize_uniart_catalog({"data": [{"id": "gpt-image-2"}]})[0]
+    assert model["inputs"]["reference_images"] == {}

@@ -73,6 +73,12 @@ def _size(value: str | None) -> tuple[str, str | None]:
 
 
 class GreenAImageModel(ImageGenModel):
+    @classmethod
+    def reference_image_limit(cls, model_name: str):
+        if model_name not in SEEDREAM_IDS:
+            raise ValueError("Unsupported GreenA image model")
+        return 10
+
     def __init__(self, owner_config: dict):
         self.config = gateway_config(owner_config)
 
@@ -88,8 +94,9 @@ class GreenAImageModel(ImageGenModel):
         refs = list(kwargs.get("ref_image_paths") or [])
         if kwargs.get("ref_image_path"):
             refs.insert(0, kwargs["ref_image_path"])
-        if len(refs) > 10:
-            raise ValueError("Seedream accepts at most 10 reference images")
+        limit = self.reference_image_limit(model)
+        if len(refs) > limit:
+            raise ValueError(f"Seedream accepts at most {limit} reference images")
         body = {"model": SEEDREAM_MODEL, "prompt": prompt, "resolution": resolution, "aspect_ratio": ratio}
         if refs:
             body["images"] = [_reference_url(ref) for ref in refs]

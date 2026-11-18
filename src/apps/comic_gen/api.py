@@ -998,7 +998,7 @@ class GenerateAssetRequest(BaseModel):
     style_preset: str = "Cinematic"
     reference_image_url: Optional[str] = None
     reference: Optional[AssetLibraryReference] = None
-    references: List[AssetLibraryReference] = Field(default_factory=list, max_length=9)
+    references: List[AssetLibraryReference] = Field(default_factory=list)
     image_generation_mode: Literal["text", "reference"] = "text"
     style_prompt: Optional[str] = None
     generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all', 'reference_sheet'

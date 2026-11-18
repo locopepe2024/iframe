@@ -428,7 +428,7 @@ class CharacterDesignPage(BaseModel):
     prompt: str = Field(default="", max_length=30000)
     negative_prompt: str = Field(default="", max_length=10000)
     mode: Literal["text", "reference"] = "text"
-    references: List[AssetLibraryReference] = Field(default_factory=list, max_length=9)
+    references: List[AssetLibraryReference] = Field(default_factory=list)
     prompt_source: str = Field(default="", max_length=240)
     reference_prompts: Dict[str, str] = Field(default_factory=dict)
     selected_variant_id: Optional[str] = None

@@ -1731,8 +1731,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._resolve_asset_library_reference(owner, item)
         requested_model = model_name or owner.model_settings.t2i_model
         effective_t2i = requested_model if is_series else self._asset_generation_model(owner, model_name)
-        if len(normalized_references) > self._asset_reference_limit(effective_t2i):
-            raise InvalidAssetReference(f"model '{effective_t2i}' supports at most {self._asset_reference_limit(effective_t2i)} referenced images")
+        reference_limit = self._asset_reference_limit(effective_t2i)
+        reference_count = len(normalized_references) + int(bool(normalized_reference))
+        if reference_limit is not None and reference_count > reference_limit:
+            raise InvalidAssetReference(f"model '{effective_t2i}' supports at most {reference_limit} referenced images")
         effective_model = (
             (owner.model_settings.i2i_model if is_series or not owner.series_id
              else self.series_store[owner.series_id].model_settings.i2i_model)
@@ -2043,7 +2045,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         normalized_references = self._normalize_asset_references(references or [])
         effective_reference_model = self._asset_generation_model(script, model_name)
         reference_limit = self._asset_reference_limit(effective_reference_model)
-        if len(normalized_references) > reference_limit:
+        reference_count = len(normalized_references) + int(bool(normalized_reference or reference_image_url))
+        if reference_limit is not None and reference_count > reference_limit:
             raise InvalidAssetReference(
                 f"model '{effective_reference_model}' supports at most {reference_limit} referenced images"
             )
@@ -2674,13 +2677,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise InvalidAssetReference("reference mode requires at least one reference image")
 
     @staticmethod
-    def _asset_reference_limit(model_name: Optional[str]) -> int:
-        normalized = str(model_name or "").removeprefix("uniart/")
-        if normalized.startswith(("gpt-image-", "wan2.7-image", "qwen-image")):
-            return 9
-        if normalized == "wan2.6-image":
-            return 4
-        return 3
+    def _asset_reference_limit(model_name: Optional[str]) -> Optional[int]:
+        return AssetGenerator.reference_image_limit(model_name or "")
 
     @staticmethod
     def _asset_image_variants(asset: Any, asset_type: str) -> List[Any]:
@@ -13338,7 +13336,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         normalized_references = self._normalize_asset_references(references or [])
         effective_reference_model = model_name or series.model_settings.t2i_model
         reference_limit = self._asset_reference_limit(effective_reference_model)
-        if len(normalized_references) > reference_limit:
+        reference_count = len(normalized_references) + int(bool(normalized_reference or reference_image_url))
+        if reference_limit is not None and reference_count > reference_limit:
             raise InvalidAssetReference(
                 f"model '{effective_reference_model}' supports at most {reference_limit} referenced images"
             )

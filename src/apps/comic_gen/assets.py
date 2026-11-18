@@ -71,6 +71,22 @@ class AssetGenerator:
             return studio_media_dir(owner_profile_id, "assets", output_root=self.output_root)
         return self.output_dir
 
+    @staticmethod
+    def reference_image_limit(model_name: str):
+        """Read the input contract from the routed adapter, without credentials."""
+        from ...models.nsfw_new_one import SEEDREAM_IDS, GreenAImageModel
+        if model_name in SEEDREAM_IDS:
+            adapter = GreenAImageModel
+        elif model_name and model_name.startswith("uniart/"):
+            from ...models.uniart import UniArtImageModel
+            adapter = UniArtImageModel
+        elif model_name and model_name.startswith("gpt-image"):
+            from ...models.mulerouter import MuleRouterImageModel
+            adapter = MuleRouterImageModel
+        else:
+            adapter = WanxImageModel
+        return adapter.reference_image_limit(model_name)
+
     def _get_model_for(self, model_name: str) -> "ImageGenModel":
         """Route to the correct image adapter based on model name."""
         from ...models.nsfw_new_one import SEEDREAM_IDS, NSFWNewOneImageModel

@@ -130,3 +130,43 @@ def test_custom_reference_prompt_edits_are_not_replaced_by_hidden_semantics(tmp_
     assert provider.generate.call_args.kwargs['model_name'] == review['selected_model_id'] == 'chosen-model'
     assert len(provider.generate.call_args.kwargs['ref_image_paths']) == 1
     pipeline._reference_semantic_prompt.assert_not_called()
+
+
+@pytest.mark.parametrize('scope', ['project', 'series'])
+def test_greena_ten_references_save_preview_and_reach_adapter(tmp_path, monkeypatch, scope):
+    from PIL import Image
+    from src.apps.reference_materials import materialize_image
+    from src.apps.comic_gen.pipeline import InvalidAssetReference
+    from src.models.nsfw_new_one import GreenAImageModel
+    from src.utils.uniart_catalog import normalize_uniart_catalog
+    pipeline, character, provider = pipeline_for(tmp_path, scope)
+    monkeypatch.setattr('src.utils.oss_utils.OSSImageUploader', lambda: Mock(is_configured=False))
+    model = 'nsfw/seedream_5.0Pro_nsfw'
+    pipeline.scripts['project'].model_settings.t2i_model = model
+    pipeline.series_store['series'].model_settings.t2i_model = model
+    references = []
+    for index in range(11):
+        image = tmp_path/f'source-{index}.png'
+        Image.new('RGB', (8, 8), (index, 0, 0)).save(image)
+        references.append(materialize_image('owner', str(image), output_root=str(tmp_path))['reference'])
+    page = CharacterDesignPage(id='costume', prompt='红衣，挥手', mode='reference', references=references[:10])
+    update = pipeline.update_asset_attributes if scope == 'project' else pipeline.update_series_asset_attributes
+    update(scope, 'hero', 'character', {'custom_design_pages': [page.model_dump()]})
+    assert len(character.custom_design_pages[0]['references']) == 10
+    args = dict(prompt=page.prompt, generation_type='design:costume', references=references[:10], image_generation_mode='reference')
+    review = pipeline.preview_asset_image_submission(scope, 'hero', 'character', is_series=scope == 'series', **args)
+    assert len(review['reference_inputs']) == 10
+    create = pipeline.create_asset_generation_task if scope == 'project' else pipeline.generate_series_asset
+    _, task_id = create(scope, 'hero', 'character', preserve_prompt=True, apply_style=False, expected_review_fingerprint=review['fingerprint'], **args)
+    pipeline.process_asset_generation_task(task_id)
+    assert pipeline.asset_generation_tasks[task_id]['status'] == 'completed', pipeline.asset_generation_tasks[task_id].get('error')
+    assert len(provider.generate.call_args.kwargs['ref_image_paths']) == 10
+    for operation in (lambda: pipeline.preview_asset_image_submission(scope, 'hero', 'character', is_series=scope == 'series', **{**args, 'references': references}),
+                      lambda: create(scope, 'hero', 'character', **{**args, 'references': references})):
+        with pytest.raises(InvalidAssetReference, match='at most 10'):
+            operation()
+    # Changing the adapter declaration changes both runtime and public UI metadata.
+    monkeypatch.setattr(GreenAImageModel, 'reference_image_limit', classmethod(lambda cls, model: 6))
+    assert normalize_uniart_catalog({'data':[{'id': model.split('/')[1]}]})[0]['inputs']['reference_images']['max'] == 6
+    with pytest.raises(InvalidAssetReference, match='at most 6'):
+        pipeline.preview_asset_image_submission(scope, 'hero', 'character', is_series=scope == 'series', **args)
