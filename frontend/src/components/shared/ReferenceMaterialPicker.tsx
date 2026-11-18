@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Image as ImageIcon, X } from 'lucide-react';
 import { api, type AssetLibraryReference } from '@/lib/api';
+import { getMaxReferenceImages } from '@/lib/modelCatalog';
 import { useProjectStore } from '@/store/projectStore';
 import ReferenceMaterialBrowser, { materialKey, type MaterialCandidate } from './ReferenceMaterialBrowser';
 
-export default function ReferenceMaterialPicker({ candidates, selected, onChange, onDiscover, title = '选择参考素材', projectId, onOpen, max = 9 }: {
+export default function ReferenceMaterialPicker({ candidates, selected, onChange, onDiscover, title = '选择参考素材', projectId, onOpen, max: suppliedMax, modelName }: {
     candidates?: MaterialCandidate[];
     selected: AssetLibraryReference[];
     onChange?: (references: AssetLibraryReference[]) => void | Promise<void>;
@@ -15,8 +16,15 @@ export default function ReferenceMaterialPicker({ candidates, selected, onChange
     projectId?: string;
     onOpen?: () => void;
     max?: number;
+    modelName?: string;
 }) {
-    const currentProjectId = useProjectStore(state => state.currentProject?.id);
+    const currentProject = useProjectStore(state => state.currentProject);
+    const currentSeries = useProjectStore(state => state.currentSeries);
+    const currentProjectId = currentProject?.id;
+    const settings = currentSeries && (currentSeries.id === currentProject?.series_id || currentSeries.id === projectId)
+        ? currentSeries.model_settings : currentProject?.model_settings;
+    const max = suppliedMax ?? getMaxReferenceImages(modelName || settings?.t2i_model);
+    const limitReached = max !== undefined && selected.length >= max;
     const [open, setOpen] = useState(false);
     const [discovered, setDiscovered] = useState<MaterialCandidate[]>([]);
     const [error, setError] = useState('');
@@ -47,7 +55,7 @@ export default function ReferenceMaterialPicker({ candidates, selected, onChange
     };
     const all = [...(candidates || []), ...discovered];
     return <section className="rounded-md border border-glass-border bg-surface/60 p-2" data-reference-picker>
-        <button type="button" disabled={!onChange || saving || selected.length >= max} aria-expanded={open} onClick={() => { onOpen?.(); setOpen(true); }} className="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-hover-bg disabled:opacity-40"><ImageIcon size={15} /><span>{title}{selected.length ? ` · ${selected.length}/${max}` : ''}</span></button>
+        <button type="button" disabled={!onChange || saving || limitReached} aria-expanded={open} onClick={() => { onOpen?.(); setOpen(true); }} className="flex min-h-11 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-hover-bg disabled:opacity-40"><ImageIcon size={15} /><span>{title}{selected.length ? ` · ${selected.length}${max === undefined ? "" : `/${max}`}` : ''}</span></button>
         {selected.length > 0 && <div className="flex flex-wrap gap-1.5 px-2 pb-1" aria-label="已选择的参考素材">{selected.map(reference => {
             const candidate = all.find(item => materialKey(item.reference) === materialKey(reference));
             const label = candidate?.label || `参考图 ${selected.indexOf(reference) + 1}`;
@@ -56,7 +64,7 @@ export default function ReferenceMaterialPicker({ candidates, selected, onChange
         {error && <p role="alert" className="px-2 py-1 text-xs text-status-failed-fg">{error}</p>}
         {open && <ReferenceMaterialBrowser open onClose={() => setOpen(false)} projectId={projectId || currentProjectId} candidates={candidates} onSelect={async (material, candidate) => {
             if (!material.reference) throw new Error('此工作台需要可校验的图片素材');
-            if (selected.length >= max) throw new Error(`最多选择 ${max} 张参考图`);
+            if (limitReached) throw new Error(`最多选择 ${max} 张参考图`);
             const resolved = { ...candidate, label: material.label, context: material.context, reference: material.reference, path: material.path, previewUrl: material.path };
             await onChange?.(selected.some(item => materialKey(item) === materialKey(material.reference)) ? selected : [...selected, material.reference]);
             setDiscovered(previous => [...previous.filter(item => materialKey(item.reference) !== materialKey(material.reference)), resolved]);

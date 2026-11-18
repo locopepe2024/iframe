@@ -14,6 +14,7 @@ type Props = {
     project: any;
     seriesId?: string;
     modelName?: string;
+    referenceModelName?: string;
     activeId: string;
     onActivate: (id: `design:${string}` | 'full_body') => void;
     tabHost: HTMLDivElement | null;
@@ -152,7 +153,7 @@ export default function CustomCharacterDesignPages(props: Props) {
             prompt={selected.prompt} setPrompt={(prompt: string) => update(selected.id, { prompt })}
             referenceCandidates={props.candidates} onReferenceCandidate={props.onDiscover} onRefreshReferences={props.onRefreshReferences}
             onReferencesChange={(references: AssetLibraryReference[]) => void selectReferences(selected.id, references).catch(() => setError('参考图描述读取失败，请重试选择。'))}
-            showReferencePicker effectiveReferences={selected.mode === 'reference' ? selected.references : []} pickerReferences={selected.references}
+            referenceModelName={props.referenceModelName} showReferencePicker effectiveReferences={selected.mode === 'reference' ? selected.references : []} pickerReferences={selected.references}
             onPickerReferencesChange={(references: AssetLibraryReference[]) => selectReferences(selected.id, references)}
             imageGenerationMode={selected.mode} onImageGenerationModeChange={(mode: 'text' | 'reference') => update(selected.id, { mode })}
             onGenerate={(count: number) => void beginReview(selected, count)} isGenerating={saving || readingReferences || !!generating(selected.id)} generatingBatchSize={generating(selected.id)?.batchSize || 1} aspectRatio="9:16" />}

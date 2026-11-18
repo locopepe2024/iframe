@@ -1559,6 +1559,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                     </div>}
 
                     <CustomCharacterDesignPages asset={asset} project={seriesId ? null : currentProject} seriesId={seriesId}
+                        referenceModelName={(currentSeries && (currentSeries.id === seriesId || currentSeries.id === currentProject?.series_id) ? currentSeries.model_settings : currentProject?.model_settings)?.t2i_model}
                         modelName={seriesId || currentProject?.series_id ? undefined : resolveAssetGenerationModel(currentProject?.model_settings?.t2i_model)}
                         activeId={activePanel} onActivate={setActivePanel} tabHost={designTabsHost} Panel={WorkbenchPanel}
                         referenceIndex={assetIndex} candidates={referenceCandidates} onDiscover={discoverReference} onRefreshReferences={refreshReferences}
@@ -1599,6 +1600,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         referenceCandidates={referenceCandidates}
                         onRefreshReferences={refreshReferences}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("full_body", references)}
+                        referenceModelName={(currentSeries && (currentSeries.id === seriesId || currentSeries.id === currentProject?.series_id) ? currentSeries.model_settings : currentProject?.model_settings)?.t2i_model}
                         showReferencePicker
                         designReferences={designReferenceAssets}
                         effectiveReferences={fittedFullBodyReferences(whiteFaceShape, asset.id, promptModes.full_body,
@@ -1668,6 +1670,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         referenceCandidates={referenceCandidates}
                         onRefreshReferences={refreshReferences}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("three_view", references)}
+                        referenceModelName={(currentSeries && (currentSeries.id === seriesId || currentSeries.id === currentProject?.series_id) ? currentSeries.model_settings : currentProject?.model_settings)?.t2i_model}
                         showReferencePicker
                         designReferences={designReferenceAssets}
                         effectiveReferences={imageGenerationReferences([...promptReferences.three_view, ...promptPickerReferences.three_view, ...(masterReference ? [masterReference] : [])]).slice(0, 1)}
@@ -1717,6 +1720,7 @@ export default function CharacterWorkbench({ asset, seriesId, onClose, onUpdateD
                         referenceCandidates={referenceCandidates}
                         onRefreshReferences={refreshReferences}
                         onReferencesChange={(references: AssetLibraryReference[]) => setPanelReferences("headshot", references)}
+                        referenceModelName={(currentSeries && (currentSeries.id === seriesId || currentSeries.id === currentProject?.series_id) ? currentSeries.model_settings : currentProject?.model_settings)?.t2i_model}
                         showReferencePicker
                         designReferences={designReferenceAssets}
                         effectiveReferences={imageGenerationReferences([...promptReferences.headshot, ...promptPickerReferences.headshot, ...(masterReference ? [masterReference] : [])]).slice(0, 1)}
@@ -1843,6 +1847,7 @@ export function WorkbenchPanel({
     onReferenceCandidate,
     onReferencesChange,
     showReferencePicker = false,
+    referenceModelName,
     designReferences,
     effectiveReferences = [],
     pickerReferences = [],
@@ -1925,6 +1930,7 @@ export function WorkbenchPanel({
                 </div>}
                 {showReferencePicker && <div className="px-4 pt-2">
                     <ReferenceMaterialPicker
+                        modelName={referenceModelName}
                         candidates={referenceCandidates}
                         selected={pickerReferences}
                         onChange={(references) => {

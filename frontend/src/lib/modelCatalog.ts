@@ -485,12 +485,12 @@ export function resolveModelSettings(
 export const normalizeModelSettings = resolveModelSettings;
 export const normalizeModelId = resolveModelId;
 
-export function getMaxReferenceImages(modelId?: string | null): number {
-    const resolvedModelId = resolveModelId('i2i', modelId, 'project_settings');
-    const maxReferenceImages =
-        MODEL_CATALOG.models[resolvedModelId]?.inputs?.reference_images?.max;
-
-    return typeof maxReferenceImages === 'number' ? maxReferenceImages : 3;
+export function getMaxReferenceImages(modelId?: string | null): number | undefined {
+    // Capacity belongs to the selected model, even when it is outside the
+    // legacy i2i selector. Never borrow another model's limit or guess one.
+    const id = modelId ? getLegacyModelId(modelId) || modelId : undefined;
+    const max = id ? MODEL_CATALOG.models[id]?.inputs?.reference_images?.max : undefined;
+    return typeof max === 'number' && Number.isFinite(max) && max >= 0 ? max : undefined;
 }
 
 export const PROJECT_T2I_MODELS = getVisibleModels('t2i', 'project_settings').map(toSelectableModel);
