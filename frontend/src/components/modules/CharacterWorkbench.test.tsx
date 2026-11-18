@@ -1872,6 +1872,42 @@ it('saves input and AI result separately and restores both instead of unsaved AI
     expect(onUpdateAttributes).toHaveBeenCalledTimes(1);
 });
 
+it.each([false, true])('generates a saved AI prompt and allows final edits when the preview differs: %s', async (differentPreview) => {
+    const originalPreview = apiMocks.previewAssetImageSubmission.getMockImplementation()!;
+    const { onGenerate, onUpdateAttributes } = mountSimpleDesign();
+    const result = await submitSimpleDesign();
+    fireEvent.change(result, { target: { value: '圆脸，自然肤质，素黑外衣，布靴。' } });
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    try {
+        apiMocks.previewAssetImageSubmission.mockImplementation(async (id: string, request: any) => ({
+            ...await originalPreview(id, request),
+            positive_prompt: request.prompt + (differentPreview ? '\n平台参考素材说明' : ''),
+        }));
+        openImagePrompt();
+        if (differentPreview) {
+            const editor = imagePromptInput() as any;
+            act(() => editor.editor.commands.setContent('<p>仅本次出图：蓝色外衣，保留自然肤质。</p>'));
+            fireEvent.change(screen.getByRole('textbox', { name: '出图负面提示词' }), { target: { value: '额外披风' } });
+            await waitFor(() => expect(apiMocks.previewAssetImageSubmission.mock.lastCall?.[1]).toEqual(expect.objectContaining({
+                prompt: '仅本次出图：蓝色外衣，保留自然肤质。', negative_prompt: '额外披风',
+            })));
+            expect(await screen.findByText(/预览文本与待提交文本不一致，请确认/)).toBeInTheDocument();
+        }
+        const confirm = screen.getByRole('button', { name: '确认并生成' });
+        await waitFor(() => expect(confirm).toBeEnabled());
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        if (!differentPreview) expect(screen.queryByText(/预览文本与待提交文本不一致/)).not.toBeInTheDocument();
+        fireEvent.click(confirm);
+        await waitFor(() => expect(onGenerate).toHaveBeenCalledWith('full_body',
+            differentPreview ? '仅本次出图：蓝色外衣，保留自然肤质。' : expect.stringContaining('圆脸，自然肤质，素黑外衣，布靴。'),
+            false, differentPreview ? '额外披风' : expect.any(String), 1, [], 'text', 'reviewed'));
+        expect(onUpdateAttributes).toHaveBeenCalledTimes(1);
+    } finally {
+        apiMocks.previewAssetImageSubmission.mockImplementation(originalPreview);
+    }
+});
+
 it('reads legacy confirmed designs as an input prompt plus a separate result on reedit', () => {
     const originalInput = '用户原始的面板描述';
     mountSimpleDesign({ character_design: { design_draft: {
