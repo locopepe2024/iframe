@@ -853,3 +853,39 @@ it("fills an atmosphere Prompt template into editable scene settings without cha
     expect((screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value).toContain("硬质定向光");
     expect((screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value).not.toContain("软硬：柔和漫射光");
 });
+
+it.each(['scene', 'prop'])('uses adapter capacity when adding %s reference images', async (type) => {
+    const catalog = await import('@/lib/modelCatalog');
+    const capacity = vi.spyOn(catalog, 'getMaxReferenceImages').mockReturnValue(10);
+    const asset = { id: 'target', name: 'Target asset', description: 'Target description', source: 'episode' };
+    const references = Array.from({ length: 11 }, (_, index) => ({
+        asset_type: 'prop', asset_id: `reference-${index}`, name: `Reference ${index}`, source_scope: 'episode',
+        selected_variant_id: 'v1', variants: [{ id: 'v1', url: `/ref-${index}.png` }],
+    }));
+    const project = { id: 'episode-1', characters: [], scenes: type === 'scene' ? [asset] : [], props: type === 'prop' ? [asset] : [],
+        series_id: 'series-1', model_settings: { t2i_model: 'wrong-project-model' },
+        art_direction: { style_config: { positive_prompt: '', negative_prompt: '' } } };
+    useProjectStore.setState({ currentProject: project as any, currentSeries: {
+        id: 'series-1', model_settings: { t2i_model: 'nsfw/seedream_5.0Pro_nsfw' },
+    } as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.getAssetReferenceIndex.mockResolvedValue({ assets: references });
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole('button', { name: type === 'scene' ? /Scenes/ : /Props/ }));
+    fireEvent.click(screen.getByText(asset.name));
+    for (let index = 0; index < 10; index++) {
+        fireEvent.click(screen.getByRole('button', { name: '添加场景参考素材' }));
+        const candidate = await screen.findByRole('option', { name: `Reference ${index}` });
+        expect(candidate).toBeEnabled();
+        fireEvent.click(candidate);
+    }
+    expect(screen.getByRole('button', { name: '添加场景参考素材' })).toHaveTextContent('10/10');
+    fireEvent.click(screen.getByRole('button', { name: '添加场景参考素材' }));
+    expect(screen.getByRole('option', { name: 'Reference 10' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '移除参考素材 Reference 9' })).toBeEnabled();
+    capacity.mockReturnValue(12);
+    fireEvent.change(screen.getByRole('textbox', { name: '搜索场景参考素材' }), { target: { value: 'Reference' } });
+    expect(screen.getByRole('option', { name: 'Reference 10' })).toBeEnabled();
+    expect(capacity).toHaveBeenLastCalledWith('nsfw/seedream_5.0Pro_nsfw');
+    capacity.mockRestore();
+});

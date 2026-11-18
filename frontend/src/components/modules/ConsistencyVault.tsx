@@ -18,7 +18,7 @@ import UploadAssetModal from "../modals/UploadAssetModal";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { buildCharacterVideoPrompt, DEFAULT_CHARACTER_NEGATIVE_PROMPT } from "@/lib/characterPrompts";
-import { resolveAssetGenerationModel } from "@/lib/modelCatalog";
+import { getMaxReferenceImages, resolveAssetGenerationModel } from "@/lib/modelCatalog";
 import {
     createSingleFlightTaskStatusPoller,
     mergeAssetTaskResult,
@@ -817,6 +817,12 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     ].map(String));
     const [propMetricError, setPropMetricError] = useState("");
     const currentProject = useProjectStore((state) => state.currentProject);
+    const currentSeries = useProjectStore((state) => state.currentSeries);
+    const referenceModelName = currentProject?.series_id
+        ? (currentSeries?.id === currentProject.series_id ? currentSeries?.model_settings?.t2i_model : undefined)
+        : currentProject?.model_settings?.t2i_model;
+    const referenceLimit = getMaxReferenceImages(referenceModelName);
+
     const updateProject = useProjectStore((state) => state.updateProject);
     const selectionQueue = useRef<Promise<void>>(Promise.resolve());
     const selectionVersion = useRef(0);
@@ -880,6 +886,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     const setVisibleImagePrompt = usingSceneAi ? setOptimizedPrompt : setImagePrompt;
     const visibleReferences = usingSceneAi ? aiReferences : promptReferences;
     const setVisibleReferences = usingSceneAi ? setAiReferences : setPromptReferences;
+    const referenceLimitReached = referenceLimit !== undefined && visibleReferences.length >= referenceLimit;
     const visibleGenerationMode = usingSceneAi ? aiGenerationMode : imageGenerationMode;
     const setVisibleGenerationMode = usingSceneAi ? setAiGenerationMode : setImageGenerationMode;
     type LightingInheritance = { reference: AssetLibraryReference; label: string; prompt: string };
@@ -1233,6 +1240,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
     };
 
     const handleGenerateClick = (batchSize: number) => {
+        if (referenceLimit !== undefined && visibleReferences.length > referenceLimit) {
+            toast.warning(`当前模型最多支持 ${referenceLimit} 张参考图，请移除多余参考素材。`);
+            return;
+        }
         if (inheritedLighting && !visibleReferences.some((reference) =>
             reference.asset_type === inheritedLighting.reference.asset_type && reference.asset_id === inheritedLighting.reference.asset_id && reference.variant_id === inheritedLighting.reference.variant_id)) {
             toast.warning("继承光影的来源版本已从参考素材中移除，请重新选择光影来源。");
@@ -1663,7 +1674,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                         </span>)}
                                         <button type="button" onClick={() => setReferencePickerOpen((open) => !open)}
                                             aria-expanded={referencePickerOpen} aria-label="添加场景参考素材"
-                                            className="flex min-h-9 items-center gap-1 rounded border border-glass-border px-2 text-xs hover:bg-hover-bg"><Plus size={14} />参考素材</button>
+                                            className="flex min-h-9 items-center gap-1 rounded border border-glass-border px-2 text-xs hover:bg-hover-bg"><Plus size={14} />参考素材 · {visibleReferences.length}{referenceLimit === undefined ? "" : `/${referenceLimit}`}</button>
                                         {type === "scene" && <button type="button" onClick={() => setLightingPickerOpen(open => !open)}
                                             disabled={!selectedCandidates.length || lightingLoading} aria-expanded={lightingPickerOpen}
                                             className="min-h-9 rounded border border-glass-border px-2 text-xs text-foreground hover:bg-hover-bg disabled:opacity-50">
@@ -1702,9 +1713,9 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onUpd
                                             {pickerCandidates.map((candidate) => {
                                                 const reference = candidate.reference!;
                                                 const selected = visibleReferences.some((item) => item.asset_type === reference.asset_type && item.asset_id === reference.asset_id && item.variant_id === reference.variant_id);
-                                                return <button key={`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`} type="button" role="option" aria-selected={selected}
-                                                    onClick={() => { setVisibleReferences(selected ? visibleReferences.filter((item) => item.asset_type !== reference.asset_type || item.asset_id !== reference.asset_id || item.variant_id !== reference.variant_id) : [...visibleReferences, reference]); setReferencePickerOpen(false); setReferencePickerQuery(""); }}
-                                                    className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-hover-bg">
+                                                return <button key={`${reference.asset_type}:${reference.asset_id}:${reference.variant_id}`} type="button" role="option" aria-selected={selected} disabled={!selected && referenceLimitReached}
+                                                    onClick={() => { if (!selected && referenceLimitReached) return; setVisibleReferences(selected ? visibleReferences.filter((item) => item.asset_type !== reference.asset_type || item.asset_id !== reference.asset_id || item.variant_id !== reference.variant_id) : [...visibleReferences, reference]); setReferencePickerOpen(false); setReferencePickerQuery(""); }}
+                                                    className="flex min-h-10 w-full items-center gap-2 rounded px-2 text-left text-xs hover:bg-hover-bg disabled:opacity-40">
                                                     {candidate.previewUrl ? <img src={candidate.previewUrl} alt="" className="h-8 w-8 rounded object-cover" /> : <ImageIcon size={16} />}
                                                     <span className="min-w-0 flex-1 truncate">{candidate.label}</span>{selected && <Check size={14} aria-label="已选" />}
                                                 </button>;
