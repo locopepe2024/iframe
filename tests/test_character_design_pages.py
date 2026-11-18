@@ -170,3 +170,40 @@ def test_greena_ten_references_save_preview_and_reach_adapter(tmp_path, monkeypa
     assert normalize_uniart_catalog({'data':[{'id': model.split('/')[1]}]})[0]['inputs']['reference_images']['max'] == 6
     with pytest.raises(InvalidAssetReference, match='at most 6'):
         pipeline.preview_asset_image_submission(scope, 'hero', 'character', is_series=scope == 'series', **args)
+
+
+@pytest.mark.parametrize('scope', ['project', 'series'])
+@pytest.mark.parametrize('asset_type', ['character', 'scene', 'prop'])
+def test_all_asset_workbenches_share_adapter_reference_capacity(tmp_path, monkeypatch, scope, asset_type):
+    from PIL import Image
+    from src.apps.reference_materials import materialize_image
+    from src.apps.comic_gen.models import Scene, Prop, ScenePromptSource
+    from src.apps.comic_gen.pipeline import InvalidAssetReference
+    pipeline, character, provider = pipeline_for(tmp_path, scope)
+    monkeypatch.setattr('src.utils.oss_utils.OSSImageUploader', lambda: Mock(is_configured=False))
+    target = character if asset_type == 'character' else (Scene if asset_type == 'scene' else Prop)(
+        id='target', name='Target', description='Target', owner_profile_id='owner')
+    model = 'nsfw/seedream_5.0Pro_nsfw'
+    for owner in [pipeline.scripts['project'], pipeline.series_store['series']]:
+        owner.model_settings.t2i_model = model
+        if asset_type != 'character':
+            setattr(owner, f'{asset_type}s', [target])
+    references = []
+    for index in range(11):
+        image = tmp_path/f'ref-{index}.png'; Image.new('RGB', (8,8), (index,0,0)).save(image)
+        references.append(materialize_image('owner', str(image), output_root=str(tmp_path))['reference'])
+    assert len(ScenePromptSource(references=references * 3).references) == 33
+    args = dict(prompt='User authored prompt', model_name=model, references=references[:10], image_generation_mode='reference',
+                generation_type='full_body' if asset_type == 'character' else 'all')
+    review = pipeline.preview_asset_image_submission(scope, target.id, asset_type, is_series=scope=='series', **args)
+    assert len(review['reference_inputs']) == 10
+    create = pipeline.create_asset_generation_task if scope == 'project' else pipeline.generate_series_asset
+    _, task_id = create(scope, target.id, asset_type, preserve_prompt=True, apply_style=False,
+                        expected_review_fingerprint=review['fingerprint'], **args)
+    pipeline.process_asset_generation_task(task_id)
+    assert pipeline.asset_generation_tasks[task_id]['status'] == 'completed', pipeline.asset_generation_tasks[task_id].get('error')
+    assert len(provider.generate.call_args.kwargs['ref_image_paths']) == 10
+    for operation in (lambda: pipeline.preview_asset_image_submission(scope, target.id, asset_type, is_series=scope=='series', **{**args, 'references':references}),
+                      lambda: create(scope, target.id, asset_type, **{**args, 'references':references})):
+        with pytest.raises(InvalidAssetReference, match='at most 10'):
+            operation()

@@ -447,7 +447,7 @@ class ScenePromptSource(BaseModel):
     model_config = {"extra": "forbid"}
     prompt: str = Field(default="", max_length=30000, strict=True)
     mode: Literal["text", "reference"] = "text"
-    references: List[AssetLibraryReference] = Field(default_factory=list, max_length=32)
+    references: List[AssetLibraryReference] = Field(default_factory=list)
     lighting_inheritance: Optional[SceneLightingInheritance] = None
 
 
