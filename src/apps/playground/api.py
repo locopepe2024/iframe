@@ -54,7 +54,7 @@ def _storage_for(identity: UserContext) -> PlaygroundStorage:
             # Never submit a new paid generation during recovery.
             service = PlaygroundService(
                 storage,
-                provider_config_loader=lambda: get_user_config_store().get_runtime_uniart(identity),
+                provider_config_loader=lambda: get_user_config_store().get_runtime_gateway(identity, "uniart"),
                 nsfw_config_loader=lambda: get_user_config_store().get_runtime_nsfw(identity),
             )
             for generation in storage.list_history(limit=1000000):
@@ -72,7 +72,7 @@ def _service_for(identity: UserContext) -> PlaygroundService:
     storage = _storage_for(identity)
     return PlaygroundService(
         storage,
-        provider_config_loader=lambda: get_user_config_store().get_runtime_uniart(identity),
+        provider_config_loader=lambda: get_user_config_store().get_runtime_gateway(identity, "uniart"),
         nsfw_config_loader=lambda: get_user_config_store().get_runtime_nsfw(identity),
     )
 

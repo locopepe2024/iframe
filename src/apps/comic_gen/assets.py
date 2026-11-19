@@ -95,6 +95,8 @@ class AssetGenerator:
         if model_name and model_name.startswith("uniart/"):
             from ...models.uniart import UniArtImageModel
             return UniArtImageModel(studio_gateway_config("uniart"))
+        if model_name and model_name.startswith(("nsfw/", "greena/")):
+            raise ValueError("Unsupported image model in the selected adapter")
         if model_name and model_name.startswith("gpt-image"):
             if self._mulerouter_image_model is None:
                 from ...models.mulerouter import MuleRouterImageModel

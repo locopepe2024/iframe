@@ -263,10 +263,10 @@ class PlaygroundService:
             model = NSFWNewOneImageModel(self._load_nsfw_config())
             use_uniart = True
         else:
-            runtime_config = self._load_provider_config()
-            use_uniart = gen.model_id.lower().startswith("uniart/") or bool(runtime_config) or "uniart.fun" in (
-                os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
-            )
+            if gen.model_id.startswith(("nsfw/", "greena/")):
+                raise ValueError("Unsupported image model in the selected adapter")
+            use_uniart = gen.model_id.lower().startswith("uniart/")
+            runtime_config = self._load_provider_config() if use_uniart else {}
             model = UniArtImageModel(runtime_config) if use_uniart else MuleRouterImageModel({})
 
         params = gen.parameters
@@ -352,7 +352,7 @@ class PlaygroundService:
     def _nsfw_wan_ids():
         from ...models.nsfw_new_one import WAN_IDS
 
-        # Keep the same legacy aliases as Studio's production pipeline.
+        # Namespace determines the adapter, including persisted tasks.
         return WAN_IDS
 
     def _generate_video_nsfw(self, gen: PlaygroundGeneration, out_path: str, *, batch_index: int = 0) -> None:
@@ -458,10 +458,8 @@ class PlaygroundService:
         from ...models.uniart import UniArtVideoModel
 
         model_lower = gen.model_id.lower()
-        runtime_config = self._load_provider_config()
-        use_uniart = gen.model_id.lower().startswith("uniart/") or bool(runtime_config) or "uniart.fun" in (
-            os.getenv("UNIART_BASE_URL") or os.getenv("OPENAI_BASE_URL") or ""
-        )
+        use_uniart = gen.model_id.lower().startswith("uniart/")
+        runtime_config = self._load_provider_config() if use_uniart else {}
         model = UniArtVideoModel(runtime_config) if use_uniart else MuleRouterVideoModel({})
         saved_task = gen.provider_tasks.get(str(batch_index))
         if use_uniart and saved_task:

@@ -28,8 +28,8 @@ def test_greena_new_containers_use_owner_catalog_and_episode_inherits_series(tmp
     assert fetch.call_count==2
 
 
-def test_non_greena_owner_preserves_existing_defaults(monkeypatch):
-    store=Mock();store.get_public.return_value={'catalog_name':'uniart'}
+def test_legacy_owner_preserves_existing_defaults(monkeypatch):
+    store=Mock();store.get_public.return_value={}
     monkeypatch.setattr('src.apps.user_config.get_user_config_store',lambda:store)
     assert ComicGenPipeline._initial_model_settings('owner','owner')==ModelSettings()
     store.get_runtime_uniart.assert_not_called()

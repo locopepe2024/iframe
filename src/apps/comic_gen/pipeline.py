@@ -104,6 +104,7 @@ from ..studio_access import (
     owned_by,
     reset_studio_uniart_config,
     runtime_uniart_for_owner,
+    runtime_gateway_for_owner,
     runtime_nsfw_for_owner,
     set_studio_uniart_config,
     studio_owner_dir,
@@ -1194,6 +1195,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             return True
 
     def _resolve_video_backend(self, model_name: str) -> str:
+        if (model_name or "").startswith("uniart/"):
+            return "uniart"
+        if (model_name or "").startswith(("nsfw/", "greena/")):
+            raise ValueError("Unsupported model in the selected adapter")
         try:
             return resolve_provider_backend(model_name)
         except (KeyError, ValueError):
@@ -1366,17 +1371,17 @@ class ComicGenPipeline(StudioOwnerMixin):
             return settings
         from ..identity import UserContext
         from ..user_config import get_user_config_store
-        from ...utils.provider_catalog import fetch_selected_catalog
+        from ...utils.provider_catalog import fetch_selected_catalog, gateway_adapter
         identity = UserContext(owner_user_id, owner_profile_id, owner_user_id, "")
         store = get_user_config_store()
-        if store.get_public(identity).get("catalog_name") != "greena":
+        if gateway_adapter(store.get_public(identity)) is None:
             return settings
         models = fetch_selected_catalog(store.get_runtime_uniart(identity))
         for field, capability in (("t2i_model", "t2i"), ("i2i_model", "i2i"), ("image_model", "t2i"),
                                   ("i2v_model", "i2v"), ("r2v_model", "r2v")):
             choices = [model["id"] for model in models if capability in model.get("capabilities", [])]
             if not choices:
-                raise ValueError(f"Selected GreenA catalog has no {capability} model")
+                raise ValueError(f"Selected adapter catalog has no {capability} model")
             setattr(settings, field, choices[0])
         return settings
 
@@ -8825,7 +8830,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # If R2V mode is selected, use the appropriate R2V model
         from ...models.nsfw_new_one import WAN_IDS
         is_nsfw_wan = model in WAN_IDS
-        is_uniart_video = bool(model and model.startswith(("uniart/minimax-h3-", "uniart/seedance-")))
+        is_uniart_video = bool(model and model.startswith("uniart/"))
         if generation_mode not in ("t2v", "i2v", "first_last_frame", "r2v"):
             raise ValueError(f"Unsupported video generation mode: {generation_mode}")
         if generation_mode == "first_last_frame":
@@ -10133,7 +10138,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Persisted tasks and asset motion tasks also need ownership validation.
             from ...models.nsfw_new_one import WAN_IDS
             is_nsfw_wan = task.model in WAN_IDS
-            is_uniart_task = (task.model or "").startswith(("uniart/minimax-h3-", "uniart/seedance-"))
+            is_uniart_task = (task.model or "").startswith("uniart/")
             if is_uniart_task and not (task.provider_name == "uniart" and task.provider_task_id):
                 task.reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in task.reference_image_urls]
                 task.reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in task.reference_video_urls]
@@ -10191,7 +10196,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 or model_name_lower.startswith("viduq3")
                 or model_name_lower.startswith("vidu/vidu")
             )
-            use_uniart = backend == "uniart" and (model_name_lower.startswith("uniart/seedance-") or model_name_lower.startswith("uniart/minimax-h3-"))
+            use_uniart = model_name_lower.startswith("uniart/")
             use_mulerouter = backend == "mulerouter" and model_name_lower.startswith("seedance")
 
             if is_nsfw_wan:
@@ -10222,9 +10227,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if not script_owner or not script_owner.owner_user_id or not script_owner.owner_profile_id:
                     raise RuntimeError("Video task has no authenticated owner")
                 uniart_model = UniArtVideoModel(
-                    runtime_uniart_for_owner(
+                    runtime_gateway_for_owner(
                         script_owner.owner_user_id,
                         script_owner.owner_profile_id,
+                        "uniart",
                     )
                 )
                 def save_provider_task(provider_task_id):

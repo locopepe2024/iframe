@@ -15,7 +15,7 @@ def generation(model="nsfw/wan3.0", mode=PlaygroundMode.I2V):
     )
 
 
-@pytest.mark.parametrize("model_id", ["nsfw/wan3.0", "nsfw/wan3.0-Prime", "uniart/wan3.0", "uniart/wan3.0-Prime"])
+@pytest.mark.parametrize("model_id", ["nsfw/wan3.0", "nsfw/wan3.0-Prime"])
 def test_agent_wan_video_uses_new_one_and_saves_task(monkeypatch, tmp_path, model_id):
     storage = Mock(output_dir=str(tmp_path))
     service = PlaygroundService(storage, provider_config_loader=lambda: {"api_key": "test"})

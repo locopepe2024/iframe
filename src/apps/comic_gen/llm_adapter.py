@@ -93,11 +93,11 @@ class LLMAdapter:
                     ) from exc
                 api_key = (configured.get("api_key") or "").strip()
                 base_url = (configured.get("base_url") or "").strip().rstrip("/")
-                if not api_key:
+                if not api_key or not base_url:
                     raise RuntimeError(
                         "LLM gateway API key is not configured for the current user"
                     )
-                return api_key, base_url or "https://uniart.fun/v1"
+                return api_key, base_url
             return (
                 os.getenv("OPENAI_API_KEY"),
                 os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/"),

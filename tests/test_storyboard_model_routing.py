@@ -105,8 +105,8 @@ def test_storyboard_routes_uniart_image_models_to_uniart_adapter(monkeypatch, tm
         lambda _config: adapter,
     )
     monkeypatch.setattr(
-        "src.apps.comic_gen.storyboard.studio_uniart_config",
-        lambda: {"UNIART_API_KEY": "test"},
+        "src.apps.comic_gen.storyboard.studio_gateway_config",
+        lambda provider: {"UNIART_API_KEY": "test"},
     )
 
     generator = StoryboardGenerator({"output_dir": str(tmp_path)})
@@ -169,7 +169,7 @@ def test_storyboard_render_keeps_local_file_even_when_oss_is_configured(monkeypa
         Path(path).write_bytes(b"image"), 0,
     )
     monkeypatch.setattr("src.models.nsfw_new_one.NSFWNewOneImageModel", lambda _config: adapter)
-    monkeypatch.setattr("src.apps.comic_gen.storyboard.studio_nsfw_new_one_config", lambda: {"api_key": "test"})
+    monkeypatch.setattr("src.apps.comic_gen.storyboard.studio_gateway_config", lambda provider: {"api_key": "test"})
     generator = StoryboardGenerator({"output_dir": "output/storyboard"})
     frame = StoryboardFrame(id="frame-1", scene_id="scene-1")
 
@@ -229,12 +229,14 @@ def test_legacy_storyboard_image_is_migrated_to_owner_media(monkeypatch, tmp_pat
     pipeline._save_data.assert_called_once()
 
 
-def test_legacy_seedream_selection_uses_nsfw_adapter(monkeypatch):
+def test_uniart_seedream_id_uses_uniart_adapter(monkeypatch):
     adapter = Mock()
-    monkeypatch.setattr("src.models.nsfw_new_one.NSFWNewOneImageModel", lambda _config: adapter)
-    monkeypatch.setattr("src.apps.comic_gen.storyboard.studio_nsfw_new_one_config", lambda: {"api_key": "test"})
+    monkeypatch.setattr("src.models.uniart.UniArtImageModel", lambda _config: adapter)
+    gateway = Mock(return_value={"api_key": "test"})
+    monkeypatch.setattr("src.apps.comic_gen.storyboard.studio_gateway_config", gateway)
 
     assert StoryboardGenerator()._get_model_for("uniart/seedream_5.0Pro_nsfw") is adapter
+    gateway.assert_called_once_with("uniart")
 
 
 def test_series_storyboard_render_uses_series_i2i_model(tmp_path):

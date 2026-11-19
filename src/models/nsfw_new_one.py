@@ -15,9 +15,9 @@ from ..apps.studio_access import signed_provider_media_url
 
 
 SEEDREAM_MODEL = "seedream_5.0Pro_nsfw"
-SEEDREAM_IDS = frozenset({f"nsfw/{SEEDREAM_MODEL}", f"uniart/{SEEDREAM_MODEL}"})
+SEEDREAM_IDS = frozenset({f"nsfw/{SEEDREAM_MODEL}"})
 WAN_MODELS = frozenset({"wan3.0", "wan3.0-Prime"})
-WAN_IDS = frozenset(f"{prefix}/{model}" for prefix in ("nsfw", "uniart") for model in WAN_MODELS)
+WAN_IDS = frozenset(f"nsfw/{model}" for model in WAN_MODELS)
 RATIOS = frozenset({"1:1", "3:4", "4:3", "16:9", "9:16", "3:2", "2:3", "21:9"})
 
 
