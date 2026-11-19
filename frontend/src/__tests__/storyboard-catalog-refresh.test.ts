@@ -89,7 +89,7 @@ it('shows only the nsfw Wan models in storyboard video selectors when published'
     vi.stubGlobal('window', { dispatchEvent: vi.fn() });
     vi.stubGlobal('CustomEvent', class { constructor(public type: string) {} });
     const catalog = await import('../lib/modelCatalog');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ adapter: { model_namespace: 'nsfw/' }, models: [
         { id: 'nsfw/wan3.0', capabilities: ['t2v', 'i2v', 'r2v'], display_name: 'Wan 3.0' },
         { id: 'nsfw/wan3.0-Prime', capabilities: ['t2v', 'i2v', 'r2v'], display_name: 'Wan 3.0 Prime' },
         { id: 'uniart/seedance-2.5-vip', capabilities: ['i2v', 'r2v'], display_name: 'Seedance' },
@@ -99,4 +99,25 @@ it('shows only the nsfw Wan models in storyboard video selectors when published'
     expect(catalog.VIDEO_I2V_MODELS.map(model => model.id).sort()).toEqual(expected);
     expect(catalog.VIDEO_R2V_MODELS.map(model => model.id).sort()).toEqual(expected);
     expect(catalog.isR2vImageBased('nsfw/wan3.0')).toBe(true);
+    expect(catalog.getR2vRouteModelId('nsfw/wan3.0')).toBe('nsfw/wan3.0');
+});
+
+it('uses GreenA adapter reference capacity without i2i selector fallback', async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, value) });
+    vi.stubGlobal('window', { dispatchEvent: vi.fn() });
+    vi.stubGlobal('CustomEvent', class { constructor(public type: string) {} });
+    const model = 'nsfw/seedream_5.0Pro_nsfw';
+    let max = 10;
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => ({ ok: true, json: async () => ({ models: [
+        { id: model, capabilities: ['t2i', 'i2i'], inputs: { reference_images: { max } } },
+    ] }) })));
+    const catalog = await import('../lib/modelCatalog');
+    await catalog.refreshUniArtModelCatalog();
+    expect(catalog.getMaxReferenceImages(model)).toBe(10);
+    max = 6;
+    await catalog.refreshUniArtModelCatalog();
+    expect(catalog.getMaxReferenceImages(model)).toBe(6);
+    expect(catalog.getMaxReferenceImages('nsfw/unknown')).toBeUndefined();
 });

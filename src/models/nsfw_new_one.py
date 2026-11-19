@@ -15,9 +15,9 @@ from ..apps.studio_access import signed_provider_media_url
 
 
 SEEDREAM_MODEL = "seedream_5.0Pro_nsfw"
-SEEDREAM_IDS = frozenset({f"nsfw/{SEEDREAM_MODEL}", f"uniart/{SEEDREAM_MODEL}"})
+SEEDREAM_IDS = frozenset({f"nsfw/{SEEDREAM_MODEL}"})
 WAN_MODELS = frozenset({"wan3.0", "wan3.0-Prime"})
-WAN_IDS = frozenset(f"{prefix}/{model}" for prefix in ("nsfw", "uniart") for model in WAN_MODELS)
+WAN_IDS = frozenset(f"nsfw/{model}" for model in WAN_MODELS)
 RATIOS = frozenset({"1:1", "3:4", "4:3", "16:9", "9:16", "3:2", "2:3", "21:9"})
 
 
@@ -73,6 +73,12 @@ def _size(value: str | None) -> tuple[str, str | None]:
 
 
 class GreenAImageModel(ImageGenModel):
+    @classmethod
+    def reference_image_limit(cls, model_name: str):
+        if model_name not in SEEDREAM_IDS:
+            raise ValueError("Unsupported GreenA image model")
+        return 10
+
     def __init__(self, owner_config: dict):
         self.config = gateway_config(owner_config)
 
@@ -88,8 +94,9 @@ class GreenAImageModel(ImageGenModel):
         refs = list(kwargs.get("ref_image_paths") or [])
         if kwargs.get("ref_image_path"):
             refs.insert(0, kwargs["ref_image_path"])
-        if len(refs) > 10:
-            raise ValueError("Seedream accepts at most 10 reference images")
+        limit = self.reference_image_limit(model)
+        if len(refs) > limit:
+            raise ValueError(f"Seedream accepts at most {limit} reference images")
         body = {"model": SEEDREAM_MODEL, "prompt": prompt, "resolution": resolution, "aspect_ratio": ratio}
         if refs:
             body["images"] = [_reference_url(ref) for ref in refs]

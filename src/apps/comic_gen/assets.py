@@ -15,7 +15,7 @@ from ...models.image import WanxImageModel, ImageGenModel
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 from ...utils.managed_media_root import ManagedMediaRoot
-from ..studio_access import studio_media_dir, studio_uniart_config, studio_nsfw_new_one_config
+from ..studio_access import studio_media_dir, studio_gateway_config
 
 logger = get_logger(__name__)
 
@@ -71,14 +71,32 @@ class AssetGenerator:
             return studio_media_dir(owner_profile_id, "assets", output_root=self.output_root)
         return self.output_dir
 
+    @staticmethod
+    def reference_image_limit(model_name: str):
+        """Read the input contract from the routed adapter, without credentials."""
+        from ...models.nsfw_new_one import SEEDREAM_IDS, GreenAImageModel
+        if model_name in SEEDREAM_IDS:
+            adapter = GreenAImageModel
+        elif model_name and model_name.startswith("uniart/"):
+            from ...models.uniart import UniArtImageModel
+            adapter = UniArtImageModel
+        elif model_name and model_name.startswith("gpt-image"):
+            from ...models.mulerouter import MuleRouterImageModel
+            adapter = MuleRouterImageModel
+        else:
+            adapter = WanxImageModel
+        return adapter.reference_image_limit(model_name)
+
     def _get_model_for(self, model_name: str) -> "ImageGenModel":
         """Route to the correct image adapter based on model name."""
         from ...models.nsfw_new_one import SEEDREAM_IDS, NSFWNewOneImageModel
         if model_name in SEEDREAM_IDS:
-            return NSFWNewOneImageModel(studio_nsfw_new_one_config())
+            return NSFWNewOneImageModel(studio_gateway_config("greena"))
         if model_name and model_name.startswith("uniart/"):
             from ...models.uniart import UniArtImageModel
-            return UniArtImageModel(studio_uniart_config())
+            return UniArtImageModel(studio_gateway_config("uniart"))
+        if model_name and model_name.startswith(("nsfw/", "greena/")):
+            raise ValueError("Unsupported image model in the selected adapter")
         if model_name and model_name.startswith("gpt-image"):
             if self._mulerouter_image_model is None:
                 from ...models.mulerouter import MuleRouterImageModel
@@ -191,6 +209,19 @@ class AssetGenerator:
         
         # Default size if not provided
         effective_size = size or "576*1024"  # Default to portrait for characters
+
+        design_page_id = None
+        if generation_type.startswith("design:"):
+            design_page_id = generation_type.removeprefix("design:")
+            if not any(page["id"] == design_page_id for page in character.custom_design_pages):
+                raise ValueError("Character design page is closed or unavailable")
+            if not prompt or not prompt.strip():
+                raise ValueError("Enter a prompt for this design page")
+            # Custom pages reuse image controls, never the fixed-view templates.
+            generation_type = "full_body"
+            preserve_prompt = True
+            style_suffix = ""
+            use_reference_image = bool(reference_image_url)
         
         try:
             # Snapshot the selected input before appending generated candidates.
@@ -300,7 +331,8 @@ class AssetGenerator:
                     base_prompt = prompt
                 
                 # Save the user's prompt WITHOUT style suffix
-                character.full_body_prompt = base_prompt
+                if not design_page_id:
+                    character.full_body_prompt = base_prompt
                 
                 # Generate the image with style suffix appended
                 generation_prompt = base_prompt if preserve_prompt and prompt else append_style_suffix(base_prompt, style_suffix)
@@ -323,7 +355,7 @@ class AssetGenerator:
                 # mode (or an older direct caller still opts in via
                 # ``use_reference_image``). Explicit ``reference_image_url``
                 # and ``reference_image_urls`` above remain authoritative.
-                allow_implicit_reference = image_generation_mode == "reference" or use_reference_image
+                allow_implicit_reference = not design_page_id and (image_generation_mode == "reference" or use_reference_image)
 
                 # Check for base character reference (for variants)
                 if allow_implicit_reference and character.base_character_id:
@@ -382,7 +414,7 @@ class AssetGenerator:
                         effective_generation_prompt = generation_prompt
                         if ref_image_path or extra_ref_image_paths:
                             # Override to I2I model when using reference image
-                            effective_model_name = i2i_model_name or "wan2.6-image"
+                            effective_model_name = model_name if design_page_id else i2i_model_name or "wan2.6-image"
                             logger.debug(f"Reverse generation: Using I2I model {effective_model_name} with reference image")
                             
                             # Enhance prompt for reverse generation to emphasize reference consistency (only if not already present)
@@ -402,6 +434,7 @@ class AssetGenerator:
                         variant = ImageVariant(
                             id=variant_id,
                             url=rel_fullbody_path,
+                            design_page_id=design_page_id,
                             created_at=time.time(),
                             prompt_used=effective_generation_prompt,
                             source_origin="generation",
@@ -413,10 +446,12 @@ class AssetGenerator:
                         cleanup_old_variants(character.full_body_asset, {
                             *(item.variant_id for item in (character.asset_pack.revisions if character.asset_pack else [])),
                             character.cover_variant_id,
+                            character.full_body_asset.selected_id,
+                            *(v.id for v in character.full_body_asset.variants if v.design_page_id),
                         })
                         
                         # Auto-select if it's the first one or we want to update the view
-                        if not character.full_body_asset.selected_id or batch_size == 1:
+                        if not design_page_id and (not character.full_body_asset.selected_id or batch_size == 1):
                             character.full_body_asset.selected_id = variant_id
                             character.full_body_image_url = rel_fullbody_path # Legacy sync
                         
@@ -451,7 +486,7 @@ class AssetGenerator:
                     raise RuntimeError(f"生成失败：{last_error}")
                 
                 # Mark downstream as inconsistent if generating only full body
-                if generation_type == "full_body":
+                if generation_type == "full_body" and not design_page_id:
                     character.is_consistent = False
             
             # Ensure full body exists for derived assets

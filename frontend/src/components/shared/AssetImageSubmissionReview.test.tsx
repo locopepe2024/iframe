@@ -64,7 +64,7 @@ it("shows the selected variant image and scope when the project index is availab
     expect(screen.getByText(/青溪镇长街 · episode · scene · long-street · blue-1/)).toBeInTheDocument();
 });
 
-it("blocks confirmation when the preview text differs from the edited request", async () => {
+it("asks for confirmation without blocking an edited prompt when the preview differs", async () => {
     preview.mockResolvedValueOnce({
         positive_prompt: `${request.prompt}, hidden warm light`, negative_prompt: request.negative_prompt,
         selected_model_id: "model", aspect_ratio: "16:9", generation_type: "all",
@@ -73,9 +73,11 @@ it("blocks confirmation when the preview text differs from the edited request", 
     });
     const confirm = vi.fn();
     render(<AssetImageSubmissionReview projectId="project" request={request} onBack={vi.fn()} onConfirm={confirm} />);
-    await screen.findByRole("alert");
-    expect(screen.getByRole("button", { name: "确认并生成" })).toBeDisabled();
-    expect(confirm).not.toHaveBeenCalled();
+    expect(await screen.findByText("预览文本与待提交文本不一致，请确认。将按当前编辑的提示词提交。")).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "确认并生成" });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ fingerprint: "bad" }));
 });
 
 it("renders structured preview validation errors as readable text", async () => {
@@ -116,4 +118,33 @@ it("invalidates a previous fingerprint immediately and ignores older responses a
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
     expect(confirm).toHaveBeenCalledExactlyOnceWith(projection(latest, 'latest-fingerprint'));
+});
+
+
+it("does not report a text difference for saved whitespace and line endings", async () => {
+    preview.mockResolvedValueOnce({
+        positive_prompt: request.prompt.trim(), negative_prompt: request.negative_prompt,
+        selected_model_id: "model", aspect_ratio: "16:9", generation_type: "all",
+        image_generation_mode: "reference", batch_size: 2,
+        reference_inputs: request.references, fingerprint: "saved",
+    });
+    render(<AssetImageSubmissionReview projectId="project" request={{ ...request, prompt: `\r\n${request.prompt}\r\n` }}
+        onBack={vi.fn()} onConfirm={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "确认并生成" })).toBeEnabled());
+    expect(screen.queryByText(/预览文本与待提交文本不一致/)).not.toBeInTheDocument();
+});
+
+it("shows the effective preview alongside the editor when server text differs", async () => {
+    preview.mockResolvedValueOnce({
+        positive_prompt: `${request.prompt} with reference context`, negative_prompt: request.negative_prompt,
+        selected_model_id: "model", aspect_ratio: "16:9", generation_type: "all",
+        image_generation_mode: "reference", batch_size: 2,
+        reference_inputs: request.references, fingerprint: "with-context",
+    });
+    render(<AssetImageSubmissionReview projectId="project" request={request}
+        editor={<textarea aria-label="最终提示词" defaultValue={request.prompt} />}
+        onBack={vi.fn()} onConfirm={vi.fn()} />);
+    expect(await screen.findByText(`${request.prompt} with reference context`)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "最终提示词" })).toHaveValue(request.prompt);
+    expect(screen.getByRole("button", { name: "确认并生成" })).toBeEnabled();
 });

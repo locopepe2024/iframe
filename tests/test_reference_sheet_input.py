@@ -286,7 +286,7 @@ def test_stored_reference_reaches_real_uniart_edit_adapter(tmp_path, monkeypatch
     generator = AssetGenerator.__new__(AssetGenerator)
     generator.output_root = "output"
     generator.output_dir = 'output/assets'
-    monkeypatch.setattr('src.apps.comic_gen.assets.studio_uniart_config', lambda: {})
+    monkeypatch.setattr('src.apps.comic_gen.assets.studio_gateway_config', lambda _provider: {})
     monkeypatch.setattr('src.apps.comic_gen.assets.time.sleep', lambda _: None)
     character = Character(id='c', name='Test', description='Test', image_url='old.png',
         reference_sheet=AssetUnit(image_variants=[ImageVariant(id='chosen', url=key)], selected_image_id='chosen'))

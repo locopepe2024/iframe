@@ -40,10 +40,6 @@ export default function AssetImageSubmissionReview({ projectId, scope = "project
         if (!request.prompt.trim()) { setError("请填写出图提示词。"); return; }
         (scope === "series" ? api.previewSeriesAssetImageSubmission(projectId, request) : api.previewAssetImageSubmission(projectId, request)).then((result) => {
             if (!active) return;
-            if (result.positive_prompt !== request.prompt || result.negative_prompt !== request.negative_prompt) {
-                setError("预览文本与待提交文本不一致，请返回检查。 ");
-                return;
-            }
             setReview(result);
             setReviewedRequest(request);
             setReviewedProject(projectId);
@@ -54,6 +50,13 @@ export default function AssetImageSubmissionReview({ projectId, scope = "project
     }, [projectId, scope, request, validationError]);
 
     const currentReview = reviewedRequest === request && reviewedProject === projectId && !validationError ? review : null;
+    // Saving text may normalize line endings and trailing whitespace. Actual
+    // differences are advisory: the user can still confirm their current draft.
+    const comparableText = (text: string) => text.replace(/\r\n?/g, "\n").trim();
+    const textDiffers = currentReview && (
+        comparableText(currentReview.positive_prompt) !== comparableText(request.prompt)
+        || comparableText(currentReview.negative_prompt) !== comparableText(request.negative_prompt)
+    );
 
     useEffect(() => { if (review && !editor) confirmRef.current?.focus(); }, [review, editor]);
 
@@ -69,6 +72,9 @@ export default function AssetImageSubmissionReview({ projectId, scope = "project
                 {editor}
                 {validationError || error ? <p role="alert" className="mt-4 text-sm text-red-400">{validationError || error}</p> : !currentReview ?
                     <p role="status" className="mt-4 text-sm text-text-secondary">正在读取实际模型与画幅…</p> : <>
+                    {textDiffers && <p role="status" className="mt-4 text-sm text-amber-400">
+                        预览文本与待提交文本不一致，请确认。将按当前编辑的提示词提交。
+                    </p>}
                     <div className="mt-4 grid gap-2 text-xs text-text-secondary sm:grid-cols-2">
                         <p>模型：<span className="text-foreground">{currentReview.selected_model_id}</span></p>
                         <p>画幅：<span className="text-foreground">{currentReview.aspect_ratio}</span></p>
@@ -91,9 +97,16 @@ export default function AssetImageSubmissionReview({ projectId, scope = "project
                     </div>}
                     <div className="mt-4 space-y-3">
                         {!editor && <><div><h3 className="text-xs font-medium text-text-secondary">正向提示词</h3>
-                            <p className="mt-1 max-h-44 overflow-y-auto whitespace-pre-wrap break-words rounded border border-glass-border bg-surface-inset p-3 text-sm text-foreground">{currentReview.positive_prompt}</p></div>
+                            <p className="mt-1 max-h-44 overflow-y-auto whitespace-pre-wrap break-words rounded border border-glass-border bg-surface-inset p-3 text-sm text-foreground">{request.prompt}</p></div>
                         <div><h3 className="text-xs font-medium text-text-secondary">负面提示词</h3>
-                            <p className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded border border-glass-border bg-surface-inset p-3 text-sm text-foreground">{currentReview.negative_prompt || "无"}</p></div></>}
+                            <p className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words rounded border border-glass-border bg-surface-inset p-3 text-sm text-foreground">{request.negative_prompt || "无"}</p></div></>}
+                        {textDiffers && <details className="rounded border border-glass-border p-3 text-sm text-foreground">
+                            <summary className="cursor-pointer text-text-secondary">查看预览文本</summary>
+                            <h3 className="mt-3 text-xs text-text-secondary">预览正向提示词</h3>
+                            <p className="mt-1 max-h-44 overflow-y-auto whitespace-pre-wrap break-words">{currentReview.positive_prompt}</p>
+                            <h3 className="mt-3 text-xs text-text-secondary">预览负面提示词</h3>
+                            <p className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words">{currentReview.negative_prompt || "无"}</p>
+                        </details>}
                         <div><h3 className="text-xs font-medium text-text-secondary">参考图（稳定资产与变体 ID）</h3>
                             {currentReview.reference_inputs.length ? <ul className="mt-1 space-y-1 rounded border border-glass-border bg-surface-inset p-3 text-xs text-foreground">
                                 {currentReview.reference_inputs.map((item) => {

@@ -5,7 +5,7 @@ from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, I
 from .visual_continuity import _as_dict, _context_value, _plan_provenance, _source_visual_design
 from .prompt_assembly import append_storyboard_character_descriptions
 from ...models.image import WanxImageModel
-from ..studio_access import studio_uniart_config, studio_nsfw_new_one_config, studio_media_dir
+from ..studio_access import studio_gateway_config, studio_media_dir
 from ...utils.managed_media_root import ManagedMediaRoot
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
@@ -38,10 +38,12 @@ class StoryboardGenerator:
         """Use the same provider routing as asset generation."""
         from ...models.nsfw_new_one import SEEDREAM_IDS, NSFWNewOneImageModel
         if model_name in SEEDREAM_IDS:
-            return NSFWNewOneImageModel(studio_nsfw_new_one_config())
+            return NSFWNewOneImageModel(studio_gateway_config("greena"))
         if model_name and model_name.startswith("uniart/"):
             from ...models.uniart import UniArtImageModel
-            return UniArtImageModel(studio_uniart_config())
+            return UniArtImageModel(studio_gateway_config("uniart"))
+        if model_name and model_name.startswith(("nsfw/", "greena/")):
+            raise ValueError("Unsupported image model in the selected adapter")
         if model_name and model_name.startswith("gpt-image"):
             from ...models.mulerouter import MuleRouterImageModel
             return MuleRouterImageModel({})

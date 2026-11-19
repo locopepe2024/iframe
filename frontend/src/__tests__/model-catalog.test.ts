@@ -194,16 +194,9 @@ describe('model catalog runtime helpers', () => {
     });
 
     it('reads per-model reference image limits from catalog metadata', () => {
-        // getMaxReferenceImages routes the input through resolveModelId
-        // for the 'i2i' surface — when the literal id isn't visible in
-        // that surface (post-Phase 2 the wan2.6 ids moved to the
-        // 'image' selection_group), the resolver falls back to the
-        // current default (UniArt GPT Image 2, which has no explicit input
-        // limit in the catalog and therefore uses the helper fallback).
-        // The behavior is correct given how callers (PropertiesPanel)
-        // use the project's i2i_model setting.
-        expect(getMaxReferenceImages('wan2.6-image')).toBe(3);
+        expect(getMaxReferenceImages('wan2.6-image')).toBe(4);
         expect(getMaxReferenceImages('wan2.5-i2i-preview')).toBe(3);
+        expect(getMaxReferenceImages('missing-model')).toBeUndefined();
     });
 });
 
@@ -266,4 +259,9 @@ describe('model catalog phase 2 canonical helpers', () => {
             expect(model.id).not.toContain('#');
         }
     });
+});
+
+it('preserves an explicit GreenA asset model before the live catalog loads', () => {
+    expect(resolveAssetGenerationModel('nsfw/seedream_5.0Pro_nsfw')).toBe('nsfw/seedream_5.0Pro_nsfw');
+    expect(resolveAssetGenerationModel('uniart/seedream_5.0Pro_nsfw')).toBe('uniart/seedream_5.0Pro_nsfw');
 });

@@ -13,8 +13,8 @@ def test_seedream_asset_uses_nsfw_new_one_adapter(monkeypatch):
 
     monkeypatch.setenv("NSFW_NEW_ONE_BASE_URL", "http://172.17.0.1:3000/v1")
     monkeypatch.setattr(
-        "src.apps.comic_gen.assets.studio_nsfw_new_one_config",
-        lambda: {"api_key": "test-key", "base_url": "http://gateway.test/v1"},
+        "src.apps.comic_gen.assets.studio_gateway_config",
+        lambda provider: {"api_key": "test-key", "base_url": "http://gateway.test/v1"},
     )
     generator = AssetGenerator()
 

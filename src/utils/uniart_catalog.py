@@ -83,11 +83,12 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
     capabilities = _unique(capabilities)
     # The local New API gateway exposes model IDs without capability metadata.
     # These profiles match the installed GlobalStore task plugin contract.
+    from ..models.nsfw_new_one import GreenAImageModel, SEEDREAM_MODEL
     local_profiles = {
-        "seedream_5.0Pro_nsfw": {
+        SEEDREAM_MODEL: {
             "capabilities": ["t2i", "i2i"],
             "resolutions": ["1k", "2k"],
-            "reference_images": 10,
+            "reference_images": GreenAImageModel.reference_image_limit(f"nsfw/{SEEDREAM_MODEL}"),
         },
         "wan3.0": {
             "capabilities": ["t2v", "i2v", "f2v", "r2v"],
@@ -100,8 +101,8 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
             "reference_images": 10,
         },
     }
-    profile = local_profiles.get(model_id) if not capabilities else None
-    if profile:
+    profile = local_profiles.get(model_id) if not capabilities or model_id == SEEDREAM_MODEL else None
+    if profile and not capabilities:
         capabilities = profile["capabilities"]
     # UniArt's /models endpoint also publishes chat SKUs. Keep them in the
     # selectable catalog even though they have no image/video controls.
@@ -157,6 +158,11 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
         params["ratio"] = {"options": ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"], "default": "adaptive"}
         params["seed"] = True
 
+    reference_limit = image.get("max_input_images") if is_image else video.get("max_reference_images")
+    if reference_limit is None:
+        reference_limit = (profile or {}).get("reference_images")
+    if model_id == SEEDREAM_MODEL:
+        reference_limit = GreenAImageModel.reference_image_limit(f"nsfw/{model_id}")
     is_nsfw_model = model_id in {"seedream_5.0Pro_nsfw", "wan3.0", "wan3.0-Prime"}
     provider = "nsfw" if is_nsfw_model else "uniart"
     return {
@@ -170,7 +176,7 @@ def normalize_uniart_model(item: Dict[str, Any]) -> Dict[str, Any] | None:
         "duration": duration,
         "params": params,
         "inputs": {
-            "reference_images": {"max": int((image.get("max_input_images") if is_image else video.get("max_reference_images")) or (profile or {}).get("reference_images") or 0)},
+            "reference_images": {"max": int(reference_limit)} if reference_limit is not None else {},
             "reference_videos": {"max": int(1 if model_id == "wan3.0" else video.get("max_reference_videos") or 0)},
             "reference_audios": {"max": int(5 if model_id == "wan3.0" else video.get("max_reference_audios") or 0)},
         },

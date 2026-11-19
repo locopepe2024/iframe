@@ -299,6 +299,11 @@ export interface AssetImageReviewProjection {
 }
 
 export interface AssetReferenceIndexVariant {
+    submission_snapshot?: {
+        positive_prompt: string;
+        negative_prompt: string;
+        visual_design?: Record<string, unknown> | null;
+    } | null;
     id: string;
     display_name?: string | null;
     media_id?: string | null;

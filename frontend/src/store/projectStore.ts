@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api, API_URL, authenticatedFetch } from '@/lib/api';
 import type { AssemblyEditPlan, EpisodeCharacterUse } from '@/lib/api';
-import type { FrontendModelSettings } from '@/lib/modelCatalog';
+import { refreshUniArtModelCatalog, resolveModelSettings, type FrontendModelSettings } from '@/lib/modelCatalog';
 export {
     I2I_MODELS,
     I2V_MODELS,
@@ -17,6 +17,7 @@ export type {
 } from '@/lib/modelCatalog';
 
 export interface ImageVariant {
+    design_page_id?: string | null;
     id: string;
     display_name?: string | null;
     is_favorited?: boolean;
@@ -79,6 +80,7 @@ export interface GenerationLineage {
 }
 
 export interface Character {
+    custom_design_pages?: import("@/lib/characterDesignPages").CharacterDesignPage[];
     asset_revision?: number;
     id: string;
     name: string;
@@ -652,17 +654,22 @@ async function injectDefaultsIntoProject(projectId: string): Promise<Project | n
     let applied = false;
 
     if (ms) {
+        // Browser defaults may belong to an earlier provider/account. Resolve
+        // them against this owner's live catalog; retain server defaults when
+        // that catalog is unavailable rather than sending stale model IDs.
+        const catalogLoaded = await refreshUniArtModelCatalog();
+        const models = catalogLoaded > 0 ? resolveModelSettings(ms) : undefined;
         await api.updateModelSettings(
             projectId,
-            ms.t2i_model,
-            ms.i2i_model,
-            ms.i2v_model,
+            models?.t2i_model,
+            models?.i2i_model,
+            models?.i2v_model,
             ms.character_aspect_ratio,
             ms.scene_aspect_ratio,
             ms.prop_aspect_ratio,
             ms.storyboard_aspect_ratio,
-            ms.image_model,
-            ms.r2v_model,
+            models?.image_model,
+            models?.r2v_model,
         );
         applied = true;
     }

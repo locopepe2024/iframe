@@ -498,14 +498,14 @@ function StoryboardInspector() {
                     const referenceLimit = getMaxReferenceImages(
                         currentProject?.model_settings?.i2i_model
                     );
-                    const isLimitReached = referenceCount >= referenceLimit;
+                    const isLimitReached = referenceLimit !== undefined && referenceCount >= referenceLimit;
 
                     return (
                         <>
                             <div className="flex justify-between items-center">
                                 <label className="text-xs font-bold text-text-muted uppercase">{tp("characters")}</label>
                                 <span className={`text-[0.625rem] ${isLimitReached ? "text-yellow-500 font-bold" : "text-text-muted"}`}>
-                                    {referenceCount}/{referenceLimit} Images
+                                    {referenceCount}{referenceLimit === undefined ? "" : `/${referenceLimit}`} Images
                                 </span>
                             </div>
 
@@ -529,7 +529,7 @@ function StoryboardInspector() {
                                         // If current didn't, we gain 1.
                                         const predictedCount = (newSceneHasImage ? 1 : 0) + charImageCount + propImageCount;
 
-                                        if (predictedCount > referenceLimit) {
+                                        if (referenceLimit !== undefined && predictedCount > referenceLimit) {
                                             alert(`Cannot select this scene: Reference image limit (${referenceLimit}) would be exceeded. Deselect some characters or props first.`);
                                             return;
                                         }

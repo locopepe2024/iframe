@@ -1872,6 +1872,42 @@ it('saves input and AI result separately and restores both instead of unsaved AI
     expect(onUpdateAttributes).toHaveBeenCalledTimes(1);
 });
 
+it.each([false, true])('generates a saved AI prompt and allows final edits when the preview differs: %s', async (differentPreview) => {
+    const originalPreview = apiMocks.previewAssetImageSubmission.getMockImplementation()!;
+    const { onGenerate, onUpdateAttributes } = mountSimpleDesign();
+    const result = await submitSimpleDesign();
+    fireEvent.change(result, { target: { value: '圆脸，自然肤质，素黑外衣，布靴。' } });
+    fireEvent.click(screen.getByRole('button', { name: /^保存并使用/ }));
+    await waitFor(() => expect(onUpdateAttributes).toHaveBeenCalled());
+    try {
+        apiMocks.previewAssetImageSubmission.mockImplementation(async (id: string, request: any) => ({
+            ...await originalPreview(id, request),
+            positive_prompt: request.prompt + (differentPreview ? '\n平台参考素材说明' : ''),
+        }));
+        openImagePrompt();
+        if (differentPreview) {
+            const editor = imagePromptInput() as any;
+            act(() => editor.editor.commands.setContent('<p>仅本次出图：蓝色外衣，保留自然肤质。</p>'));
+            fireEvent.change(screen.getByRole('textbox', { name: '出图负面提示词' }), { target: { value: '额外披风' } });
+            await waitFor(() => expect(apiMocks.previewAssetImageSubmission.mock.lastCall?.[1]).toEqual(expect.objectContaining({
+                prompt: '仅本次出图：蓝色外衣，保留自然肤质。', negative_prompt: '额外披风',
+            })));
+            expect(await screen.findByText(/预览文本与待提交文本不一致，请确认/)).toBeInTheDocument();
+        }
+        const confirm = screen.getByRole('button', { name: '确认并生成' });
+        await waitFor(() => expect(confirm).toBeEnabled());
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        if (!differentPreview) expect(screen.queryByText(/预览文本与待提交文本不一致/)).not.toBeInTheDocument();
+        fireEvent.click(confirm);
+        await waitFor(() => expect(onGenerate).toHaveBeenCalledWith('full_body',
+            differentPreview ? '仅本次出图：蓝色外衣，保留自然肤质。' : expect.stringContaining('圆脸，自然肤质，素黑外衣，布靴。'),
+            false, differentPreview ? '额外披风' : expect.any(String), 1, [], 'text', 'reviewed'));
+        expect(onUpdateAttributes).toHaveBeenCalledTimes(1);
+    } finally {
+        apiMocks.previewAssetImageSubmission.mockImplementation(originalPreview);
+    }
+});
+
 it('reads legacy confirmed designs as an input prompt plus a separate result on reedit', () => {
     const originalInput = '用户原始的面板描述';
     mountSimpleDesign({ character_design: { design_draft: {
@@ -2040,4 +2076,65 @@ it('exposes full-body reference controls before generation and carries the selec
     fireEvent.click(confirm);
     await waitFor(() => expect(onGenerate).toHaveBeenCalledWith('full_body', expect.any(String), false,
         expect.any(String), 1, [{ asset_type: 'prop', asset_id: 'watch-1', variant_id: 'watch-front' }], 'reference', 'reviewed'));
+});
+
+it('adds editable design tabs from episode Director descriptions and submits the exact final prompt', async () => {
+    const previousProject = projectStoreMocks.currentProject;
+    projectStoreMocks.currentProject = { id: 'project-1', art_direction: { director_profile: { canon_state: { characters: [
+        { subject: '苏砚', value: '当集：蓝衣，受伤的手臂', status: 'active' },
+    ] } } } } as any;
+    try {
+        const { onGenerate, onUpdateAttributes } = mountSimpleDesign();
+        fireEvent.click(screen.getByRole('button', { name: '增加设计页' }));
+        expect(await screen.findByRole('tab', { name: '设计 1' })).toHaveAttribute('aria-selected', 'true');
+        expect(screen.getByRole('textbox', { name: '设计页提示词' })).toHaveValue('当集：蓝衣，受伤的手臂');
+        expect(screen.getByRole('textbox', { name: '设计页负面提示词' })).toHaveValue('');
+        fireEvent.change(screen.getByRole('textbox', { name: '设计页名称' }), { target: { value: '新服装' } });
+        fireEvent.change(screen.getByRole('textbox', { name: '设计页提示词' }), { target: { value: '换成红外衣，侧身挥手，近景。' } });
+        fireEvent.click(screen.getByRole('button', { name: '增加设计页' }));
+        await screen.findByRole('tab', { name: '设计 2' });
+        fireEvent.click(screen.getByRole('tab', { name: '新服装' }));
+        expect(screen.getByRole('textbox', { name: '设计页提示词' })).toHaveValue('换成红外衣，侧身挥手，近景。');
+        fireEvent.click(screen.getByTestId('variant-generate'));
+        const confirm = await screen.findByRole('button', { name: '确认并生成' });
+        await waitFor(() => expect(confirm).toBeEnabled());
+        const editor = imagePromptInput() as any;
+        act(() => editor.editor.commands.setContent('<p>最终服装：白外衣，坐姿。</p>'));
+        fireEvent.change(screen.getByRole('textbox', { name: '设计页负面提示词' }), { target: { value: '披风' } });
+        await waitFor(() => expect(confirm).toBeEnabled());
+        fireEvent.click(confirm);
+        await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(expect.stringMatching(/^design:page-/), '最终服装：白外衣，坐姿。', false, '披风', 1, [], 'text', 'reviewed'));
+        expect(onUpdateAttributes.mock.lastCall?.[0].custom_design_pages[0].prompt).toBe('最终服装：白外衣，坐姿。');
+    } finally { projectStoreMocks.currentProject = previousProject; }
+});
+
+it('restores saved design pages and closes them without deleting generated variants', async () => {
+    const page = { id: 'coat', name: '服装方案', prompt: '白衣，坐姿', negative_prompt: '', mode: 'text', references: [], reference_prompts: {}, prompt_source: '当集导演理解 · 角色描述' };
+    const { onUpdateAttributes } = mountSimpleDesign({ custom_design_pages: [page], full_body_asset: { variants: [{ id: 'look', url: 'look.png', design_page_id: 'coat' }] } });
+    fireEvent.click(screen.getByRole('tab', { name: '服装方案' }));
+    expect(screen.getByRole('textbox', { name: '设计页提示词' })).toHaveValue(page.prompt);
+    fireEvent.click(screen.getByRole('button', { name: '关闭设计页 服装方案' }));
+    await waitFor(() => expect(screen.queryByRole('tab', { name: '服装方案' })).not.toBeInTheDocument());
+    expect(onUpdateAttributes).toHaveBeenLastCalledWith({ custom_design_pages: [] });
+    expect(screen.getByRole('tab', { name: 'masterAsset' })).toHaveAttribute('aria-selected', 'true');
+});
+
+it('imports reference structured text without replacing the authored design prompt', async () => {
+    apiMocks.getAssetReferenceIndex.mockResolvedValue({ assets: [{ asset_type: 'prop', asset_id: 'coat-ref', name: '蓝外衣', source_scope: 'global',
+        variants: [{ id: 'front', url: 'coat.png', prompt_used: '服装：蓝色窄袖外衣\n动作：抬右手' }] }] });
+    apiMocks.resolveReferenceMaterial.mockResolvedValueOnce({ reference: { asset_type: 'prop', asset_id: 'coat-ref', variant_id: 'front' }, label: '蓝外衣', path: '/files/coat.png' });
+    const { onGenerate } = mountSimpleDesign();
+    fireEvent.click(screen.getByRole('button', { name: '增加设计页' }));
+    await screen.findByRole('tab', { name: '设计 1' });
+    fireEvent.change(screen.getByRole('textbox', { name: '设计页提示词' }), { target: { value: '保留用户指定的短发。' } });
+    fireEvent.click(screen.getByRole('button', { name: '选择参考素材' }));
+    fireEvent.click(await screen.findByRole('button', { name: /蓝外衣/ }));
+    fireEvent.click(screen.getByRole('button', { name: '使用参考素材' }));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: '设计页提示词' })).toHaveValue('保留用户指定的短发。\n\n参考图「蓝外衣」：\n服装：蓝色窄袖外衣\n动作：抬右手'));
+    fireEvent.click(screen.getByTestId('variant-generate'));
+    const confirm = await screen.findByRole('button', { name: '确认并生成' });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    fireEvent.click(confirm);
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledWith(expect.stringMatching(/^design:/), expect.stringContaining('服装：蓝色窄袖外衣'), false, '', 1,
+        [expect.objectContaining({ asset_type: 'prop', asset_id: 'coat-ref', variant_id: 'front' })], 'reference', 'reviewed'));
 });

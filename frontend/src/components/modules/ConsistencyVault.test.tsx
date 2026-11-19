@@ -6,7 +6,6 @@ import ConsistencyVault from "./ConsistencyVault";
 const mocks = vi.hoisted(() => ({
     getProject: vi.fn(), getSeries: vi.fn(), getEpisodeVisualContext: vi.fn(),
     syncEpisodeAssetsFromShootingPlan: vi.fn(), deleteSeriesAsset: vi.fn(),
-    bindEpisodePlanScene: vi.fn(),
     getAssetReferenceIndex: vi.fn(),
     authenticatedFetch: vi.fn(),
     deleteCharacter: vi.fn(), deleteScene: vi.fn(), deleteProp: vi.fn(),
@@ -542,7 +541,7 @@ it.each([
     ["character", "Characters", "characters", "deleteCharacter"],
     ["scene", "Scenes", "scenes", "deleteScene"],
     ["prop", "Props", "props", "deleteProp"],
-] as const)("refreshes plan bindings and series options after deleting a %s", async (type, tab, key, deletion) => {
+] as const)("refreshes plan context after deleting a shared %s", async (type, tab, key, deletion) => {
     const asset = { id: "asset-1", name: "Old asset", source: "series" };
     const project = { id: "episode-1", series_id: "series-1", characters: [], scenes: [], props: [], [key]: [asset] };
     const emptyProject = { ...project, [key]: [] };
@@ -553,24 +552,15 @@ it.each([
         .mockResolvedValue(state(type, asset.id, false));
     mocks.getProject.mockResolvedValueOnce(project).mockResolvedValue(emptyProject);
     render(<ConsistencyVault />);
-    await screen.findByRole("region", { name: "拍摄计划资产需求" });
+    await waitFor(() => expect(mocks.getEpisodeVisualContext).toHaveResolved());
     fireEvent.click(screen.getByRole("button", { name: "从拍摄计划同步" }));
-    await screen.findByText("拍摄计划上下文已同步：");
-    expect(screen.getByText(/新增记录 0 · 可复用记录 0 · 变更记录 0 · 过期记录 0/)).toBeInTheDocument();
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("拍摄计划已同步"));
     fireEvent.click(screen.getByRole("button", { name: new RegExp(tab) }));
     fireEvent.click(screen.getByTitle("Delete"));
     await waitFor(() => expect(mocks.syncEpisodeAssetsFromShootingPlan).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(useProjectStore.getState().currentProject?.[key]).toEqual([]));
     expect(mocks.deleteSeriesAsset).toHaveBeenCalledWith("series-1", type, asset.id);
     expect(mocks[deletion]).not.toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByText("拍摄计划上下文已同步：")).not.toBeInTheDocument());
-    if (type === "character") {
-        const requirements = screen.getByRole("region", { name: "拍摄计划资产需求" });
-        expect(within(requirements).getByText(/待关联角色资产/)).toBeInTheDocument();
-        expect(within(requirements).queryByRole("option", { name: /Old asset/ })).not.toBeInTheDocument();
-    } else {
-        expect(screen.queryByRole("region", { name: "拍摄计划资产需求" })).not.toBeInTheDocument();
-    }
     expect(window.alert).not.toHaveBeenCalled();
 });
 
@@ -581,7 +571,7 @@ it("keeps a successful local deletion when the plan refresh fails", async () => 
     mocks.getProject.mockResolvedValue({ ...project, characters: [] });
     mocks.syncEpisodeAssetsFromShootingPlan.mockRejectedValue(new Error("Refresh unavailable"));
     render(<ConsistencyVault />);
-    await screen.findByRole("region", { name: "拍摄计划资产需求" });
+    await waitFor(() => expect(mocks.getEpisodeVisualContext).toHaveResolved());
     fireEvent.click(screen.getByTitle("Delete"));
     await waitFor(() => expect(mocks.error).toHaveBeenCalledWith("资产已删除，部分数据刷新失败", expect.anything()));
     expect(useProjectStore.getState().currentProject?.characters).toEqual([]);
@@ -602,111 +592,48 @@ it("deletes an unsynced asset without requiring a confirmed plan", async () => {
     expect(mocks.error).not.toHaveBeenCalled();
 });
 
-it("offers an existing scene asset for a plan scene with no asset ID", async () => {
-    const project = { id: "episode-1", characters: [], scenes: [{ id: "street", name: "长街" }], props: [] };
-    const unbound = {
-        ...state("scene", "street", false),
-        context: {
-            shooting_plan_revision: 2,
-            scenes: [{ scene_id: "plan-street", scene_ref: "粮铺门前", scene_asset_id: null }],
-            shots: [{ scene_id: "plan-street", shot_id: "shot-1", scene_asset_id: null }],
-            characters: [], props: [],
-        },
-    };
+it("keeps asset cards usable without plan requirement prompts before and after syncing", async () => {
+    const project = { id: "episode-1", series_id: "series-1",
+        characters: [{ id: "hero", name: "Hero", source: "series" }],
+        scenes: [{ id: "street", name: "长街" }], props: [] };
+    const plan = state("character", "hero");
+    plan.context.scenes = [{ scene_id: "unbound-scene", scene_ref: "粮铺门前", scene_asset_id: null }] as any;
     useProjectStore.setState({ currentProject: project as any });
-    mocks.getEpisodeVisualContext.mockResolvedValue(unbound);
+    mocks.getEpisodeVisualContext.mockResolvedValue(plan);
+    mocks.syncEpisodeAssetsFromShootingPlan.mockResolvedValue(plan);
     mocks.getProject.mockResolvedValue(project);
-    mocks.bindEpisodePlanScene.mockResolvedValue({ ...unbound,
-        context: { ...unbound.context, scenes: [{ ...unbound.context.scenes[0], scene_asset_id: "street" }],
-            shots: [{ ...unbound.context.shots[0], scene_asset_id: "street" }] },
-        bindings: [{ asset_type: "scene", asset_id: "street", status: "suggested", scene_ids: ["plan-street"], shot_ids: ["shot-1"] }],
-    });
 
     render(<ConsistencyVault />);
-    const picker = await screen.findByRole("combobox", { name: "为计划场景 粮铺门前 选择资产" });
-    expect(screen.getByText("计划场景 · 粮铺门前")).toBeInTheDocument();
-    expect(screen.getByText("关联场景资产 · 待关联")).toBeInTheDocument();
-    fireEvent.change(picker, { target: { value: "street" } });
+    await waitFor(() => expect(mocks.getEpisodeVisualContext).toHaveResolved());
+    expect(screen.queryByRole("region", { name: "拍摄计划资产需求" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/重新提炼会生成新的资产 ID/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/计划人物 ·/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /为计划/ })).not.toBeInTheDocument();
+    expect(mocks.getSeries).not.toHaveBeenCalled();
+    expect(mocks.getAssetReferenceIndex).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Hero"));
+    expect(screen.getByRole("dialog", { name: "角色工作台" })).toHaveTextContent("Hero");
 
-    await waitFor(() => expect(mocks.bindEpisodePlanScene).toHaveBeenCalledWith(
-        "episode-1", "plan-street", null, "street", 2));
-    await waitFor(() => expect(screen.queryByRole("combobox", { name: "为计划场景 粮铺门前 选择资产" })).not.toBeInTheDocument());
-    expect(screen.getByText("关联场景资产 · 长街 · 本集资产")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "从拍摄计划同步" }));
+    await waitFor(() => expect(mocks.success).toHaveBeenCalledWith("拍摄计划已同步"));
+    expect(mocks.syncEpisodeAssetsFromShootingPlan).toHaveBeenCalledWith("episode-1");
+    expect(screen.queryByRole("region", { name: "拍摄计划资产需求" })).not.toBeInTheDocument();
+    expect(screen.queryByText("拍摄计划上下文已同步：")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "角色工作台" })).toHaveTextContent("Hero");
 });
 
-it("shows a director person and its resolved character asset as separate identities", async () => {
-    const character = { id: "hero", name: "清溪镇百姓", source: "series" };
-    const project = { id: "episode-1", characters: [character], scenes: [], props: [] };
-    useProjectStore.setState({ currentProject: project as any });
-    mocks.getEpisodeVisualContext.mockResolvedValue({
-        context: { shooting_plan_revision: 1, scenes: [], shots: [], props: [], characters: [{
-            person_id: "person-1", person_label: "镇上居民", character_asset_ids: ["hero"],
-            scene_ids: ["scene-1"], shot_ids: ["shot-1"],
-        }] },
-        bindings: [{ asset_type: "character", asset_id: "hero", status: "suggested",
-            scene_ids: ["scene-1"], shot_ids: ["shot-1"] }],
-    });
-
-    render(<ConsistencyVault />);
-    await screen.findByText("计划人物 · 镇上居民");
-    expect(screen.getByText("关联角色资产 · 清溪镇百姓 · 系列共享")).toBeInTheDocument();
-    expect(screen.getByText(/按人物身份关联/)).toBeInTheDocument();
-    expect(screen.queryByText("使用导演映射")).not.toBeInTheDocument();
-});
-
-it("explains that re-extracted scene and prop IDs need explicit plan bindings", async () => {
-    const project = { id: "episode-1", characters: [],
-        scenes: [{ id: "new-scene", name: "长街" }], props: [{ id: "new-prop", name: "竹篮" }] };
-    useProjectStore.setState({ currentProject: project as any });
-    mocks.getEpisodeVisualContext.mockResolvedValue({
-        context: { shooting_plan_revision: 1,
-            scenes: [{ scene_id: "plan-scene", scene_ref: "长街", scene_asset_id: "old-scene", plan_scene_asset_id: "old-scene" }],
-            shots: [], characters: [], props: [{ prop_id: "old-prop", plan_prop_id: "old-prop", scene_ids: ["plan-scene"], shot_ids: [] }] },
-        bindings: [
-            { asset_type: "scene", asset_id: "old-scene", status: "suggested", scene_ids: ["plan-scene"], shot_ids: [] },
-            { asset_type: "prop", asset_id: "old-prop", status: "suggested", scene_ids: ["plan-scene"], shot_ids: [] },
-        ],
-    });
-
-    render(<ConsistencyVault />);
-    const requirements = await screen.findByRole("region", { name: "拍摄计划资产需求" });
-    expect(within(requirements).getByText(/重新提炼会生成新的资产 ID/)).toBeInTheDocument();
-    expect(within(requirements).getAllByRole("option", { name: /长街 · 本集资产/ })).toHaveLength(1);
-    expect(within(requirements).getAllByRole("option", { name: /竹篮 · 本集资产/ })).toHaveLength(1);
-});
-
-it("recognizes personal-library scene and prop assets in plan requirements", async () => {
-    const project = { id: "episode-1", characters: [], scenes: [], props: [] };
-    useProjectStore.setState({ currentProject: project as any });
-    mocks.getAssetReferenceIndex.mockResolvedValue({ assets: [
-        { asset_type: "scene", asset_id: "global-street", name: "长街", source_scope: "global" },
-        { asset_type: "prop", asset_id: "global-sign", name: "粮铺招牌", source_scope: "global" },
-    ] });
-    mocks.getEpisodeVisualContext.mockResolvedValue({
-        context: { shooting_plan_revision: 1, scenes: [], shots: [], characters: [], props: [] },
-        bindings: [
-            { asset_type: "scene", asset_id: "global-street", status: "suggested", scene_ids: [], shot_ids: [] },
-            { asset_type: "prop", asset_id: "global-sign", status: "suggested", scene_ids: [], shot_ids: [] },
-        ],
-    });
-
-    render(<ConsistencyVault />);
-    const requirements = await screen.findByRole("region", { name: "拍摄计划资产需求" });
-    await waitFor(() => expect(within(requirements).getByText("长街 · 个人资产")).toBeInTheDocument());
-    expect(within(requirements).getByText("粮铺招牌 · 个人资产")).toBeInTheDocument();
-});
-
-it("preserves the plan display when deletion is rejected", async () => {
+it("preserves asset cards when deletion is rejected", async () => {
     const project = { id: "episode-1", characters: [{ id: "asset-1", name: "Hero" }], scenes: [], props: [] };
     useProjectStore.setState({ currentProject: project as any });
     mocks.getEpisodeVisualContext.mockResolvedValue(state("character", "asset-1"));
     mocks.deleteCharacter.mockRejectedValue(new Error("Delete unavailable"));
     vi.spyOn(console, "error").mockImplementation(() => {});
     render(<ConsistencyVault />);
-    await screen.findByRole("region", { name: "拍摄计划资产需求" });
+    await waitFor(() => expect(mocks.getEpisodeVisualContext).toHaveResolved());
     fireEvent.click(screen.getByTitle("Delete"));
     await waitFor(() => expect(window.alert).toHaveBeenCalled());
-    expect(screen.getByRole("region", { name: "拍摄计划资产需求" })).toHaveTextContent("计划人物 · Hero");
+    expect(screen.getByText("Hero")).toBeInTheDocument();
+    expect(useProjectStore.getState().currentProject?.characters).toEqual(project.characters);
     expect(mocks.getProject).not.toHaveBeenCalled();
     expect(mocks.syncEpisodeAssetsFromShootingPlan).not.toHaveBeenCalled();
 });
@@ -721,7 +648,7 @@ it("discards a deletion refresh after switching episodes", async () => {
     mocks.syncEpisodeAssetsFromShootingPlan.mockReturnValue(new Promise(resolve => { finishRefresh = resolve; }));
     mocks.getProject.mockResolvedValue({ ...project, characters: [] });
     render(<ConsistencyVault />);
-    await screen.findByRole("region", { name: "拍摄计划资产需求" });
+    await waitFor(() => expect(mocks.getEpisodeVisualContext).toHaveResolved());
     fireEvent.click(screen.getByTitle("Delete"));
     await waitFor(() => expect(mocks.syncEpisodeAssetsFromShootingPlan).toHaveBeenCalled());
     await act(async () => { useProjectStore.setState({ currentProject: nextProject as any }); });
@@ -925,4 +852,40 @@ it("fills an atmosphere Prompt template into editable scene settings without cha
     fireEvent.click(screen.getByRole("button", { name: "应用到图片提示词" }));
     expect((screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value).toContain("硬质定向光");
     expect((screen.getByRole("textbox", { name: "图像提示词" }) as HTMLTextAreaElement).value).not.toContain("软硬：柔和漫射光");
+});
+
+it.each(['scene', 'prop'])('uses adapter capacity when adding %s reference images', async (type) => {
+    const catalog = await import('@/lib/modelCatalog');
+    const capacity = vi.spyOn(catalog, 'getMaxReferenceImages').mockReturnValue(10);
+    const asset = { id: 'target', name: 'Target asset', description: 'Target description', source: 'episode' };
+    const references = Array.from({ length: 11 }, (_, index) => ({
+        asset_type: 'prop', asset_id: `reference-${index}`, name: `Reference ${index}`, source_scope: 'episode',
+        selected_variant_id: 'v1', variants: [{ id: 'v1', url: `/ref-${index}.png` }],
+    }));
+    const project = { id: 'episode-1', characters: [], scenes: type === 'scene' ? [asset] : [], props: type === 'prop' ? [asset] : [],
+        series_id: 'series-1', model_settings: { t2i_model: 'wrong-project-model' },
+        art_direction: { style_config: { positive_prompt: '', negative_prompt: '' } } };
+    useProjectStore.setState({ currentProject: project as any, currentSeries: {
+        id: 'series-1', model_settings: { t2i_model: 'nsfw/seedream_5.0Pro_nsfw' },
+    } as any });
+    mocks.getEpisodeVisualContext.mockResolvedValue({ context: null, bindings: [] });
+    mocks.getAssetReferenceIndex.mockResolvedValue({ assets: references });
+    render(<ConsistencyVault />);
+    fireEvent.click(screen.getByRole('button', { name: type === 'scene' ? /Scenes/ : /Props/ }));
+    fireEvent.click(screen.getByText(asset.name));
+    for (let index = 0; index < 10; index++) {
+        fireEvent.click(screen.getByRole('button', { name: '添加场景参考素材' }));
+        const candidate = await screen.findByRole('option', { name: `Reference ${index}` });
+        expect(candidate).toBeEnabled();
+        fireEvent.click(candidate);
+    }
+    expect(screen.getByRole('button', { name: '添加场景参考素材' })).toHaveTextContent('10/10');
+    fireEvent.click(screen.getByRole('button', { name: '添加场景参考素材' }));
+    expect(screen.getByRole('option', { name: 'Reference 10' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '移除参考素材 Reference 9' })).toBeEnabled();
+    capacity.mockReturnValue(12);
+    fireEvent.change(screen.getByRole('textbox', { name: '搜索场景参考素材' }), { target: { value: 'Reference' } });
+    expect(screen.getByRole('option', { name: 'Reference 10' })).toBeEnabled();
+    expect(capacity).toHaveBeenLastCalledWith('nsfw/seedream_5.0Pro_nsfw');
+    capacity.mockRestore();
 });

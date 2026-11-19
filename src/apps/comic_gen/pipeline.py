@@ -104,6 +104,7 @@ from ..studio_access import (
     owned_by,
     reset_studio_uniart_config,
     runtime_uniart_for_owner,
+    runtime_gateway_for_owner,
     runtime_nsfw_for_owner,
     set_studio_uniart_config,
     studio_owner_dir,
@@ -1194,6 +1195,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             return True
 
     def _resolve_video_backend(self, model_name: str) -> str:
+        if (model_name or "").startswith("uniart/"):
+            return "uniart"
+        if (model_name or "").startswith(("nsfw/", "greena/")):
+            raise ValueError("Unsupported model in the selected adapter")
         try:
             return resolve_provider_backend(model_name)
         except (KeyError, ValueError):
@@ -1358,6 +1363,28 @@ class ComicGenPipeline(StudioOwnerMixin):
         if repair_assets(self.library_store):
             self._save_library_data()
 
+    @staticmethod
+    def _initial_model_settings(owner_user_id: Optional[str], owner_profile_id: Optional[str]) -> ModelSettings:
+        """New containers inherit their owner's catalog, not another gateway's defaults."""
+        settings = ModelSettings()
+        if not owner_user_id or not owner_profile_id:
+            return settings
+        from ..identity import UserContext
+        from ..user_config import get_user_config_store
+        from ...utils.provider_catalog import fetch_selected_catalog, gateway_adapter
+        identity = UserContext(owner_user_id, owner_profile_id, owner_user_id, "")
+        store = get_user_config_store()
+        if gateway_adapter(store.get_public(identity)) is None:
+            return settings
+        models = fetch_selected_catalog(store.get_runtime_uniart(identity))
+        for field, capability in (("t2i_model", "t2i"), ("i2i_model", "i2i"), ("image_model", "t2i"),
+                                  ("i2v_model", "i2v"), ("r2v_model", "r2v")):
+            choices = [model["id"] for model in models if capability in model.get("capabilities", [])]
+            if not choices:
+                raise ValueError(f"Selected adapter catalog has no {capability} model")
+            setattr(settings, field, choices[0])
+        return settings
+
     def create_project(
         self,
         title: str,
@@ -1381,11 +1408,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         if series_id and not self.get_series(series_id, owner_profile_id):
             raise ValueError("Series not found")
 
+        initial_settings = (self.get_series(series_id, owner_profile_id).model_settings.model_copy(deep=True)
+                            if series_id else self._initial_model_settings(owner_user_id, owner_profile_id))
         if skip_analysis:
             script = self.script_processor.create_draft_script(title, text)
         else:
             script = self.script_processor.parse_novel(title, text)
 
+        script.model_settings = initial_settings
         script.workflow_mode = workflow_mode
         script.owner_user_id = owner_user_id
         script.owner_profile_id = owner_profile_id
@@ -1593,6 +1623,26 @@ class ComicGenPipeline(StudioOwnerMixin):
         return requested_model or script.model_settings.t2i_model
 
     @staticmethod
+    def _validate_character_design_pages(attributes: Dict[str, Any], asset_type: str) -> Dict[str, Any]:
+        if "custom_design_pages" not in attributes:
+            return attributes
+        from .models import CharacterDesignPage
+        pages = attributes["custom_design_pages"]
+        if asset_type != "character" or not isinstance(pages, list) or len(pages) > 50:
+            raise ValueError("Character design pages must be a list of at most 50 pages")
+        normalized = [CharacterDesignPage.model_validate(page).model_dump() for page in pages]
+        if len({page["id"] for page in normalized}) != len(normalized):
+            raise ValueError("Character design page IDs must be unique")
+        return {**attributes, "custom_design_pages": normalized}
+
+    @staticmethod
+    def _validate_character_design_page(asset: Any, asset_type: str, generation_type: str) -> None:
+        if generation_type.startswith("design:"):
+            page_id = generation_type.removeprefix("design:")
+            if asset_type != "character" or not any(page["id"] == page_id for page in asset.custom_design_pages):
+                raise ValueError("Character design page is closed or unavailable")
+
+    @staticmethod
     def _confirmed_asset_design_revision(asset: Any, asset_type: str) -> Optional[int]:
         record = (asset.character_design if asset_type == "character" else asset.asset_design) or {}
         revisions = record.get("design_revisions") or []
@@ -1678,6 +1728,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             asset, _source = self._find_asset_with_source(owner, asset_id, asset_type)
             if asset is None:
                 raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+        self._validate_character_design_page(asset, asset_type, generation_type)
         normalized_reference = None
         if reference is not None:
             _url, normalized_reference = self._resolve_asset_library_reference(owner, reference)
@@ -1710,8 +1761,10 @@ class ComicGenPipeline(StudioOwnerMixin):
             self._resolve_asset_library_reference(owner, item)
         requested_model = model_name or owner.model_settings.t2i_model
         effective_t2i = requested_model if is_series else self._asset_generation_model(owner, model_name)
-        if len(normalized_references) > self._asset_reference_limit(effective_t2i):
-            raise InvalidAssetReference(f"model '{effective_t2i}' supports at most {self._asset_reference_limit(effective_t2i)} referenced images")
+        reference_limit = self._asset_reference_limit(effective_t2i)
+        reference_count = len(normalized_references) + int(bool(normalized_reference))
+        if reference_limit is not None and reference_count > reference_limit:
+            raise InvalidAssetReference(f"model '{effective_t2i}' supports at most {reference_limit} referenced images")
         effective_model = (
             (owner.model_settings.i2i_model if is_series or not owner.series_id
              else self.series_store[owner.series_id].model_settings.i2i_model)
@@ -1723,7 +1776,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             if is_series else aspect_ratio or getattr(owner.model_settings, f"{asset_type}_aspect_ratio")
         )
         snapshot = self._asset_submission_snapshot(
-            asset, asset_type, prompt=self._reference_semantic_prompt(owner, prompt, ([normalized_reference] if normalized_reference else []) + normalized_references), negative_prompt=negative_prompt,
+            asset, asset_type, prompt=(prompt if generation_type.startswith("design:") else self._reference_semantic_prompt(owner, prompt, ([normalized_reference] if normalized_reference else []) + normalized_references)), negative_prompt=negative_prompt,
             model_id=effective_model, aspect_ratio=effective_aspect,
             generation_type=generation_type, image_generation_mode=image_generation_mode,
             batch_size=batch_size, reference=normalized_reference, references=normalized_references,
@@ -1769,7 +1822,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Structured identity always wins over the legacy URL. Resolve it
             # again during execution so a queued task cannot use a deleted or
             # cross-owner variant.
-            reference_image_url, reference_provenance = self._resolve_asset_library_reference(
+            reference_image_url, reference_provenance = self._resolve_asset_generation_reference(
                 script,
                 reference,
             )
@@ -1780,12 +1833,12 @@ class ComicGenPipeline(StudioOwnerMixin):
         if references:
             normalized_references = self._normalize_asset_references(references)
             for structured_reference in normalized_references:
-                resolved, provenance = self._resolve_asset_library_reference(script, structured_reference)
+                resolved, provenance = self._resolve_asset_generation_reference(script, structured_reference)
                 resolved_references.append(resolved)
                 reference_provenance_list.append(provenance)
         
         semantic_references = ([reference_provenance] if reference_provenance else []) + reference_provenance_list
-        if prompt:
+        if prompt and not generation_type.startswith("design:"):
             prompt = self._reference_semantic_prompt(script, prompt, semantic_references)
 
         # Get effective model names from project settings if not overridden
@@ -1973,6 +2026,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         target_asset, source = self._find_asset_with_source(script, asset_id, asset_type)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+        self._validate_character_design_page(target_asset, asset_type, generation_type)
         normalized_scene_tool = None
         normalized_tool_references = []
         if scene_tool is not None:
@@ -2021,7 +2075,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         normalized_references = self._normalize_asset_references(references or [])
         effective_reference_model = self._asset_generation_model(script, model_name)
         reference_limit = self._asset_reference_limit(effective_reference_model)
-        if len(normalized_references) > reference_limit:
+        reference_count = len(normalized_references) + int(bool(normalized_reference or reference_image_url))
+        if reference_limit is not None and reference_count > reference_limit:
             raise InvalidAssetReference(
                 f"model '{effective_reference_model}' supports at most {reference_limit} referenced images"
             )
@@ -2227,7 +2282,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         image_generation_mode = params.get("image_generation_mode", "text")
         reference_provenance = None
         if params.get("reference") is not None:
-            reference_image_url, reference_provenance = self._resolve_asset_library_reference(
+            reference_image_url, reference_provenance = self._resolve_asset_generation_reference(
                 series,
                 params["reference"],
             )
@@ -2236,13 +2291,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         if params.get("references"):
             normalized_references = self._normalize_asset_references(params["references"])
             for structured_reference in normalized_references:
-                resolved, provenance = self._resolve_asset_library_reference(series, structured_reference)
+                resolved, provenance = self._resolve_asset_generation_reference(series, structured_reference)
                 resolved_references.append(resolved)
                 reference_provenance_list.append(provenance)
 
         semantic_references = ([reference_provenance] if reference_provenance else []) + reference_provenance_list
         if prompt:
-            prompt = self._reference_semantic_prompt(series, prompt, semantic_references)
+            if not generation_type.startswith("design:"):
+                prompt = self._reference_semantic_prompt(series, prompt, semantic_references)
         else:
             positive_prompt = self._reference_semantic_prompt(series, positive_prompt or "", semantic_references)
 
@@ -2651,13 +2707,8 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise InvalidAssetReference("reference mode requires at least one reference image")
 
     @staticmethod
-    def _asset_reference_limit(model_name: Optional[str]) -> int:
-        normalized = str(model_name or "").removeprefix("uniart/")
-        if normalized.startswith(("gpt-image-", "wan2.7-image", "qwen-image")):
-            return 9
-        if normalized == "wan2.6-image":
-            return 4
-        return 3
+    def _asset_reference_limit(model_name: Optional[str]) -> Optional[int]:
+        return AssetGenerator.reference_image_limit(model_name or "")
 
     @staticmethod
     def _asset_image_variants(asset: Any, asset_type: str) -> List[Any]:
@@ -3053,6 +3104,25 @@ class ComicGenPipeline(StudioOwnerMixin):
             raise InvalidAssetReference("reference variant media is missing")
         return candidate
 
+    def _resolve_asset_generation_reference(
+        self, container: Any, reference: Any,
+    ) -> Tuple[str, Dict[str, str]]:
+        """Keep stable provenance while preparing platform bytes for delivery.
+
+        Catalog images are shared. Provider signing requires owner-local media,
+        so materialize the validated revision only when a task executes.
+        """
+        source, normalized = self._resolve_asset_library_reference(container, reference)
+        if normalized["asset_type"] != "platform_reference":
+            return source, normalized
+        from ..reference_materials import materialize_image, reference_context
+
+        owner = container.owner_profile_id
+        context = reference_context(normalized, owner, output_root=self.output_root)
+        material = materialize_image(owner, source, label=context["title"] if context else "",
+                                     output_root=self.output_root, context=context)
+        return self._local_output_path(material["storage_key"]), normalized
+
     def _resolve_asset_library_reference(
         self,
         container: Any,
@@ -3250,6 +3320,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         ):
             raise ValueError("Confirmed character asset pack can only change through reviewed anchor operations")
 
+        attributes = self._validate_character_design_pages(attributes, asset_type)
         if "name" in attributes:
             attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
 
@@ -8759,7 +8830,7 @@ class ComicGenPipeline(StudioOwnerMixin):
         # If R2V mode is selected, use the appropriate R2V model
         from ...models.nsfw_new_one import WAN_IDS
         is_nsfw_wan = model in WAN_IDS
-        is_uniart_video = bool(model and model.startswith(("uniart/minimax-h3-", "uniart/seedance-")))
+        is_uniart_video = bool(model and model.startswith("uniart/"))
         if generation_mode not in ("t2v", "i2v", "first_last_frame", "r2v"):
             raise ValueError(f"Unsupported video generation mode: {generation_mode}")
         if generation_mode == "first_last_frame":
@@ -10067,7 +10138,7 @@ class ComicGenPipeline(StudioOwnerMixin):
             # Persisted tasks and asset motion tasks also need ownership validation.
             from ...models.nsfw_new_one import WAN_IDS
             is_nsfw_wan = task.model in WAN_IDS
-            is_uniart_task = (task.model or "").startswith(("uniart/minimax-h3-", "uniart/seedance-"))
+            is_uniart_task = (task.model or "").startswith("uniart/")
             if is_uniart_task and not (task.provider_name == "uniart" and task.provider_task_id):
                 task.reference_image_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in task.reference_image_urls]
                 task.reference_video_urls = [resolve_studio_reference(ref, script.owner_profile_id, output_root=self.output_root) for ref in task.reference_video_urls]
@@ -10125,7 +10196,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 or model_name_lower.startswith("viduq3")
                 or model_name_lower.startswith("vidu/vidu")
             )
-            use_uniart = backend == "uniart" and (model_name_lower.startswith("uniart/seedance-") or model_name_lower.startswith("uniart/minimax-h3-"))
+            use_uniart = model_name_lower.startswith("uniart/")
             use_mulerouter = backend == "mulerouter" and model_name_lower.startswith("seedance")
 
             if is_nsfw_wan:
@@ -10156,9 +10227,10 @@ class ComicGenPipeline(StudioOwnerMixin):
                 if not script_owner or not script_owner.owner_user_id or not script_owner.owner_profile_id:
                     raise RuntimeError("Video task has no authenticated owner")
                 uniart_model = UniArtVideoModel(
-                    runtime_uniart_for_owner(
+                    runtime_gateway_for_owner(
                         script_owner.owner_user_id,
                         script_owner.owner_profile_id,
+                        "uniart",
                     )
                 )
                 def save_provider_task(provider_task_id):
@@ -12146,12 +12218,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         source_script_document_id: Optional[str] = None,
     ) -> Series:
         """Create a new Series."""
+        initial_settings = self._initial_model_settings(owner_user_id, owner_profile_id)
         with self._save_lock:
             series = Series(
                 id=str(uuid.uuid4()),
                 owner_user_id=owner_user_id,
                 owner_profile_id=owner_profile_id,
                 source_script_document_id=source_script_document_id,
+                model_settings=initial_settings,
                 title=title,
                 description=description,
                 workflow_mode=workflow_mode,
@@ -13246,6 +13320,7 @@ class ComicGenPipeline(StudioOwnerMixin):
                 })
             ):
                 raise ValueError("Confirmed character asset pack can only change through reviewed anchor operations")
+            attributes = self._validate_character_design_pages(attributes, asset_type)
             if "name" in attributes:
                 attributes = {**attributes, "name": self._validated_asset_name(attributes["name"])}
             for key, value in attributes.items():
@@ -13270,6 +13345,9 @@ class ComicGenPipeline(StudioOwnerMixin):
         if not series:
             raise ValueError("Series not found")
 
+        _series, target = self._find_series_asset(series_id, asset_id, asset_type)
+        self._validate_character_design_page(target, asset_type, generation_type)
+
         if references and (reference is not None or reference_image_url):
             raise InvalidAssetReference("multiple structured references cannot be combined with a singular legacy reference")
         self._validate_asset_generation_mode(
@@ -13291,7 +13369,8 @@ class ComicGenPipeline(StudioOwnerMixin):
         normalized_references = self._normalize_asset_references(references or [])
         effective_reference_model = model_name or series.model_settings.t2i_model
         reference_limit = self._asset_reference_limit(effective_reference_model)
-        if len(normalized_references) > reference_limit:
+        reference_count = len(normalized_references) + int(bool(normalized_reference or reference_image_url))
+        if reference_limit is not None and reference_count > reference_limit:
             raise InvalidAssetReference(
                 f"model '{effective_reference_model}' supports at most {reference_limit} referenced images"
             )

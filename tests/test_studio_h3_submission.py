@@ -19,7 +19,7 @@ def studio(monkeypatch, tmp_path):
     pipeline.get_script = lambda ident: script if ident == script.id else None
     pipeline._save_data = Mock()
     pipeline._resolve_video_backend = lambda model: "uniart"
-    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner", lambda *a: {})
+    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_gateway_for_owner", lambda *a: {})
     monkeypatch.setattr(uniart, "_media", lambda value: value)
     monkeypatch.setattr(uniart, "_poll", Mock(return_value={}))
     monkeypatch.setattr(uniart, "_download_result", Mock())

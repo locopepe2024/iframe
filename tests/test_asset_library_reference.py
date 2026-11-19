@@ -91,6 +91,69 @@ def test_platform_reference_is_frozen_in_asset_review(monkeypatch, tmp_path):
     assert pipeline._reference_semantic_prompt(pipeline.scripts['project'], 'A seated person', [reference]) == review['positive_prompt']
 
 
+@pytest.mark.parametrize("scope", ["project", "series"])
+@pytest.mark.parametrize("singular", [False, True])
+def test_platform_character_reference_is_owner_materialized_before_provider_submission(monkeypatch, tmp_path, scope, singular):
+    import json
+    from urllib.parse import parse_qs, unquote, urlsplit
+    from PIL import Image
+    from src.apps.studio_access import studio_owner_key, verify_provider_media
+    from src.models.nsfw_new_one import _reference_url
+
+    root = tmp_path / "output"
+    manifest = tmp_path / "catalog/manifest.json"
+    media = manifest.parent / "media/pose.png"
+    media.parent.mkdir(parents=True)
+    Image.new("RGB", (8, 8), "blue").save(media)
+    manifest.write_text(json.dumps({"schema_version": 1, "catalog_revision": "test", "resources": [{
+        "platform_resource_id": "platform.pose.one", "revision": 2, "kind": "image",
+        "category_path": "reference/pose", "title": "坐姿", "status": "active",
+        "payload": {"media_file": "pose.png"}, "provenance": {"license": "test", "content_sha256": "digest"},
+    }]}))
+    monkeypatch.setattr(platform_catalog, "MANIFEST_PATH", manifest)
+    monkeypatch.setenv("PROVIDER_MEDIA_PUBLIC_BASE_URL", "https://media.example.test")
+    monkeypatch.setenv("LUMENX_MEDIA_SIGNING_KEY", "test-key")
+    monkeypatch.setattr("src.apps.comic_gen.pipeline.runtime_uniart_for_owner", lambda *_args: {})
+    pipeline, _ = _pipeline_with_assets(tmp_path)
+    pipeline.output_root = str(root)
+    character = Character(id="hero", name="Hero", description="Blue clothes", owner_user_id="user", owner_profile_id="owner")
+    pipeline.scripts["project"].characters = [character]
+    if scope == "series":
+        pipeline.series_store["series"] = Series(id="series", title="Series", created_at=1, updated_at=1,
+            owner_user_id="user", owner_profile_id="owner", characters=[character])
+        pipeline.get_series = lambda series_id, *_args: pipeline.series_store.get(series_id)
+        pipeline._save_series_data_unlocked = Mock()
+    reference = {"asset_type": "platform_reference", "asset_id": "platform.pose.one", "variant_id": "2"}
+    inputs = {"reference": reference} if singular else {"references": [reference]}
+    seen = []
+    def generate(_character, **kwargs):
+        paths = ([kwargs["reference_image_url"]] if kwargs.get("reference_image_url") else []) + list(kwargs.get("reference_image_urls") or [])
+        assert len(paths) == 1
+        # Exercise the real GreenA transport boundary; no model request is made.
+        signed = urlsplit(_reference_url(paths[0]))
+        query = parse_qs(signed.query)
+        owner_key, owner_path = unquote(signed.path).removeprefix("/provider/media/").split("/", 1)
+        assert owner_key == studio_owner_key("owner")
+        resolved = verify_provider_media(owner_key, owner_path, int(query["expires"][0]), query["signature"][0], output_root=str(root))
+        assert Path(resolved).read_bytes() == media.read_bytes()
+        assert (kwargs.get("reference_provenance") or kwargs["reference_provenance_list"][0]) == reference
+        seen.extend(paths)
+    pipeline.asset_generator = Mock()
+    pipeline.asset_generator.generate_character.side_effect = generate
+    review = pipeline.preview_asset_image_submission(scope, character.id, "character", prompt="Blue clothes",
+        generation_type="full_body", image_generation_mode="reference", is_series=scope == "series", **inputs)
+    assert review["reference_inputs"] == [reference]
+    assert not (root / "users").exists()
+    create = pipeline.generate_series_asset if scope == "series" else pipeline.create_asset_generation_task
+    _, task_id = create(scope, character.id, "character", prompt="Blue clothes", generation_type="full_body",
+        image_generation_mode="reference", preserve_prompt=True, apply_style=False,
+        expected_review_fingerprint=review["fingerprint"], **inputs)
+    pipeline.process_asset_generation_task(task_id)
+    assert pipeline.asset_generation_tasks[task_id]["status"] == "completed", pipeline.asset_generation_tasks[task_id].get("error")
+    assert len(seen) == 1
+    assert pipeline.asset_generation_tasks[task_id]["submission_snapshot"]["reference_inputs"] == [reference]
+
+
 def _pipeline_with_assets(tmp_path: Path):
     from src.apps.comic_gen.models import Script
 

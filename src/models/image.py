@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 import base64
 import mimetypes
 import os
@@ -22,6 +22,15 @@ class ImageGenModel(ABC):
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
+
+    @classmethod
+    def reference_image_limit(cls, model_name: str) -> Optional[int]:
+        """Return declared input capacity; missing metadata is not a guessed limit."""
+        from ..utils.model_catalog import get_catalog_accessor, load_generated_model_catalog
+        catalog = load_generated_model_catalog()
+        model_id = get_catalog_accessor(catalog).resolve_to_flat(model_name)
+        model = catalog.get("models", {}).get(model_id, {})
+        return model.get("inputs", {}).get("reference_images", {}).get("max")
 
     @abstractmethod
     def generate(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
@@ -87,17 +96,10 @@ class WanxImageModel(ImageGenModel):
         # model_name is already handled above, remove from kwargs if present
         kwargs.pop('model_name', None)
         
-        # Determine reference image limit based on model
-        if final_model_name.startswith('wan2.7-image') or final_model_name.startswith('qwen-image'):
-            ref_limit = 9
-        elif final_model_name == 'wan2.6-image':
-            ref_limit = 4
-        else:
-            ref_limit = 3
-        if len(all_ref_paths) > ref_limit:
-            logger.warning(f"Limiting reference images from {len(all_ref_paths)} to {ref_limit} for model {final_model_name}")
-            all_ref_paths = all_ref_paths[:ref_limit]
-        
+        ref_limit = self.reference_image_limit(final_model_name)
+        if ref_limit is not None and len(all_ref_paths) > ref_limit:
+            raise ValueError(f"Model {final_model_name} accepts at most {ref_limit} reference images")
+
         logger.info(f"Starting image generation...")
         logger.info(f"Prompt: {prompt}")
         logger.info(f"Model: {final_model_name}, Size: {size}, N: {n}")
