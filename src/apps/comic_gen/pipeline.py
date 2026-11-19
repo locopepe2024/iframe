@@ -1358,6 +1358,28 @@ class ComicGenPipeline(StudioOwnerMixin):
         if repair_assets(self.library_store):
             self._save_library_data()
 
+    @staticmethod
+    def _initial_model_settings(owner_user_id: Optional[str], owner_profile_id: Optional[str]) -> ModelSettings:
+        """New containers inherit their owner's catalog, not another gateway's defaults."""
+        settings = ModelSettings()
+        if not owner_user_id or not owner_profile_id:
+            return settings
+        from ..identity import UserContext
+        from ..user_config import get_user_config_store
+        from ...utils.provider_catalog import fetch_selected_catalog
+        identity = UserContext(owner_user_id, owner_profile_id, owner_user_id, "")
+        store = get_user_config_store()
+        if store.get_public(identity).get("catalog_name") != "greena":
+            return settings
+        models = fetch_selected_catalog(store.get_runtime_uniart(identity))
+        for field, capability in (("t2i_model", "t2i"), ("i2i_model", "i2i"), ("image_model", "t2i"),
+                                  ("i2v_model", "i2v"), ("r2v_model", "r2v")):
+            choices = [model["id"] for model in models if capability in model.get("capabilities", [])]
+            if not choices:
+                raise ValueError(f"Selected GreenA catalog has no {capability} model")
+            setattr(settings, field, choices[0])
+        return settings
+
     def create_project(
         self,
         title: str,
@@ -1381,11 +1403,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         if series_id and not self.get_series(series_id, owner_profile_id):
             raise ValueError("Series not found")
 
+        initial_settings = (self.get_series(series_id, owner_profile_id).model_settings.model_copy(deep=True)
+                            if series_id else self._initial_model_settings(owner_user_id, owner_profile_id))
         if skip_analysis:
             script = self.script_processor.create_draft_script(title, text)
         else:
             script = self.script_processor.parse_novel(title, text)
 
+        script.model_settings = initial_settings
         script.workflow_mode = workflow_mode
         script.owner_user_id = owner_user_id
         script.owner_profile_id = owner_profile_id
@@ -12187,12 +12212,14 @@ class ComicGenPipeline(StudioOwnerMixin):
         source_script_document_id: Optional[str] = None,
     ) -> Series:
         """Create a new Series."""
+        initial_settings = self._initial_model_settings(owner_user_id, owner_profile_id)
         with self._save_lock:
             series = Series(
                 id=str(uuid.uuid4()),
                 owner_user_id=owner_user_id,
                 owner_profile_id=owner_profile_id,
                 source_script_document_id=source_script_document_id,
+                model_settings=initial_settings,
                 title=title,
                 description=description,
                 workflow_mode=workflow_mode,
