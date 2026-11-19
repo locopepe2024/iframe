@@ -260,3 +260,7 @@ describe('model catalog phase 2 canonical helpers', () => {
         }
     });
 });
+
+it('preserves an explicit GreenA asset model before the live catalog loads', () => {
+    expect(resolveAssetGenerationModel('nsfw/seedream_5.0Pro_nsfw')).toBe('nsfw/seedream_5.0Pro_nsfw');
+});

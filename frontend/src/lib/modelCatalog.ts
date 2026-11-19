@@ -456,6 +456,9 @@ export function resolveModelId(
 export function resolveAssetGenerationModel(
     requestedId: string | null | undefined,
 ): string {
+    // A saved explicit gateway choice must not switch provider while the
+    // live catalog is still loading (or when an enabled-SKU filter hides it).
+    if (requestedId?.startsWith('nsfw/')) return requestedId;
     return resolveModelId('t2i', requestedId, 'project_settings');
 }
 
