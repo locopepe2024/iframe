@@ -171,7 +171,7 @@ def test_minimax_ir_uses_reviewed_text(monkeypatch):
     assert "H3 constraint" in preview["messages"]["user"]
     confirmed.reviewed_messages = {"system": "", "user": "冷灰蓝长街。"}
     monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
-    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    monkeypatch.setattr("src.apps.studio_access.runtime_gateway_for_owner", lambda *args: object())
     complete = Mock(return_value="镜头")
     monkeypatch.setattr(uniart, "complete_context_ir", complete)
     api._complete_minimax_ir_polish(confirmed, "unused", confirmed.reviewed_messages["user"])
@@ -187,7 +187,7 @@ def test_minimax_ir_accepts_native_prompt_without_local_h3_headings(monkeypatch)
     )
     monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
     confirmed, _ = _confirmed(request)
-    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    monkeypatch.setattr("src.apps.studio_access.runtime_gateway_for_owner", lambda *args: object())
     monkeypatch.setattr(uniart, "complete_context_ir", Mock(return_value=native_prompt))
 
     assert api.polish_video_prompt(confirmed) == {"prompt_cn": native_prompt, "prompt_en": native_prompt}
@@ -259,7 +259,7 @@ def test_minimax_ir_rejects_oversized_review_before_provider_call(monkeypatch):
         target_video_model="uniart/minimax-h3-vip",
     )
     monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
-    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    monkeypatch.setattr("src.apps.studio_access.runtime_gateway_for_owner", lambda *args: object())
     complete = Mock()
     monkeypatch.setattr(uniart, "complete_context_ir", complete)
 
@@ -275,7 +275,7 @@ def test_minimax_ir_resolves_studio_media_before_provider_submission(monkeypatch
         target_video_model="uniart/minimax-h3-vip", image_urls=["/studio/media/owned/first.png"],
     )
     monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
-    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    monkeypatch.setattr("src.apps.studio_access.runtime_gateway_for_owner", lambda *args: object())
     resolved = Mock(return_value=["/app/output/users/owned/studio/first.png"])
     signed = Mock(return_value="https://media.example/first.png")
     complete = Mock(return_value="optimized prompt")
@@ -299,7 +299,7 @@ def test_minimax_ir_reports_invalid_studio_media_without_provider_call(monkeypat
         target_video_model="uniart/minimax-h3-vip", image_urls=["/studio/media/invalid/first.png"],
     )
     monkeypatch.setattr(api, "current_studio_user", lambda: SimpleNamespace(user_id="u", owner_profile_id="o"))
-    monkeypatch.setattr("src.apps.studio_access.runtime_uniart_for_owner", lambda *args: object())
+    monkeypatch.setattr("src.apps.studio_access.runtime_gateway_for_owner", lambda *args: object())
     monkeypatch.setattr(api, "resolve_studio_reference", Mock(side_effect=ValueError("invalid reference")))
     complete = Mock()
     monkeypatch.setattr(uniart, "complete_context_ir", complete)

@@ -165,3 +165,10 @@ def test_project_model_fallback_resolves_project_and_series_with_same_owner(gree
     assert api._get_polish_model_for_project('project') == 'qwen3.6-plus'
     get_script.assert_called_once_with('project', greena.owner_profile_id)
     get_series.assert_called_once_with('series', greena.owner_profile_id)
+
+
+def test_workspace_kimi_uses_selected_adapter_not_uniart(greena):
+    token=set_studio_script_model('greena/kimi-k3')
+    try:
+        assert api._resolve_video_polish_model(api.PolishVideoPromptRequest(draft_prompt='镜头'))=='greena/kimi-k3'
+    finally:reset_studio_script_model(token)

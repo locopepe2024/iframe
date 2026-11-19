@@ -9239,8 +9239,8 @@ def _complete_minimax_ir_polish(request, custom_prompt: str, reviewed_text: Opti
     if user is None:
         raise HTTPException(status_code=401, detail="MiniMax Context-IR requires a Studio user context")
     from ...models.uniart import complete_context_ir, _image_reference_url
-    from ..studio_access import runtime_uniart_for_owner
-    config = runtime_uniart_for_owner(user.user_id, user.owner_profile_id)
+    from ..studio_access import runtime_gateway_for_owner
+    config = runtime_gateway_for_owner(user.user_id, user.owner_profile_id, "uniart")
     text = reviewed_text if reviewed_text is not None else _compile_ir_polish_text(request, custom_prompt)
     if len(text) > _MINIMAX_IR_TEXT_LIMIT:
         raise PolishError(
@@ -9277,13 +9277,6 @@ _OPTIMIZER_MODEL_IDS = {
 }
 
 
-_UNIART_OPTIMIZERS = [
-    {"id": "minimax_context_ir", "label": "MiniMax 官方 IR"},
-    {"id": "gpt", "label": "GPT"}, {"id": "qwen", "label": "Qwen"},
-    {"id": "deepseek", "label": "DeepSeek"}, {"id": "glm", "label": "GLM"},
-]
-_GREENA_OPTIMIZER_MODELS = {"llm": "llm-nf-all", "deepseek": "deepseek-v4.1-flash"}
-
 
 def _video_polish_catalog() -> str:
     from ..user_config import get_user_config_store
@@ -9293,38 +9286,40 @@ def _video_polish_catalog() -> str:
 
 @app.get("/video/polish_prompt/optimizers")
 def get_video_polish_optimizers():
+    from ...utils.provider_catalog import gateway_adapter
     catalog = _video_polish_catalog()
-    if catalog == "greena":
-        return {"catalog_name": catalog, "default_provider": "local_llm", "providers": [
-            {"id": "local_llm", "label": "跟随工作区剧本模型"},
-            {"id": "llm", "label": "LLM · llm-nf-all"},
-            {"id": "deepseek", "label": "DeepSeek · deepseek-v4.1-flash"},
-        ]}
-    return {"catalog_name": catalog, "default_provider": "qwen", "providers": _UNIART_OPTIMIZERS}
+    adapter = gateway_adapter({"catalog_name": catalog or "uniart"})
+    return {"catalog_name": catalog, "default_provider": adapter.DEFAULT_OPTIMIZER,
+            "providers": list(adapter.OPTIMIZERS)}
 
 
 def _resolve_video_polish_model(request, script=None) -> str:
-    """Resolve the text model from its account catalog, independently of video targets."""
+    """The selected adapter owns optimizer availability and text-model identity."""
+    from ...utils.provider_catalog import gateway_adapter
     catalog = _video_polish_catalog()
+    adapter = gateway_adapter({"catalog_name": catalog})
     provider = request.optimizer_provider
-    if catalog == "greena":
-        if provider not in {"local_llm", *_GREENA_OPTIMIZER_MODELS}:
-            raise HTTPException(422, "当前 GreenA 账户不支持此优化器，请重新选择 LLM 或 DeepSeek")
-        model = (_script_model_for_request(current_studio_user(), None) if provider == "local_llm"
-                 else "greena/" + _GREENA_OPTIMIZER_MODELS[provider])
-        if model not in {"greena/" + value for value in _GREENA_OPTIMIZER_MODELS.values()}:
-            raise HTTPException(422, "GreenA 剧本模型设置无效，请重新选择 LLM 或 DeepSeek")
-        if request.polish_model and request.polish_model not in {model, model.removeprefix("greena/")}:
+    if adapter:
+        allowed = {item["id"] for item in adapter.OPTIMIZERS} | {"local_llm"}
+        if provider not in allowed:
+            raise HTTPException(422, "当前 adapter 不支持此优化器，请重新选择并预览")
+        if provider == "minimax_context_ir":
+            return ""
+        if provider == "local_llm":
+            model = _script_model_for_request(current_studio_user(), None)
+            if model not in {adapter.LLM_NAMESPACE + value for value in adapter.SCRIPT_MODELS}:
+                raise HTTPException(422, "当前 adapter 的剧本模型设置无效，请重新选择")
+        else:
+            model = adapter.LLM_NAMESPACE + adapter.OPTIMIZER_MODELS[provider]
+        if request.polish_model and request.polish_model not in {model, model.removeprefix(adapter.LLM_NAMESPACE)}:
             raise HTTPException(422, "优化器与文字模型不一致，请重新选择并预览")
         return model
     if provider == "llm":
-        raise HTTPException(422, "此优化器仅适用于 GreenA")
+        raise HTTPException(422, "当前 adapter 不支持此优化器")
     if provider == "minimax_context_ir":
         return ""
-    model = request.polish_model or _OPTIMIZER_MODEL_IDS.get(provider) or _get_polish_model_for_project(request.script_id, script)
-    if catalog == "uniart" and model and "/" not in model:
-        return "uniart/" + model
-    return model
+    return request.polish_model or _OPTIMIZER_MODEL_IDS.get(provider) or _get_polish_model_for_project(request.script_id, script)
+
 
 
 def _effective_optimization_skills(request) -> Optional[List[str]]:
@@ -9730,7 +9725,10 @@ def get_uniart_models(provider: Optional[Literal["uniart", "greena", "nsfw"]] = 
         except Exception as exc:
             logger.warning("Provider catalog unavailable for %s (%s)", provider, type(exc).__name__)
             raise HTTPException(status_code=502, detail=f"{provider}_models_unavailable") from exc
+        from ...utils.provider_catalog import gateway_adapter
+        adapter = gateway_adapter(runtime_config)
         return {"provider": runtime_config["provider"], "base_url": runtime_config["public_base_url"],
+                "adapter": {"model_namespace": adapter.MODEL_NAMESPACE},
                 "models": models, "fetched_at": time.time()}
     runtime_config = studio_uniart_config()
     base = runtime_config.get("public_base_url", runtime_config["base_url"]).rstrip("/")
@@ -9740,7 +9738,11 @@ def get_uniart_models(provider: Optional[Literal["uniart", "greena", "nsfw"]] = 
     except Exception as exc:
         logger.warning("%s unavailable (%s)", catalog_label(runtime_config), type(exc).__name__)
         raise HTTPException(status_code=502, detail=f"{catalog_label(runtime_config)} 模型目录暂时不可用") from None
-    return {"provider": catalog_name(runtime_config) or "mixed", "base_url": base, "models": models, "fetched_at": time.time()}
+    from ...utils.provider_catalog import gateway_adapter
+    adapter = gateway_adapter(runtime_config)
+    return {"provider": catalog_name(runtime_config) or "mixed", "base_url": base, "models": models,
+            "adapter": {"model_namespace": adapter.MODEL_NAMESPACE} if adapter else None,
+            "fetched_at": time.time()}
 
 
 # ============================================
@@ -9848,11 +9850,12 @@ class ScriptWritingModelSettings(BaseModel):
 def _script_model_options(user: UserContext) -> tuple[str | None, list[str]]:
     from ..user_config import get_user_config_store
 
+    from ...utils.provider_catalog import gateway_adapter
     provider = get_user_config_store().get_public(user).get("catalog_name")
-    models = ["deepseek-v4.1-flash", "kimi-k3"] if provider == "uniart" else [
-        "llm-nf-all", "deepseek-v4.1-flash", "kimi-k3",
-    ]
-    return provider, models
+    adapter = gateway_adapter({"catalog_name": provider})
+    if adapter is None:
+        from ...models import greena as adapter
+    return provider, list(adapter.SCRIPT_MODELS)
 
 
 def _validate_script_model(model: str | None) -> None:

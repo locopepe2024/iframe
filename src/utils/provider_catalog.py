@@ -50,3 +50,15 @@ def fetch_selected_catalog(config: Mapping[str, str], *, timeout: float = 15) ->
         return fetch_provider_catalog(name, {**config, "provider": name}, timeout=timeout)
     from .uniart_catalog import fetch_uniart_catalog
     return fetch_uniart_catalog(config, timeout=timeout)
+
+
+def gateway_adapter(config: Mapping):
+    """Return the selected adapter's presentation contract; workspaces stay neutral."""
+    name = catalog_name(config)
+    if name == "greena":
+        from ..models import greena
+        return greena
+    if name == "uniart":
+        from ..models import uniart
+        return uniart
+    return None

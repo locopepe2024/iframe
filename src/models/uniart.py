@@ -679,3 +679,16 @@ class UniArtVideoModel(VideoGenModel):
         result = _poll(config, task_id)
         _download_result(config, result, "video", output_path)
         return output_path, time.time() - started
+
+
+# Adapter-owned model and optimizer presentation contract.
+MODEL_NAMESPACE = "uniart/"
+LLM_NAMESPACE = "uniart/"
+SCRIPT_MODELS = ("deepseek-v4.1-flash", "kimi-k3")
+OPTIMIZER_MODELS = {"gpt": "gpt-5.6-sol", "qwen": "qwen3.8-flash", "deepseek": "deepseek-v4.1-flash", "glm": "glm-5.3"}
+OPTIMIZERS = (
+    {"id": "minimax_context_ir", "label": "MiniMax 官方 IR"},
+    {"id": "gpt", "label": "GPT"}, {"id": "qwen", "label": "Qwen"},
+    {"id": "deepseek", "label": "DeepSeek"}, {"id": "glm", "label": "GLM"},
+)
+DEFAULT_OPTIMIZER = "qwen"
