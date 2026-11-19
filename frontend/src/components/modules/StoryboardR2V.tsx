@@ -27,7 +27,7 @@ import type { BatchSummary } from "./storyboard-r2v/shot-panel/CandidatesSection
 import { getR2vRouteModelId, isR2vImageBased, videoModelSupportsMode, VIDEO_I2V_MODELS, VIDEO_R2V_MODELS, DEFAULT_I2V_MODEL_ID, DEFAULT_R2V_MODEL_ID } from "@/lib/modelCatalog";
 
 const preferredVideoModel = (models: { id: string }[], fallback: string) =>
-    models.find(model => model.id === 'nsfw/wan3.0')?.id ?? models[0]?.id ?? fallback;
+    models[0]?.id ?? fallback;
 import ShotCard, { type ShotNode } from "./storyboard-r2v/ShotCard";
 import {
     buildGenerationPrompt,

@@ -147,6 +147,7 @@ interface ModelCatalog {
 
 const MODEL_CATALOG = rawCatalog as ModelCatalog;
 let UNIART_RUNTIME_ACTIVE = false;
+let RUNTIME_MODEL_NAMESPACE: string | undefined;
 // When the live UniArt catalog is available it is the authority for UniArt
 // SKU visibility. Keep the IDs that came from that live snapshot separate
 // from the static compatibility catalog so a removed SKU cannot remain
@@ -157,6 +158,7 @@ if (typeof window !== 'undefined') {
         const snapshot = JSON.parse(localStorage.getItem('lumenx_uniart_model_snapshot') || '{}');
         const snapshotModels = Array.isArray(snapshot.models) ? snapshot.models : [];
         UNIART_RUNTIME_ACTIVE = snapshotModels.length > 0;
+        RUNTIME_MODEL_NAMESPACE = snapshot.adapter?.model_namespace;
         RUNTIME_UNIART_MODEL_IDS = new Set(
             snapshotModels
                 .map((entry: { id?: unknown }) => String(entry?.id || ''))
@@ -200,6 +202,7 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
         const payload = await response.json();
         const models = Array.isArray(payload.models) ? payload.models : [];
         UNIART_RUNTIME_ACTIVE = models.length > 0;
+        RUNTIME_MODEL_NAMESPACE = payload.adapter?.model_namespace;
         const liveIds = new Set<string>(
             models
                 .map((entry: { id?: unknown }) => String(entry?.id || ''))
@@ -240,7 +243,7 @@ export async function refreshUniArtModelCatalog(): Promise<number> {
                 },
             };
         }
-        localStorage.setItem('lumenx_uniart_model_snapshot', JSON.stringify({ fetched_at: payload.fetched_at, models }));
+        localStorage.setItem('lumenx_uniart_model_snapshot', JSON.stringify({ provider: payload.provider, adapter: payload.adapter, fetched_at: payload.fetched_at, models }));
         rebuildDynamicModelLists();
         window.dispatchEvent(new CustomEvent('lumenx:uniart-catalog-refreshed', { detail: models.length }));
         return models.length;
@@ -324,7 +327,10 @@ function isVisibleModel(model: CatalogModel, surface: VisibilitySurface): boolea
     const enabled = typeof window !== 'undefined'
         ? (() => { try { return JSON.parse(localStorage.getItem('lumenx_uniart_enabled_skus') || 'null') as string[] | null; } catch { return null; } })()
         : null;
+    const namespacedGateway = model.id.startsWith('uniart/') || model.id.startsWith('nsfw/');
+    const foreignGateway = Boolean(RUNTIME_MODEL_NAMESPACE && namespacedGateway && !model.id.startsWith(RUNTIME_MODEL_NAMESPACE));
     return (
+        !foreignGateway &&
         (!UNIART_RUNTIME_ACTIVE || (model.provider !== 'uniart' && model.provider !== 'nsfw' && model.provider !== 'greena') || RUNTIME_UNIART_MODEL_IDS.has(model.id)) &&
         model.capabilities.some((capability) => ['t2i', 'i2i', 't2v', 'i2v', 'r2v', 'f2v', 'v2v'].includes(capability)) &&
         (!enabled || (model.provider !== 'uniart' && model.provider !== 'nsfw' && model.provider !== 'greena') || enabled.includes(model.id) ||
@@ -458,7 +464,7 @@ export function resolveAssetGenerationModel(
 ): string {
     // A saved explicit gateway choice must not switch provider while the
     // live catalog is still loading (or when an enabled-SKU filter hides it).
-    if (requestedId?.startsWith('nsfw/')) return requestedId;
+    if (requestedId?.startsWith('nsfw/') || requestedId?.startsWith('uniart/')) return requestedId;
     return resolveModelId('t2i', requestedId, 'project_settings');
 }
 
@@ -513,10 +519,8 @@ export const SERIES_I2V_MODELS = getVisibleModels('i2v', 'series_settings').map(
 export const GLOBAL_I2V_MODELS = getVisibleModels('i2v', 'global_settings').map(toI2VModel);
 export const GLOBAL_R2V_MODELS = getVisibleModels('r2v', 'global_settings').map(toI2VModel);
 const NSFW_WAN_VIDEO_IDS = new Set(['nsfw/wan3.0', 'nsfw/wan3.0-Prime']);
-const storyboardVideoModels = (models: I2VModelConfig[]) => {
-    const wan = models.filter(model => NSFW_WAN_VIDEO_IDS.has(model.id));
-    return wan.length ? [...wan, ...models.filter(model => !NSFW_WAN_VIDEO_IDS.has(model.id))] : models;
-};
+// Keep the ordering published by the selected adapter's catalog.
+const storyboardVideoModels = (models: I2VModelConfig[]) => models;
 export const VIDEO_I2V_MODELS = storyboardVideoModels(getVisibleModels('i2v', 'video_sidebar').map(toI2VModel));
 
 export function videoModelSupportsMode(modelId: string, mode: 't2v' | 'i2v' | 'first_last_frame' | 'r2v'): boolean {
@@ -603,6 +607,7 @@ export const DEFAULT_R2V_MODEL_ID = VIDEO_R2V_MODELS[0]?.id ?? R2V_SELECTION_MOD
  */
 export function getR2vRouteModelId(selectedI2vModelId: string): string {
     const selectedModel = MODEL_CATALOG.models[selectedI2vModelId];
+    if (selectedModel?.capabilities.includes('r2v')) return selectedI2vModelId;
     if (!selectedModel) return R2V_ROUTE_MODEL_ID;
     return R2V_ROUTE_MAP[selectedModel.family] ?? R2V_ROUTE_MODEL_ID;
 }

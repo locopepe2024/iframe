@@ -89,7 +89,7 @@ it('shows only the nsfw Wan models in storyboard video selectors when published'
     vi.stubGlobal('window', { dispatchEvent: vi.fn() });
     vi.stubGlobal('CustomEvent', class { constructor(public type: string) {} });
     const catalog = await import('../lib/modelCatalog');
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ models: [
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ adapter: { model_namespace: 'nsfw/' }, models: [
         { id: 'nsfw/wan3.0', capabilities: ['t2v', 'i2v', 'r2v'], display_name: 'Wan 3.0' },
         { id: 'nsfw/wan3.0-Prime', capabilities: ['t2v', 'i2v', 'r2v'], display_name: 'Wan 3.0 Prime' },
         { id: 'uniart/seedance-2.5-vip', capabilities: ['i2v', 'r2v'], display_name: 'Seedance' },
@@ -99,6 +99,7 @@ it('shows only the nsfw Wan models in storyboard video selectors when published'
     expect(catalog.VIDEO_I2V_MODELS.map(model => model.id).sort()).toEqual(expected);
     expect(catalog.VIDEO_R2V_MODELS.map(model => model.id).sort()).toEqual(expected);
     expect(catalog.isR2vImageBased('nsfw/wan3.0')).toBe(true);
+    expect(catalog.getR2vRouteModelId('nsfw/wan3.0')).toBe('nsfw/wan3.0');
 });
 
 it('uses GreenA adapter reference capacity without i2i selector fallback', async () => {
