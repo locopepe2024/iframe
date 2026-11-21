@@ -112,6 +112,18 @@ def summarize_contact_phases(samples, fps):
     result = {'status': 'diagnostic_only', 'supportAccepted': False}
     for phase, items in groups.items():
         pairs = [(a, b) for a, b in zip(items, items[1:]) if b['frame'] == a['frame']+1]
+        planes = []
+        for item in items:
+            patch = select_ground_patch(item['soleRegionWorldM'])
+            plane, correction = None, None
+            try:
+                plane = fit_contact_plane(patch['points'])
+                correction = bounded_plane_correction(patch['points'])
+            except ValueError as exc:
+                correction = {'status': 'rejected', 'reason': str(exc), 'applied': False}
+            planes.append({'frame': item['frame'], 'groundPatch': patch,
+                           'patchPlane': plane, 'planeCorrection': correction})
+        first = planes[0] if planes else {}
         result[phase] = {'frames': [s['frame'] for s in items],
             'maxAnchorResidualM': max((math.dist(s['soleWorldM'], s['anchorWorldM']) for s in items), default=None),
             'maxHorizontalDriftM': max((math.dist(s['soleWorldM'][:2], items[0]['soleWorldM'][:2]) for s in items), default=None),
@@ -119,19 +131,15 @@ def summarize_contact_phases(samples, fps):
             'maxPatchVertexDriftM': max((math.dist(p[:2], q[:2]) for s in items
                                           for p, q in zip(items[0]['soleRegionWorldM'], s['soleRegionWorldM'])), default=None),
             'minPatchZM': min((p[2] for s in items for p in s['soleRegionWorldM']), default=None),
-            'groundPatch': select_ground_patch(items[0]['soleRegionWorldM']) if items else None,
-            'patchPlane': (fit_contact_plane(select_ground_patch(items[0]['soleRegionWorldM'])['points'])
-                          if items and len(select_ground_patch(items[0]['soleRegionWorldM'])['points']) >= 3 else None),
-            'planeCorrection': None,
+            'groundPatch': first.get('groundPatch'),
+            'patchPlaneFrame': first.get('frame'),
+            'patchPlane': first.get('patchPlane'),
+            'planeCorrection': first.get('planeCorrection'),
+            'planeFrames': planes,
+            'maxPatchTiltDeg': max((p['patchPlane']['tiltDeg'] for p in planes
+                                    if p['patchPlane'] is not None), default=None),
             'maxPatchVertexSpeedMps': max((math.dist(p[:2], q[:2])*fps for a, b in pairs
                                           for p, q in zip(a['soleRegionWorldM'], b['soleRegionWorldM'])), default=None)}
-    for phase, items in groups.items():
-        plane = result[phase]['patchPlane']
-        if plane is not None:
-            try:
-                result[phase]['planeCorrection'] = bounded_plane_correction(select_ground_patch(items[0]['soleRegionWorldM'])['points'])
-            except ValueError as exc:
-                result[phase]['planeCorrection'] = {'status': 'rejected', 'reason': str(exc), 'applied': False}
     return result
 
 
@@ -158,29 +166,29 @@ def select_ground_patch(points, band_m=0.01):
 
 
 def fit_contact_plane(points):
-    """Fit z=ax+by+c; return tilt and residuals without accepting contact."""
+    """Fit z=ax+by+c using centered coordinates; residuals are vertical Z."""
     if not isinstance(points, list) or len(points) < 3:
         raise ValueError('contact plane requires three points')
     for point in points:
         vector(point)
-    sxx = sum(p[0]*p[0] for p in points); sxy = sum(p[0]*p[1] for p in points)
-    syy = sum(p[1]*p[1] for p in points); sx = sum(p[0] for p in points); sy = sum(p[1] for p in points)
-    sz = sum(p[2] for p in points); sxz = sum(p[0]*p[2] for p in points); syz = sum(p[1]*p[2] for p in points)
-    matrix = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, len(points)]]; rhs = [sxz, syz, sz]
-    for col in range(3):
-        pivot = max(range(col, 3), key=lambda row: abs(matrix[row][col]))
-        if abs(matrix[pivot][col]) < 1e-10:
-            raise ValueError('contact patch is collinear in XY')
-        matrix[col], matrix[pivot] = matrix[pivot], matrix[col]; rhs[col], rhs[pivot] = rhs[pivot], rhs[col]
-        scale = matrix[col][col]
-        matrix[col] = [v/scale for v in matrix[col]]; rhs[col] /= scale
-        for row in range(3):
-            if row == col: continue
-            factor = matrix[row][col]
-            matrix[row] = [a-factor*b for a,b in zip(matrix[row], matrix[col])]
-            rhs[row] -= factor*rhs[col]
-    a, b, c = rhs
-    residuals = [p[2]-(a*p[0]+b*p[1]+c) for p in points]
+    center = [math.fsum(p[i] for p in points)/len(points) for i in range(3)]
+    centered = [[p[i]-center[i] for i in range(3)] for p in points]
+    scale = max(max(abs(p[0]), abs(p[1])) for p in centered)
+    if scale == 0:
+        raise ValueError('contact patch is collinear in XY')
+    normalized = [[x/scale, y/scale, z/scale] for x, y, z in centered]
+    sxx = math.fsum(x*x for x, y, z in normalized)
+    sxy = math.fsum(x*y for x, y, z in normalized)
+    syy = math.fsum(y*y for x, y, z in normalized)
+    sxz = math.fsum(x*z for x, y, z in normalized)
+    syz = math.fsum(y*z for x, y, z in normalized)
+    determinant = sxx*syy-sxy*sxy
+    if determinant <= 1e-10*(sxx+syy)**2:
+        raise ValueError('contact patch is collinear in XY')
+    a = (sxz*syy-syz*sxy)/determinant
+    b = (syz*sxx-sxz*sxy)/determinant
+    c = center[2]-a*center[0]-b*center[1]
+    residuals = [z-a*x-b*y for x, y, z in centered]
     tilt = math.degrees(math.atan(math.sqrt(a*a+b*b)))
     return {'status': 'diagnostic_only', 'slopeXY': [a, b], 'interceptZM': c,
             'tiltDeg': tilt, 'maxAbsResidualM': max(abs(v) for v in residuals),
@@ -201,5 +209,5 @@ def bounded_plane_correction(points, max_tilt_deg=8.0):
         axis = [-b/length, a/length, 0.0]
     return {'status': 'diagnostic_only', 'tiltDeg': fit['tiltDeg'],
             'maxTiltDeg': max_tilt_deg, 'axisWorld': axis,
-            'angleDeg': -fit['tiltDeg'], 'applied': False,
+            'angleDeg': fit['tiltDeg'], 'applied': False,
             'planeResidualM': fit['maxAbsResidualM']}
