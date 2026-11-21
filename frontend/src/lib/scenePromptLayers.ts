@@ -142,7 +142,7 @@ export function sceneCameraCompatibilityNotes(layers: ScenePromptLayers): string
     if (typeof elevation === "number" && elevation <= -30 && /14mm|24mm|广角/.test(focal)) {
         notes.push("明显低机位广角会加强垂直线汇聚和近处透视夸张；若建筑线条需保持端正，可明确要求透视校正。刻意夸张的透视可以保留。");
     }
-    if (/背视/.test(viewpoint) && /近景|特写|细节/.test(framing)) {
+    if (/背视|背面机位/.test(viewpoint) && /近景|特写|细节/.test(framing)) {
         notes.push("背视近景会遮住主体正面特征；若本镜需要确认面部身份或表情，改为侧前方机位或明确只拍后脑/背部细节。");
     }
     if (/手机/.test(device) && /85mm|135mm|200mm/.test(focal)) {
