@@ -22,6 +22,11 @@ export default function PosePreview() {
     if (!ctx) return;
 
     const draw = () => {
+      const theme = getComputedStyle(element);
+      const primary = theme.getPropertyValue('--color-primary').trim();
+      const text = theme.getPropertyValue('--color-text-primary').trim();
+      const surface = theme.getPropertyValue('--color-bg-surface').trim();
+      const accent = theme.getPropertyValue('--color-status-completed-fg').trim();
       const ratio = window.devicePixelRatio || 1;
       element.width = Math.round(element.clientWidth * ratio);
       element.height = Math.round(element.clientHeight * ratio);
@@ -37,16 +42,17 @@ export default function PosePreview() {
       };
 
       ctx.lineWidth = 1;
-      ctx.strokeStyle = 'rgba(167, 149, 255, .16)';
+      ctx.strokeStyle = primary;
+      ctx.globalAlpha = .16;
       for (let x = -110; x < 630; x += 48) line(250 + (x - 250) * .38, 226, x, 320);
       for (const y of [230, 243, 261, 286, 319]) line(0, y, 500, y);
 
-      ctx.strokeStyle = 'rgba(163, 137, 255, .50)';
+      ctx.globalAlpha = .5;
       ctx.setLineDash([4, 6]);
       ctx.strokeRect(103, 39, 309, 244);
       ctx.setLineDash([]);
 
-      ctx.strokeStyle = '#a992ff';
+      ctx.globalAlpha = 1;
       ctx.lineWidth = 2;
       for (const [x, y, dx, dy] of [[103, 39, 1, 1], [412, 39, -1, 1], [103, 283, 1, -1], [412, 283, -1, -1]]) {
         line(x, y, x + 13 * dx, y);
@@ -54,19 +60,19 @@ export default function PosePreview() {
       }
 
       const color = ctx.createLinearGradient(160, 60, 346, 260);
-      color.addColorStop(0, '#d5c0ff');
-      color.addColorStop(.55, '#a58aff');
-      color.addColorStop(1, '#68e5ed');
+      color.addColorStop(0, text);
+      color.addColorStop(.55, primary);
+      color.addColorStop(1, accent);
       ctx.strokeStyle = color;
       ctx.lineWidth = 4;
-      ctx.shadowColor = '#a280ff';
+      ctx.shadowColor = primary;
       ctx.shadowBlur = 14 * scale;
       for (const [start, end] of bones) line(...joints[start], ...joints[end]);
 
       joints.forEach(([x, y], index) => {
         ctx.beginPath();
         ctx.arc(x, y, index === 0 ? 15 : 5, 0, 2 * Math.PI);
-        ctx.fillStyle = index === 0 ? '#2b2155' : '#e4e0ff';
+        ctx.fillStyle = index === 0 ? surface : text;
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.stroke();
@@ -74,19 +80,24 @@ export default function PosePreview() {
 
       ctx.shadowBlur = 0;
       ctx.setLineDash([2, 4]);
-      ctx.strokeStyle = '#68e5ed';
+      ctx.strokeStyle = accent;
       ctx.lineWidth = 1;
       line(322, 222, 397, 205);
       ctx.setLineDash([]);
-      ctx.fillStyle = '#aaeff6';
+      ctx.fillStyle = text;
       ctx.font = '12px monospace';
       ctx.fillText('134°', 397, 202);
     };
 
     const observer = new ResizeObserver(draw);
     observer.observe(element);
+    const themeObserver = new MutationObserver(draw);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     draw();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      themeObserver.disconnect();
+    };
   }, []);
 
   return (

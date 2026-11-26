@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import {
-  Activity, ArrowRight, BookOpen, Camera, Check, ChevronRight, Code2, Crosshair,
+  ArrowRight, BookOpen, Camera, Check, ChevronRight, Code2, Crosshair,
   Layers3, Menu, ScanLine, ShieldCheck, Smartphone, Sparkles, Target, Timer, X,
 } from 'lucide-react';
 import { HOME_HASH } from '@/lib/appRoutes';
@@ -47,12 +47,7 @@ const footerGroups = [
 ];
 
 function Brand({ onClick }: { onClick: () => void }) {
-  return (
-    <a className={styles.brand} href={HOME_HASH} onClick={onClick} aria-label="MotionAPI 首页">
-      <span className={styles.brandMark}><Activity size={20} /></span>
-      <span>Motion<b>API</b></span>
-    </a>
-  );
+  return <a className={styles.brand} href={HOME_HASH} onClick={onClick} aria-label="iFrame 首页">iFrame</a>;
 }
 
 export default function MotionHome() {
@@ -172,7 +167,7 @@ export default function MotionHome() {
             </div>
             <div className={styles.codePanel}>
               <div className={styles.codeHeader}><Code2 size={17} /> 请求示例 <span>cURL</span></div>
-              <pre tabIndex={0} aria-label="cURL 请求示例"><code><span>{'# 提交动作数据文件\n'}</span>{'curl -X POST \\\n  https://motionapi.cn/api/v1/motion/analyze \\\n  -H "X-API-Key: mk_your_api_key" \\\n  -H "Content-Type: application/json" \\\n  --data @motion.json'}</code></pre>
+              <pre tabIndex={0} aria-label="cURL 请求示例"><code><span>{'# 提交动作数据文件\n'}</span>{'curl -X POST \\\n  https://api.example.com/api/v1/motion/analyze \\\n  -H "X-API-Key: YOUR_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  --data @motion.json'}</code></pre>
             </div>
           </div>
         </section>
@@ -200,7 +195,7 @@ export default function MotionHome() {
 
         <section className={`${styles.section} ${styles.benefits}`} aria-labelledby="benefits-title">
           <div className={styles.wrap}>
-            <h2 id="benefits-title">为什么选择 MotionAPI</h2>
+            <h2 id="benefits-title">为什么选择 iFrame</h2>
             <div className={styles.benefitsGrid}>
               {benefits.map(({ icon: Icon, title, text }) => (
               <article key={title}>
@@ -236,7 +231,7 @@ export default function MotionHome() {
               </div>
             ))}
           </div>
-          <p className={styles.copyright}>© 2026 MotionAPI</p>
+          <p className={styles.copyright}>© 2026 iFrame</p>
         </div>
       </footer>
 
