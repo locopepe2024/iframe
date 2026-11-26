@@ -39,8 +39,8 @@ describe("EnvConfigChecker route boundaries", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("keeps the configuration gate for non-director routes", async () => {
-    history.replaceState(null, "", "#/");
+  it("keeps the configuration gate for the workspace", async () => {
+    history.replaceState(null, "", "#/workspace");
     mocks.getUserConfig.mockRejectedValueOnce(new Error("backend unavailable"));
     render(<EnvConfigChecker />);
     await waitFor(() => expect(mocks.getUserConfig).toHaveBeenCalledTimes(1));
@@ -69,7 +69,7 @@ describe("EnvConfigChecker route boundaries", () => {
   });
 
   it("closes an already-open gate when navigating to the director", async () => {
-    history.replaceState(null, "", "#/");
+    history.replaceState(null, "", "#/workspace");
     mocks.getUserConfig.mockResolvedValueOnce({ secrets_configured: {} });
     render(<EnvConfigChecker />);
     await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());

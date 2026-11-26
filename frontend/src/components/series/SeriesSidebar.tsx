@@ -119,7 +119,7 @@ export default function SeriesSidebar({
             <button
               onClick={onBack}
               className="flex-shrink-0 text-text-secondary hover:text-foreground transition-colors"
-              title={t("backToHome")}
+              title={t("backToWorkspace")}
             >
               <ChevronLeft size={16} />
             </button>

@@ -5,6 +5,7 @@ import { Palette, Layout, Film, BookOpen, Users, Video, Settings, Key, MessageSq
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
 import { useProjectStore } from "@/store/projectStore";
+import { WORKSPACE_HASH } from "@/lib/appRoutes";
 import PipelineSidebar from "@/components/layout/PipelineSidebar";
 import EpisodeMiniList from "@/components/layout/EpisodeMiniList";
 import type { BreadcrumbSegment } from "@/components/layout/BreadcrumbBar";
@@ -105,8 +106,8 @@ export default function ProjectClient({ id, initialStep, breadcrumbSegments, sta
         return base.map(s => ({ ...s, ...statusFor(s.id) }));
     }, [currentProject, seriesContentMode, tp]);
 
-    const handleBackToHome = () => {
-        window.location.hash = '';
+    const handleBackToWorkspace = () => {
+        window.location.hash = WORKSPACE_HASH;
     };
 
     // Cross-module step navigation event (used by intra-module
@@ -143,7 +144,7 @@ export default function ProjectClient({ id, initialStep, breadcrumbSegments, sta
                 <div className="text-center">
                     <p className="text-text-secondary mb-4">{t("notFound")}</p>
                     <button
-                        onClick={handleBackToHome}
+                        onClick={handleBackToWorkspace}
                         className="text-primary hover:underline"
                     >
                         {t("backToList")}
@@ -157,7 +158,7 @@ export default function ProjectClient({ id, initialStep, breadcrumbSegments, sta
         return <main className="min-h-screen w-screen overflow-auto bg-background"><ArtDirection mindMapOnly /></main>;
     }
 
-    const segments = breadcrumbSegments || [{ label: "iFrame", hash: "#/" }, { label: currentProject.title }];
+    const segments = breadcrumbSegments || [{ label: "iFrame", hash: WORKSPACE_HASH }, { label: currentProject.title }];
 
     const settingsActions = (
         <>
