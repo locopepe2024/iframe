@@ -63,14 +63,14 @@ export default function PosePreview() {
       ctx.shadowBlur = 14 * scale;
       for (const [start, end] of bones) line(...joints[start], ...joints[end]);
 
-      for (const [index, [x, y]] of joints.entries()) {
+      joints.forEach(([x, y], index) => {
         ctx.beginPath();
         ctx.arc(x, y, index === 0 ? 15 : 5, 0, 2 * Math.PI);
         ctx.fillStyle = index === 0 ? '#2b2155' : '#e4e0ff';
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.stroke();
-      }
+      });
 
       ctx.shadowBlur = 0;
       ctx.setLineDash([2, 4]);

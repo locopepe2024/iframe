@@ -207,6 +207,10 @@
   margin-top: 0;
 }
 
+.root :where(h1, h2, h3) {
+  font-weight: 700;
+}
+
 .root :where(h1, h2) {
   font-family: 'Space Grotesk', 'PingFang SC', sans-serif;
   letter-spacing: -.055em;
@@ -561,6 +565,10 @@
 
 .root pre span {
   color: #817a94;
+}
+
+.root pre code {
+  font: inherit;
 }
 
 .pricing {
