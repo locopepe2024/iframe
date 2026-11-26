@@ -1,25 +1,26 @@
 "use client";
 
-import { LayoutGrid, Layers, Wand2, Settings, FileText, Film, Box, ImagePlus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { House, LayoutGrid, Layers, Wand2, Settings, FileText, Film, Box, ImagePlus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
 import IFrameBranding from "./IFrameBranding";
 import { isTauri } from "@/lib/transport";
+import { HOME_HASH, WORKSPACE_HASH } from "@/lib/appRoutes";
 import PlaygroundSessionSubnav from "@/components/modules/playground/PlaygroundSessionSubnav";
 import { APP_VERSION_LABEL } from "@/generated/appVersion";
 
-export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "imageEditor" | "recreation" | "editing" | "director3d" | "settings";
+export type GlobalTab = "home" | "workspace" | "library" | "editor" | "playground" | "imageEditor" | "recreation" | "editing" | "director3d" | "settings";
 
 interface GlobalSidebarProps {
   activeTab: GlobalTab;
   onTabChange: (tab: GlobalTab) => void;
 }
 
-// Shared global nav model (workspace/library/playground + settings). Reused by
-// the desktop GlobalSidebar (below) and the mobile BottomTabBar (md:hidden).
+// Shared by the desktop sidebar and the mobile tab bar.
 export const GLOBAL_NAV_ITEMS: { id: GlobalTab; icon: typeof LayoutGrid; hash: string }[] = [
-  { id: "workspace", icon: LayoutGrid, hash: "#/" },
+  { id: "home", icon: House, hash: HOME_HASH },
+  { id: "workspace", icon: LayoutGrid, hash: WORKSPACE_HASH },
   { id: "library", icon: Layers, hash: "#/library" },
   { id: "editor", icon: FileText, hash: "#/studio/editor" },
   { id: "playground", icon: Wand2, hash: "#/playground" },
@@ -91,11 +92,11 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
     >
       {/* Traffic Light inset for Tauri desktop */}
       {isTauri() && <div className="tauri-titlebar-inset" />}
-      {/* Brand lockup — Logo + LUMENX + Slogan, click → workspace */}
+      {/* Brand lockup links to the home page. */}
       <button
         type="button"
-        onClick={() => handleNav("workspace", "#/")}
-        aria-label={t("workspaceAria")}
+        onClick={() => handleNav("home", HOME_HASH)}
+        aria-label={t("homeAria")}
         className={clsx("text-left pt-5 pb-4 border-b border-glass-border hover:opacity-90 transition-opacity", collapsed ? "px-2" : "px-4")}
       >
         <div className={clsx(collapsed && "flex justify-center")}>{collapsed ? <img src="iframe-logo.png" alt="iFrame" className="h-9 w-9 object-contain" /> : <IFrameBranding size="md" showSlogan={false} />}</div>

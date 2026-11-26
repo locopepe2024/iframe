@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, Download, Film, Image as ImageIcon, Loader2, Play, ChevronRight, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { WORKSPACE_HASH } from "@/lib/appRoutes";
 import type { Series, Character, Scene, Prop, Project, ExtraRosterEntry } from "@/store/projectStore";
 import AssetCard from "@/components/common/AssetCard";
 import CharacterWorkbench from "@/components/modules/CharacterWorkbench";
@@ -75,8 +76,8 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
     fetchData();
   }, [seriesId]);
 
-  const handleBackToHome = () => {
-    window.location.hash = "";
+  const handleBackToWorkspace = () => {
+    window.location.hash = WORKSPACE_HASH;
   };
 
   const handleTitleSave = async () => {
@@ -174,7 +175,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
           <p className="text-text-secondary mb-4">{t("notFound")}</p>
-          <a href="#/" className="text-primary hover:underline">{t("backToHome")}</a>
+          <a href={WORKSPACE_HASH} className="text-primary hover:underline">{t("backToWorkspace")}</a>
         </div>
       </div>
     );
@@ -200,7 +201,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
         episodes={episodes}
         activeItem={activeItem}
         onItemChange={setActiveItem}
-        onBack={handleBackToHome}
+        onBack={handleBackToWorkspace}
         isEditingTitle={isEditingTitle}
         editTitle={editTitle}
         onEditTitleChange={setEditTitle}

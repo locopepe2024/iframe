@@ -22,7 +22,7 @@ export default function BottomTabBar({
   const [moreOpen, setMoreOpen] = useState(false);
   // Keep the two creation entry points visible in narrow embeds. Library,
   // script editor, recreation and settings remain available from More.
-  const primaryIds: GlobalTab[] = ["workspace", "playground", "imageEditor", "director3d"];
+  const primaryIds: GlobalTab[] = ["home", "workspace", "playground", "imageEditor", "director3d"];
   const primaryItems = GLOBAL_NAV_ITEMS.filter((item) => primaryIds.includes(item.id));
   const moreItems = GLOBAL_NAV_ITEMS.filter((item) => !primaryIds.includes(item.id));
   const moreActive = moreItems.some((item) => item.id === activeTab);
@@ -33,7 +33,7 @@ export default function BottomTabBar({
   };
   return (
     <nav
-      className="md:hidden relative z-20 flex-shrink-0 grid grid-cols-5 items-stretch border-t border-glass-border bg-surface/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]"
+      className="md:hidden relative z-20 flex-shrink-0 grid grid-cols-6 items-stretch border-t border-glass-border bg-surface/80 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]"
       aria-label={t("mainNavAria")}
     >
       {primaryItems.map(({ id, icon: Icon, hash }) => {

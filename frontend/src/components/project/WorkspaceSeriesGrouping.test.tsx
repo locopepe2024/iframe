@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import Home from '@/app/page';
+import { WORKSPACE_HASH } from '@/lib/appRoutes';
 
 const { state, getProjects, getSeriesEpisodes } = vi.hoisted(() => ({
   state: {
@@ -28,7 +29,7 @@ vi.mock('@/components/project/ProjectCard', () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
-  window.location.hash = '#/';
+  window.location.hash = WORKSPACE_HASH;
   state.projects = Array.from({ length: 60 }, (_, index) => ({
     id: `episode-${index + 1}`, title: `第${index + 1}集`, series_id: 'series-60', episode_number: index + 1,
   }));

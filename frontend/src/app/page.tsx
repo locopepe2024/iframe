@@ -14,10 +14,12 @@ import ProjectCard, { deriveStatus, deriveCover, type DerivedStatus } from "@/co
 import CreateProjectDialog from "@/components/project/CreateProjectDialog";
 import EnvConfigDialog from "@/components/project/EnvConfigDialog";
 import CreativeCanvas from "@/components/canvas/CreativeCanvas";
+import MotionHome from "@/components/MotionHome";
 import AppShell from "@/components/layout/AppShell";
 import type { GlobalTab } from "@/components/layout/GlobalSidebar";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
+import { isHomeRoute, WORKSPACE_HASH } from "@/lib/appRoutes";
 import { shouldGuardEditingRouteChange } from "@/lib/editingNavigationGuard";
 import { parseProjectRouteHash } from "@/lib/projectRoute";
 import { useTranslations } from "next-intl";
@@ -455,7 +457,7 @@ function EpisodeBreadcrumbWrapper({ seriesId, episodeId, standaloneDirectorMindM
   }, [seriesId, episodeId]);
 
   const segments = [
-    { label: "iFrame", hash: "#/" },
+    { label: "iFrame", hash: WORKSPACE_HASH },
     { label: seriesTitle || t("series"), hash: `#/series/${seriesId}` },
     { label: episodeNumber != null ? t("episodeNum", { number: episodeNumber }) : t("episodeLabel") },
   ];
@@ -474,8 +476,8 @@ export default function Home() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
   const [openSeriesMenuId, setOpenSeriesMenuId] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'editing' | 'director3d' | 'studio/editor' | 'script-document-editor' | 'project-editor'>('home');
-  const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
+  const [currentView, setCurrentView] = useState<'home' | 'workspace' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'image-editor' | 'recreation' | 'editing' | 'director3d' | 'studio/editor' | 'script-document-editor' | 'project-editor'>('home');
+  const [activeTab, setActiveTab] = useState<GlobalTab>("home");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
   const [wsStatus, setWsStatus] = useState<DerivedStatus | "all">("all");
@@ -516,11 +518,11 @@ export default function Home() {
     };
   }, [openSeriesMenuId]);
 
-  // The browser-only director must remain usable without the project backend.
-  // Defer the normal workspace sync until the user leaves that route.
+  // The home and browser-only director pages do not need workspace data.
   useEffect(() => {
     const syncWorkspaceData = () => {
-      if (window.location.hash === "#/director" || workspaceDataSyncedRef.current) return;
+      const hash = window.location.hash;
+      if (isHomeRoute(hash) || hash === "#/director" || workspaceDataSyncedRef.current) return;
       workspaceDataSyncedRef.current = true;
       void syncProjects();
       void fetchSeriesList();
@@ -529,8 +531,8 @@ export default function Home() {
     window.addEventListener("hashchange", syncWorkspaceData);
     const refreshForIdentity = () => {
       setSeriesEpisodes({});
-      void syncProjects();
-      void fetchSeriesList();
+      workspaceDataSyncedRef.current = false;
+      syncWorkspaceData();
     };
     window.addEventListener("iframe:workspace-identity-changed", refreshForIdentity);
     return () => {
@@ -611,7 +613,7 @@ export default function Home() {
 
   // 监听 hash 变化
   useEffect(() => {
-    let lastHandledHash = window.location.hash || '#/';
+    let lastHandledHash = window.location.hash;
     let routeHistory = [lastHandledHash];
     let routeHistoryIndex = 0;
     let historyTraversalPending = false;
@@ -625,6 +627,7 @@ export default function Home() {
         else if (routeHistory[routeHistoryIndex + 1] === hash) { traversalDirection = 1; routeHistoryIndex += 1; }
       }
       if (shouldGuardEditingRouteChange(lastHandledHash, hash)) {
+        setActiveTab('editing');
         // hashchange cannot be canceled. Undo history traversal in the opposite
         // direction; replace a newly pushed hash entry with the current route.
         // This keeps Back usable after the user cancels an attempted exit.
@@ -752,21 +755,17 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
-      // Menu action: open new project dialog then land on workspace
-      if (hash === '#/new-project') {
-        setCurrentView('home');
-        setActiveTab('workspace');
-        setProjectId(null);
-        setSeriesId(null);
-        setEpisodeId(null);
+      // Menu action: open the new project dialog in the workspace.
+      const isNewProject = hash === '#/new-project';
+      if (isNewProject) {
         setIsDialogOpen(true);
-        // Clean URL without triggering another hashchange
-        history.replaceState(null, '', '#/');
-        return;
+        history.replaceState(null, '', WORKSPACE_HASH);
+        lastHandledHash = WORKSPACE_HASH;
+        routeHistory[routeHistoryIndex] = WORKSPACE_HASH;
       }
-      // Default: workspace
-      setCurrentView('home');
-      setActiveTab('workspace');
+      const tab = isHomeRoute(hash) ? 'home' : 'workspace';
+      setCurrentView(tab);
+      setActiveTab(tab);
       setProjectId(null);
       setSeriesId(null);
       setEpisodeId(null);
@@ -827,8 +826,9 @@ export default function Home() {
     }
   };
 
-  // Determine content based on activeTab
+  // Render the view resolved by the hash router.
   const renderContent = () => {
+    if (currentView === 'home') return <MotionHome />;
     if (currentView === 'editing') return <EditingPage />;
     if (currentView === 'recreation') {
       return <RecreationPage />;
@@ -1195,16 +1195,15 @@ export default function Home() {
 
   return (
     <main className="relative h-dvh w-full min-w-0 bg-background flex flex-col overflow-hidden">
-      {/* Background Canvas */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <CreativeCanvas />
-      </div>
-
-      {/* Atelier atmosphere overlays — inert on non-atelier themes.
-          Mounted at page level so bloom/grain cover workspace, playground, library, etc.
-          SettingsPage also mounts its own copies (harmless duplicates). */}
-      <div className="atelier-page-bloom" aria-hidden="true" />
-      <div className="atelier-page-grain" aria-hidden="true" />
+      {currentView !== 'home' && (
+        <>
+          <div className="fixed inset-0 z-0 pointer-events-none">
+            <CreativeCanvas />
+          </div>
+          <div className="atelier-page-bloom" aria-hidden="true" />
+          <div className="atelier-page-grain" aria-hidden="true" />
+        </>
+      )}
 
       {/* AppShell with GlobalSidebar + content */}
       <div className="relative z-10 flex-1 overflow-hidden">
@@ -1242,7 +1241,7 @@ export default function Home() {
       />
 
       {/* Tauri native menu event listener */}
-      <TauriMenuListener onNewProject={() => setIsDialogOpen(true)} />
+      <TauriMenuListener onNewProject={() => { window.location.hash = '#/new-project'; }} />
     </main>
   );
 }
